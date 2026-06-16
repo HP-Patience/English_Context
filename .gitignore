@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# database
+prisma/dev.db
+
+# screenshots
+screenshots/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

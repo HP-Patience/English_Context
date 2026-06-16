@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  name      String?
+  interests String?  @default("[]") // JSON array
+  llmConfig String?  // JSON: { baseURL, apiKey, model }
+  createdAt DateTime @default(now())
+
+  words          UserWord[]
+  reviewSessions ReviewSession[]
+}
+
+model Word {
+  id       String @id @default(cuid())
+  text     String
+  language String @default("en")
+
+  meanings  Meaning[]
+  userWords UserWord[]
+  groups    WordGroupItem[]
+}
+
+model WordGroup {
+  id        String @id @default(cuid())
+  name      String // e.g. "高频词 Word List 1"
+  sortOrder Int
+  words     WordGroupItem[]
+
+  @@index([sortOrder])
+}
+
+model WordGroupItem {
+  id          String @id @default(cuid())
+  wordGroupId String
+  wordId      String
+  sortOrder   Int
+
+  wordGroup WordGroup @relation(fields: [wordGroupId], references: [id])
+  word      Word      @relation(fields: [wordId], references: [id])
+
+  @@index([wordGroupId])
+  @@index([wordId])
+}
+
+model Meaning {
+  id           String @id @default(cuid())
+  wordId       String
+  partOfSpeech String
+  definition   String
+  definitionCn String? // 中文释义
+  example      String?
+
+  word              Word               @relation(fields: [wordId], references: [id])
+  generatedSentences GeneratedSentence[]
+  userWordMeanings   UserWordMeaning[]
+}
+
+model UserWord {
+  id        String   @id @default(cuid())
+  userId    String
+  wordId    String
+  status    String   @default("learning") // learning | reviewing | mastered
+  mastery   Float    @default(0) // 0-100, aggregated from sub-meanings
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  word    Word    @relation(fields: [wordId], references: [id])
+  meanings UserWordMeaning[]
+
+  @@unique([userId, wordId])
+}
+
+model UserWordMeaning {
+  id              String   @id @default(cuid())
+  userWordId      String
+  meaningId       String
+  easeFactor      Float    @default(2.5)
+  interval        Int      @default(0) // days
+  nextReviewAt    DateTime @default(now())
+  currentTestLevel Int     @default(0) // 0-3
+  mastery         Float    @default(0) // 0-100
+
+  userWord     UserWord           @relation(fields: [userWordId], references: [id])
+  meaning       Meaning            @relation(fields: [meaningId], references: [id])
+  reviewLogs    ReviewLog[]
+  sentences     GeneratedSentence[]
+
+  @@index([userWordId, nextReviewAt])
+}
+
+model GeneratedSentence {
+  id            String   @id @default(cuid())
+  userWordMeaningId String
+  meaningId     String
+  sentenceText  String
+  sentenceCn    String?  // 中文翻译
+  contextTopic  String?  // general, interest_tuned, synonym_test
+  interestTuned Boolean  @default(false)
+  source        String   @default("learning") // learning | synonym_test
+  createdAt     DateTime @default(now())
+  lastUsedAt    DateTime @default(now())
+
+  userWordMeaning UserWordMeaning @relation(fields: [userWordMeaningId], references: [id])
+  meaning         Meaning         @relation(fields: [meaningId], references: [id])
+}
+
+model ReviewSession {
+  id        String   @id @default(cuid())
+  userId    String
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+
+  user  User        @relation(fields: [userId], references: [id])
+  logs  ReviewLog[]
+}
+
+model ReviewLog {
+  id                  String   @id @default(cuid())
+  reviewSessionId     String
+  userWordMeaningId   String
+  sentenceText        String
+  testLevel           Int      // 1 | 2 | 3
+  isSynonymTest       Boolean  @default(false)
+  synonymWord         String?
+  result              String   // pass | fail
+  createdAt           DateTime @default(now())
+
+  reviewSession   ReviewSession   @relation(fields: [reviewSessionId], references: [id])
+  userWordMeaning UserWordMeaning @relation(fields: [userWordMeaningId], references: [id])
+}
