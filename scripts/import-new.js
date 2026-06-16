@@ -34,7 +34,7 @@ async function main() {
 
   console.log('\n=== Step 2: Parse txt file ===')
 
-  const txtPath = path.join(__dirname, '..', 'english-vocabulary-master', '2026考研英语词汇闪过.txt')
+  const txtPath = path.join(__dirname, '..', 'data', '2026考研英语词汇闪过.txt')
   const raw = fs.readFileSync(txtPath, 'utf-8')
   const lines = raw.split('\n').filter(l => l.trim())
 
