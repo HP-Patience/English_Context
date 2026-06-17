@@ -15,6 +15,10 @@
     background: #fff;
   }
 
+  .mx-auto.max-w-3xl {
+    max-width: none !important;
+  }
+
   .export-group {
     page-break-before: always;
     margin-bottom: 10mm;
