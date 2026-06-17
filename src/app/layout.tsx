@@ -22,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav className="flex items-center gap-4 text-sm">
               <a href="/learn" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">学习</a>
               <a href="/review" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">复习</a>
+              <a href="/search" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">搜索</a>
               <a href="/manual" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">+手动</a>
               <a href="/settings" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">设置</a>
               <ThemeToggle />
