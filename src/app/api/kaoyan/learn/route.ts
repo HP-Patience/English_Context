@@ -137,5 +137,30 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  // Upsert today's daily goal
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { dailyTarget: true },
+  })
+  const goal = await prisma.dailyGoal.upsert({
+    where: { userId_date: { userId, date: today } },
+    update: { learned: { increment: 1 } },
+    create: {
+      userId,
+      date: today,
+      target: user?.dailyTarget ?? 30,
+      learned: 1,
+      reviewed: 0,
+    },
+  })
+  if (goal.learned >= goal.target && !goal.completed) {
+    await prisma.dailyGoal.update({
+      where: { id: goal.id },
+      data: { completed: true },
+    })
+  }
+
   return NextResponse.json({ grade, newMastery, wordMastery: avgMastery })
 }
