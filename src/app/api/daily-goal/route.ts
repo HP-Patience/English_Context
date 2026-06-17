@@ -7,6 +7,10 @@ function todayStart(): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
+function fmt(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export async function GET(req: NextRequest) {
   try {
     const userId = await getLocalUserId()
@@ -26,10 +30,10 @@ export async function GET(req: NextRequest) {
       const result = []
       const d = new Date(startDate)
       const recordMap = new Map(
-        records.map((r) => [r.date.toISOString().split('T')[0], r])
+        records.map((r) => [fmt(r.date), r])
       )
       for (let i = 0; i < range; i++) {
-        const key = d.toISOString().split('T')[0]
+        const key = fmt(d)
         const record = recordMap.get(key)
         result.push({
           date: key,
@@ -70,6 +74,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ...goal,
+      date: fmt(goal.date),
       streak,
     })
   } catch {
