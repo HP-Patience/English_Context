@@ -24,51 +24,100 @@ export async function calculateStreak(
 
   if (records.length === 0) return { current: 0, longest: 0 }
 
-  // Current streak: start from today, go backwards
+  // Current streak: start from today; if today isn't completed, start from yesterday.
+  // Walk backwards counting consecutive completed days.
   let current = 0
-  const todayStr = toDateString(new Date())
-  let expectedDate = new Date()
 
-  for (const record of records) {
-    const recordStr = toDateString(record.date)
-    const expectedStr = toDateString(expectedDate)
+  // Determine the first day to check
+  const firstRecord = records[0]
+  const firstRecordStr = toLocalDateStr(firstRecord.date)
+  const todayStr = toLocalDateStr(new Date())
 
-    if (recordStr === expectedStr) {
-      if (record.completed) {
-        current++
-      } else if (recordStr === todayStr) {
-        // today not completed yet, skip it
-        continue
-      } else {
+  if (firstRecordStr === todayStr && firstRecord.completed) {
+    // Today completed — start streak from today
+    let expectedDate = new Date()
+    for (const record of records) {
+      const recordStr = toLocalDateStr(record.date)
+      const expectedStr = toLocalDateStr(expectedDate)
+
+      if (recordStr === expectedStr) {
+        if (record.completed) {
+          current++
+          expectedDate.setDate(expectedDate.getDate() - 1)
+        } else {
+          break
+        }
+      } else if (recordStr < expectedStr) {
+        // Record is older than expected — gap in sequence, streak broken
         break
       }
-    } else if (recordStr === todayStr && record.completed) {
-      // today completed
-      current++
-    } else {
-      break
+      // recordStr > expectedStr: record is newer, skip it
     }
+  } else {
+    // Today not completed or no record for today — start streak from yesterday
+    let expectedDate = new Date()
     expectedDate.setDate(expectedDate.getDate() - 1)
+
+    for (const record of records) {
+      const recordStr = toLocalDateStr(record.date)
+      const expectedStr = toLocalDateStr(expectedDate)
+
+      if (recordStr === expectedStr) {
+        if (record.completed) {
+          current++
+          expectedDate.setDate(expectedDate.getDate() - 1)
+        } else {
+          break
+        }
+      } else if (recordStr < expectedStr) {
+        // Record is older than expected — gap, streak broken
+        break
+      }
+      // recordStr > expectedStr: record is newer, skip it
+    }
   }
 
-  // Longest streak: scan all records
+  // Longest streak: scan sorted records, check calendar-day adjacency
   let longest = 0
   let running = 0
+  let prevDateStr: string | null = null
+
   const sorted = [...records].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    (a, b) => a.date.getTime() - b.date.getTime()
   )
+
   for (const record of sorted) {
+    const recordStr = toLocalDateStr(record.date)
+
     if (record.completed) {
-      running++
+      if (prevDateStr === null) {
+        running = 1
+      } else {
+        // Check if this record is the next calendar day after the previous
+        const [y, m, d] = prevDateStr.split('-').map(Number)
+        const expectedNext = new Date(y, m - 1, d + 1)
+        const expectedNextStr = toLocalDateStr(expectedNext)
+
+        if (recordStr === expectedNextStr) {
+          running++
+        } else {
+          running = 1
+        }
+      }
       if (running > longest) longest = running
     } else {
       running = 0
     }
+    prevDateStr = recordStr
   }
 
   return { current, longest }
 }
 
-function toDateString(d: Date): string {
-  return d.toISOString().split('T')[0]
+/** Convert a Date to "YYYY-MM-DD" in local timezone. */
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
