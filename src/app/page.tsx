@@ -18,6 +18,7 @@ const STAGE_ORDER = ['高频词', '中频词', '低频词', '偶考词', '基础
 export default function HomePage() {
   const router = useRouter()
   const [stats, setStats] = useState<any>(null)
+  const [dailyGoal, setDailyGoal] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set(['高频词']))
   const [showInstallBanner, setShowInstallBanner] = useState(false)
@@ -53,6 +54,15 @@ export default function HomePage() {
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/daily-goal')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) setDailyGoal(data)
+      })
+      .catch(() => {})
   }, [])
 
   // Group groups by stage, aggregate stats
@@ -91,20 +101,34 @@ export default function HomePage() {
       <h1 className="mb-1 text-3xl font-bold tracking-tight">考研英语</h1>
       <p className="mb-6 text-sm text-stone-500 dark:text-stone-400">2026考研英语词汇闪过 · {stats?.totalWords || 6098} 词</p>
 
-      {/* Overall progress */}
-      {stats && (
-        <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
+      {/* Daily goal progress */}
+      {dailyGoal && (
+        <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
           <div className="mb-1 flex items-center justify-between text-sm">
-            <span className="font-medium text-stone-700 dark:text-stone-300">总进度</span>
-            <span className="text-stone-500 dark:text-stone-400">{stats.learnedCount}/{stats.totalWords}</span>
+            <span className="font-medium text-stone-700 dark:text-stone-300">
+              🔥 连续 {dailyGoal.streak?.current ?? 0} 天
+            </span>
+            <span className="text-stone-500 dark:text-stone-400">
+              今日 {dailyGoal.learned}/{dailyGoal.target} 词
+            </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
-            <div className="h-full rounded-full bg-stone-900 transition-all dark:bg-stone-100" style={{ width: `${stats.totalWords > 0 ? (stats.learnedCount / stats.totalWords * 100) : 0}%` }} />
+            <div
+              className="h-full rounded-full bg-stone-900 transition-all dark:bg-stone-400"
+              style={{
+                width: `${dailyGoal.target > 0 ? Math.min(100, (dailyGoal.learned / dailyGoal.target) * 100) : 0}%`,
+              }}
+            />
           </div>
-          {stats.dueCount > 0 && (
-            <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-              今日复习: {stats.dueCount} 词
-            </div>
+          {dailyGoal.reviewed > 0 && (
+            <p className="mt-2 text-xs text-stone-400 dark:text-stone-500">
+              已复习 {dailyGoal.reviewed} 词
+            </p>
+          )}
+          {dailyGoal.completed && (
+            <p className="mt-2 text-xs font-medium text-green-600 dark:text-green-400">
+              ✓ 今日目标达成
+            </p>
           )}
         </div>
       )}
