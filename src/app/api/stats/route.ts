@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma, getLocalUserId } from '@/lib/prisma'
+import { calculateStreak } from '@/lib/streak'
 
 export async function GET() {
   const userId = await getLocalUserId()
@@ -156,6 +157,38 @@ export async function GET() {
     count,
   }))
 
+  // Daily goal heatmap data
+  const goalStart = new Date(today)
+  goalStart.setDate(goalStart.getDate() - 29)
+  const goalRecords = await prisma.dailyGoal.findMany({
+    where: { userId, date: { gte: goalStart } },
+    orderBy: { date: 'asc' },
+  })
+  const goalMap = new Map<string, (typeof goalRecords)[0]>()
+  for (const r of goalRecords) {
+    goalMap.set(r.date.toISOString().split('T')[0], r)
+  }
+  const goalHeatmap: Array<{
+    date: string
+    learned: number
+    target: number
+    completed: boolean
+  }> = []
+  const d = new Date(goalStart)
+  for (let i = 0; i < 30; i++) {
+    const key = d.toISOString().split('T')[0]
+    const record = goalMap.get(key)
+    goalHeatmap.push({
+      date: key,
+      learned: record?.learned ?? 0,
+      target: record?.target ?? 0,
+      completed: record?.completed ?? false,
+    })
+    d.setDate(d.getDate() + 1)
+  }
+
+  const streak = await calculateStreak(userId)
+
   return NextResponse.json({
     overall: { totalWords, learnedWords, avgMastery: learnedWords > 0 ? Math.round(userWords.reduce((s, u) => s + u.mastery, 0) / learnedWords) : 0 },
     masteryDistribution: dist,
@@ -163,5 +196,7 @@ export async function GET() {
     weakGroups,
     reviewForecast,
     dailyActivity,
+    goalHeatmap,
+    streak,
   })
 }

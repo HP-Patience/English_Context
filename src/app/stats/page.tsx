@@ -9,6 +9,8 @@ type Stats = {
   weakGroups: Array<{ id: string; name: string; total: number; learned: number; avgMastery: number }>
   reviewForecast: Array<{ date: string; dueCount: number }>
   dailyActivity: Array<{ date: string; count: number }>
+  goalHeatmap?: Array<{ date: string; learned: number; target: number; completed: boolean }>
+  streak?: { current: number; longest: number }
 }
 
 function maxVal(arr: Array<{ count: number }>): number {
@@ -60,6 +62,49 @@ export default function StatsPage() {
           </p>
         )}
       </div>
+
+      {/* Streak and daily goal */}
+      {stats.streak && (
+        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+          <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">连续打卡</h2>
+          <div className="flex items-center gap-8">
+            <div className="text-center">
+              <p className="text-3xl font-bold text-stone-900 dark:text-stone-100">{stats.streak.current}</p>
+              <p className="text-xs text-stone-400 dark:text-stone-500">当前连续</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl font-bold text-stone-900 dark:text-stone-100">{stats.streak.longest}</p>
+              <p className="text-xs text-stone-400 dark:text-stone-500">最长连续</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Goal heatmap */}
+      {stats.goalHeatmap && stats.goalHeatmap.length > 0 && (
+        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+          <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">近 30 天打卡</h2>
+          <div className="grid grid-cols-15 gap-[3px]" style={{ gridTemplateColumns: 'repeat(15, 1fr)' }}>
+            {stats.goalHeatmap.map((d) => {
+              let bg = 'bg-stone-100 dark:bg-stone-800'
+              if (d.completed) bg = 'bg-emerald-500 dark:bg-emerald-600'
+              else if (d.learned > 0 && d.target > 0) {
+                const ratio = d.learned / d.target
+                if (ratio >= 0.75) bg = 'bg-emerald-300 dark:bg-emerald-700'
+                else if (ratio >= 0.5) bg = 'bg-emerald-200 dark:bg-emerald-800'
+                else bg = 'bg-emerald-100 dark:bg-emerald-900'
+              }
+              return (
+                <div
+                  key={d.date}
+                  className={`aspect-square rounded-sm ${bg}`}
+                  title={`${d.date}: ${d.learned}/${d.target}`}
+                />
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Mastery distribution */}
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
