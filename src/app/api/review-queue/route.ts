@@ -29,7 +29,11 @@ export async function GET() {
       definition: uwm.meaning.definition,
       definitionCn: uwm.meaning.definitionCn,
     },
-    userWord: { word: { text: uwm.userWord.word.text } },
+    userWord: {
+      word: { text: uwm.userWord.word.text, id: uwm.userWord.word.id },
+      bookmarked: uwm.userWord.bookmarked,
+      wordId: uwm.userWord.wordId,
+    },
     sentences: uwm.sentences,
   }))
 

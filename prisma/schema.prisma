@@ -70,6 +70,7 @@ model UserWord {
   wordId    String
   status    String   @default("learning") // learning | reviewing | mastered
   mastery   Float    @default(0) // 0-100, aggregated from sub-meanings
+  bookmarked Boolean @default(false)
   createdAt DateTime @default(now())
 
   user    User    @relation(fields: [userId], references: [id])

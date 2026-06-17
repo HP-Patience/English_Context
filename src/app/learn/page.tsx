@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 
 type LearnItem = {
   id: string
+  wordId: string
   word: string
+  bookmarked: boolean
   pos: string
   definitionCn: string
   wordMastery: number
@@ -26,6 +28,7 @@ export default function LearnPage() {
   const [doneInfo, setDoneInfo] = useState<any>(null)
   const [revealed, setRevealed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [bookmarked, setBookmarked] = useState(false)
 
   const fetchNext = useCallback(async () => {
     if (!groupId) return
@@ -39,6 +42,7 @@ export default function LearnPage() {
         setDoneInfo(data)
       } else {
         setItem(data)
+        setBookmarked(data.bookmarked ?? false)
       }
     } catch {
       setDone(true)
@@ -110,7 +114,24 @@ export default function LearnPage() {
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-6 text-center">
-        <h1 className="text-3xl font-bold">{item.word}</h1>
+        <div className="flex items-center justify-center gap-2">
+          <h1 className="text-3xl font-bold">{item.word}</h1>
+          <button
+            onClick={async () => {
+              const res = await fetch('/api/bookmarks/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ wordId: item.wordId }),
+              })
+              const data = await res.json()
+              if (data.bookmarked !== undefined) setBookmarked(data.bookmarked)
+            }}
+            className={`text-lg ${bookmarked ? 'text-amber-500' : 'text-stone-300 hover:text-amber-400 dark:text-stone-600 dark:hover:text-amber-400'}`}
+            title={bookmarked ? '取消收藏' : '收藏'}
+          >
+            {bookmarked ? '★' : '☆'}
+          </button>
+        </div>
         {revealed && (
           <div className="mt-2 flex items-center justify-center gap-3 text-sm">
             <span className="text-stone-500 dark:text-stone-400">{item.pos}. {item.definitionCn}</span>

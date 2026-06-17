@@ -49,7 +49,9 @@ export async function GET(req: NextRequest) {
         })
         return NextResponse.json({
           id: uwm.id,
+          wordId: item.word.id,
           word: item.word.text,
+          bookmarked: item.word.userWords[0]?.bookmarked ?? false,
           pos: meaning.partOfSpeech,
           definitionCn: meaning.definitionCn,
           wordMastery: calcMastery(uwm.easeFactor),

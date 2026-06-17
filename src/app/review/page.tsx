@@ -8,7 +8,7 @@ type ReviewItem = {
   mastery: number
   wordMastery: number
   meaning: { id: string; partOfSpeech: string; definition: string; definitionCn: string | null }
-  userWord: { word: { text: string } }
+  userWord: { word: { text: string; id: string }; bookmarked: boolean; wordId: string }
   sentences: Array<{ sentenceText: string; sentenceCn: string | null; contextTopic: string | null }>
 }
 
@@ -22,12 +22,16 @@ export default function ReviewPage() {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetch('/api/review-queue')
       .then((r) => r.json())
       .then((data) => {
         setQueue(data)
+        const bm: Record<string, boolean> = {}
+        data.forEach((d: ReviewItem) => { bm[d.userWord.word.id] = d.userWord.bookmarked })
+        setBookmarks(bm)
         setLoading(false)
         if (data.length === 0) setDone(true)
       })
@@ -63,6 +67,18 @@ export default function ReviewPage() {
       case 'clear': return 4
       case 'vague': return 2
       case 'forgot': return 0
+    }
+  }
+
+  async function toggleBookmark(wordId: string) {
+    const res = await fetch('/api/bookmarks/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wordId }),
+    })
+    const data = await res.json()
+    if (data.bookmarked !== undefined) {
+      setBookmarks((prev) => ({ ...prev, [wordId]: data.bookmarked }))
     }
   }
 
@@ -180,7 +196,16 @@ export default function ReviewPage() {
         <div className="space-y-4">
           {/* Word header with mastery */}
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold">{item.userWord.word.text}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold">{item.userWord.word.text}</h2>
+              <button
+                onClick={() => toggleBookmark(item.userWord.word.id)}
+                className={`text-base ${bookmarks[item.userWord.word.id] ? 'text-amber-500' : 'text-stone-300 hover:text-amber-400 dark:text-stone-600 dark:hover:text-amber-400'}`}
+                title={bookmarks[item.userWord.word.id] ? '取消收藏' : '收藏'}
+              >
+                {bookmarks[item.userWord.word.id] ? '★' : '☆'}
+              </button>
+            </div>
             <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">
               掌握 {item.wordMastery}%
             </span>
