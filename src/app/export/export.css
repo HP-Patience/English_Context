@@ -1,0 +1,57 @@
+@media print {
+  header, .print\:hidden {
+    display: none !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 15mm 10mm;
+  }
+
+  body {
+    font-size: 10pt;
+    line-height: 1.4;
+    color: #000;
+    background: #fff;
+  }
+
+  .export-group {
+    page-break-before: always;
+    margin-bottom: 10mm;
+  }
+
+  .export-group:first-of-type {
+    page-break-before: avoid;
+  }
+
+  .export-group h2 {
+    font-size: 14pt;
+    font-weight: 700;
+    margin-bottom: 5mm;
+    border-bottom: 1pt solid #ccc;
+    padding-bottom: 2mm;
+  }
+
+  .grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 3mm !important;
+  }
+
+  .grid > div {
+    break-inside: avoid;
+    border: 1pt solid #ddd;
+    padding: 2mm 3mm;
+    border-radius: 0;
+  }
+
+  .grid > div > div:first-child {
+    font-size: 11pt;
+    font-weight: 600;
+  }
+
+  .grid > div > div:last-child {
+    font-size: 8pt;
+    color: #444;
+  }
+}
