@@ -24,6 +24,12 @@ type SearchResult = {
     id: string
     mastery: number
   }>
+  groups: Array<{
+    wordGroup: {
+      id: string
+      name: string
+    }
+  }>
 }
 
 export default function SearchPage() {
@@ -108,7 +114,7 @@ export default function SearchPage() {
           return (
             <div
               key={word.id}
-              className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900"
+              className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:shadow-none dark:border-stone-700 dark:bg-stone-900"
             >
               <div className="mb-2 flex items-baseline justify-between">
                 <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100">{word.text}</h3>
@@ -149,6 +155,13 @@ export default function SearchPage() {
                     className="rounded-lg bg-stone-100 px-3 py-1 text-xs text-stone-600 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700"
                   >
                     去复习
+                  </button>
+                ) : word.groups && word.groups.length > 0 ? (
+                  <button
+                    onClick={() => router.push(`/learn?groupId=${word.groups[0].wordGroup.id}`)}
+                    className="rounded-lg bg-stone-100 px-3 py-1 text-xs text-stone-600 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700"
+                  >
+                    从 {word.groups[0].wordGroup.name} 学习
                   </button>
                 ) : (
                   <span className="rounded-lg bg-stone-50 px-3 py-1 text-xs text-stone-400 dark:bg-stone-800 dark:text-stone-500">

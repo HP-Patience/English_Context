@@ -5,7 +5,7 @@ export async function GET() {
   const userId = await getLocalUserId()
 
   // Overall counts
-  const totalWords = await prisma.userWord.count({ where: { userId } })
+  const totalWords = await prisma.word.count({ where: { language: 'en' } })
   const learnedWords = await prisma.userWord.count({
     where: { userId, mastery: { gt: 0 } },
   })

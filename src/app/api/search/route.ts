@@ -24,6 +24,10 @@ export async function GET(req: NextRequest) {
       ],
     },
     include: {
+      groups: {
+        include: { wordGroup: true },
+        take: 1,
+      },
       meanings: {
         include: {
           userWordMeanings: {

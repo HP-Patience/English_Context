@@ -32,7 +32,7 @@ export default function StatsPage() {
   }
 
   if (!stats) {
-    return <div className="py-16 text-center text-sm text-stone-400">无法加载统计数据</div>
+    return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">无法加载统计数据</div>
   }
 
   const formatDate = (d: string) => {

@@ -70,7 +70,7 @@ export default function BookmarksPage() {
                 className="rounded-lg px-2 py-1 text-xs text-stone-400 hover:bg-stone-100 hover:text-red-500 dark:hover:bg-stone-800"
                 title="取消收藏"
               >
-                ★
+                ☆
               </button>
             </div>
 
