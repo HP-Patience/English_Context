@@ -14,6 +14,7 @@ model User {
   interests String?  @default("[]") // JSON array
   llmConfig   String?   // JSON: { baseURL, apiKey, model }
   dailyTarget Int       @default(30)
+  ttsConfig   String?  @default("{}") // JSON: { provider, baseURL, apiKey, voice }
   createdAt   DateTime  @default(now())
 
   words          UserWord[]
