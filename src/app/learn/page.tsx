@@ -118,13 +118,17 @@ export default function LearnPage() {
           <h1 className="text-3xl font-bold">{item.word}</h1>
           <button
             onClick={async () => {
-              const res = await fetch('/api/bookmarks/toggle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ wordId: item.wordId }),
-              })
-              const data = await res.json()
-              if (data.bookmarked !== undefined) setBookmarked(data.bookmarked)
+              try {
+                const res = await fetch('/api/bookmarks/toggle', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ wordId: item.wordId }),
+                })
+                if (res.ok) {
+                  const data = await res.json()
+                  if (data.bookmarked !== undefined) setBookmarked(data.bookmarked)
+                }
+              } catch {}
             }}
             className={`text-lg ${bookmarked ? 'text-amber-500' : 'text-stone-300 hover:text-amber-400 dark:text-stone-600 dark:hover:text-amber-400'}`}
             title={bookmarked ? '取消收藏' : '收藏'}

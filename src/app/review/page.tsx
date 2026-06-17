@@ -71,15 +71,19 @@ export default function ReviewPage() {
   }
 
   async function toggleBookmark(wordId: string) {
-    const res = await fetch('/api/bookmarks/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wordId }),
-    })
-    const data = await res.json()
-    if (data.bookmarked !== undefined) {
-      setBookmarks((prev) => ({ ...prev, [wordId]: data.bookmarked }))
-    }
+    try {
+      const res = await fetch('/api/bookmarks/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wordId }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.bookmarked !== undefined) {
+          setBookmarks((prev) => ({ ...prev, [wordId]: data.bookmarked }))
+        }
+      }
+    } catch {}
   }
 
   async function handleNext() {
