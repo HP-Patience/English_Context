@@ -34,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/search" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">搜索</a>
               <a href="/stats" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">统计</a>
               <a href="/bookmarks" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">难词本</a>
+              <a href="/export" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">导出</a>
               <a href="/manual" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">+手动</a>
               <a href="/settings" className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">设置</a>
               <ThemeToggle />
