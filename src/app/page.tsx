@@ -20,6 +20,32 @@ export default function HomePage() {
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set(['高频词']))
+  const [showInstallBanner, setShowInstallBanner] = useState(false)
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+
+  useEffect(() => {
+    const dismissedAt = localStorage.getItem('pwa-install-dismissed')
+    if (dismissedAt && Date.now() - Number(dismissedAt) < 7 * 24 * 60 * 60 * 1000) return
+
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+      setShowInstallBanner(true)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  async function handleInstall() {
+    if (!deferredPrompt) return
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    setDeferredPrompt(null)
+    setShowInstallBanner(false)
+    if (outcome === 'accepted') {
+      localStorage.removeItem('pwa-install-dismissed')
+    }
+  }
 
   useEffect(() => {
     fetch('/api/kaoyan/stats')
@@ -180,6 +206,34 @@ export default function HomePage() {
           复习 {stats?.dueCount > 0 ? `(${stats.dueCount})` : ''}
         </button>
       </div>
+
+      {/* PWA install banner */}
+      {showInstallBanner && (
+        <div className="mt-6 rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-stone-600 dark:text-stone-400">
+              添加到主屏幕，随时随地背单词
+            </p>
+            <div className="flex shrink-0 gap-2">
+              <button
+                onClick={handleInstall}
+                className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
+              >
+                安装
+              </button>
+              <button
+                onClick={() => {
+                  setShowInstallBanner(false)
+                  localStorage.setItem('pwa-install-dismissed', String(Date.now()))
+                }}
+                className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-400 hover:text-stone-600 dark:border-stone-700 dark:hover:text-stone-300"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
