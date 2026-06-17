@@ -15,14 +15,6 @@ function maxVal(arr: Array<{ count: number }>): number {
   return Math.max(...arr.map((d) => d.count), 1)
 }
 
-function Bar({ value, max, className }: { value: number; max: number; className: string }) {
-  return (
-    <div className="h-full w-full overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
-      <div className={`h-full rounded-full transition-all ${className}`} style={{ width: `${(value / max) * 100}%` }} />
-    </div>
-  )
-}
-
 export default function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -138,7 +130,7 @@ export default function StatsPage() {
               return (
                 <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
                   <span className="text-[10px] text-stone-400 dark:text-stone-500">{d.dueCount}</span>
-                  <div className="w-full rounded-t-md bg-amber-400" style={{ height: `${height}%`, minHeight: d.dueCount > 0 ? '4px' : '0' }} />
+                  <div className="w-full rounded-t-md bg-amber-400 dark:bg-amber-600" style={{ height: `${height}%`, minHeight: d.dueCount > 0 ? '4px' : '0' }} />
                   <span className="text-[10px] text-stone-400 dark:text-stone-500">{formatDate(d.date)}</span>
                 </div>
               )
