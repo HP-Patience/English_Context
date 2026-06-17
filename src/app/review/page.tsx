@@ -92,17 +92,17 @@ export default function ReviewPage() {
     }
   }
 
-  if (loading) return <p className="text-center text-stone-500">加载中...</p>
+  if (loading) return <p className="text-center text-stone-500 dark:text-stone-400">加载中...</p>
 
   if (done) {
     return (
       <div className="mx-auto max-w-lg pt-12 text-center">
-        <p className="mb-1 text-5xl font-light text-stone-300">✓</p>
+        <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">✓</p>
         <h2 className="mb-1 text-xl font-semibold">复习完成</h2>
-        <p className="mb-8 text-sm text-stone-400">完成了 {idx} 个单词</p>
+        <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">完成了 {idx} 个单词</p>
         <div className="flex justify-center gap-3">
-          <button onClick={() => router.push('/learn')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800">查看单词</button>
-          <button onClick={() => router.push('/')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50">学新词</button>
+          <button onClick={() => router.push('/learn')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">查看单词</button>
+          <button onClick={() => router.push('/')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">学新词</button>
         </div>
       </div>
     )
@@ -111,10 +111,10 @@ export default function ReviewPage() {
   if (!item && queue.length === 0) {
     return (
       <div className="mx-auto max-w-lg pt-12 text-center">
-        <p className="mb-1 text-5xl font-light text-stone-300">📚</p>
+        <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">📚</p>
         <h2 className="mb-1 text-xl font-semibold">暂无复习</h2>
-        <p className="mb-8 text-sm text-stone-400">学些新词再来</p>
-        <button onClick={() => router.push('/')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800">学新词</button>
+        <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">学些新词再来</p>
+        <button onClick={() => router.push('/')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">学新词</button>
       </div>
     )
   }
@@ -127,16 +127,16 @@ export default function ReviewPage() {
     <div className="mx-auto max-w-lg">
       {/* progress bar */}
       <div className="mb-6 flex items-center gap-3">
-        <div className="h-1 flex-1 rounded-full bg-stone-200">
-          <div className="h-1 rounded-full bg-stone-900 transition-all" style={{ width: `${((idx + 1) / queue.length) * 100}%` }} />
+        <div className="h-1 flex-1 rounded-full bg-stone-200 dark:bg-stone-800">
+          <div className="h-1 rounded-full bg-stone-900 transition-all dark:bg-stone-100" style={{ width: `${((idx + 1) / queue.length) * 100}%` }} />
         </div>
-        <span className="text-xs text-stone-400">{idx + 1}/{queue.length}</span>
+        <span className="text-xs text-stone-400 dark:text-stone-500">{idx + 1}/{queue.length}</span>
       </div>
 
       {/* sentence */}
       <div className="mb-6">
         {sentence.text && (
-          <p className="text-lg leading-relaxed text-stone-800">
+          <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
             {parts.map((part, i) =>
               part.startsWith('==') && part.endsWith('==') ? (
                 <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">
@@ -155,23 +155,23 @@ export default function ReviewPage() {
         <div className="grid grid-cols-3 gap-1.5">
           <button
             onClick={() => handleRate('clear')}
-            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300"
+            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600"
           >
-            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-[10px] text-green-600">✓</span>
+            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-[10px] text-green-600 dark:bg-green-900 dark:text-green-400">✓</span>
             清楚
           </button>
           <button
             onClick={() => handleRate('vague')}
-            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300"
+            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600"
           >
-            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-[10px] text-amber-600">~</span>
+            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-[10px] text-amber-600 dark:bg-amber-900 dark:text-amber-400">~</span>
             模糊
           </button>
           <button
             onClick={() => handleRate('forgot')}
-            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300"
+            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600"
           >
-            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-[10px] text-red-600">✗</span>
+            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-[10px] text-red-600 dark:bg-red-900 dark:text-red-400">✗</span>
             忘记
           </button>
         </div>
@@ -181,37 +181,37 @@ export default function ReviewPage() {
           {/* Word header with mastery */}
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold">{item.userWord.word.text}</h2>
-            <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-500">
+            <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">
               掌握 {item.wordMastery}%
             </span>
           </div>
 
-          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-stone-400">
+              <span className="text-xs font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
                 {item.meaning.partOfSpeech}
               </span>
-              <span className="text-xs text-stone-400">{item.mastery}%</span>
+              <span className="text-xs text-stone-400 dark:text-stone-500">{item.mastery}%</span>
             </div>
-            <p className="text-sm leading-relaxed text-stone-700">{item.meaning.definition}</p>
+            <p className="text-sm leading-relaxed text-stone-700 dark:text-stone-300">{item.meaning.definition}</p>
             {item.meaning.definitionCn && (
-              <p className="mt-2 border-t border-stone-100 pt-2 text-sm font-medium text-stone-900">
+              <p className="mt-2 border-t border-stone-100 pt-2 text-sm font-medium text-stone-900 dark:border-stone-800 dark:text-stone-100">
                 {item.meaning.definitionCn}
               </p>
             )}
           </div>
 
           {sentence.cn && (
-            <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-              <span className="mb-1.5 block text-xs font-medium text-stone-400">译文</span>
-              <p className="text-sm leading-relaxed text-stone-600">{sentence.cn}</p>
+            <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
+              <span className="mb-1.5 block text-xs font-medium text-stone-400 dark:text-stone-500">译文</span>
+              <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-400">{sentence.cn}</p>
             </div>
           )}
 
           {showForgotAfterClear && (
             <button
               onClick={handleForgotAfterClear}
-              className="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-400 shadow-sm transition hover:border-red-200 hover:text-red-500"
+              className="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-400 shadow-sm transition hover:border-red-200 hover:text-red-500 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500 dark:shadow-none dark:hover:border-red-400"
             >
               忘记
             </button>
@@ -220,7 +220,7 @@ export default function ReviewPage() {
           <button
             onClick={handleNext}
             disabled={submitting}
-            className="w-full rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-stone-800 disabled:opacity-50"
+            className="w-full rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-stone-800 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 dark:shadow-none"
           >
             {submitting ? '...' : idx < queue.length - 1 ? '继续' : '完成'}
           </button>
