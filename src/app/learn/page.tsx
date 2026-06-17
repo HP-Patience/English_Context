@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import PronounceButton from '@/components/PronounceButton'
 
 type LearnItem = {
   id: string
@@ -17,7 +18,7 @@ type LearnItem = {
   groupId: string
 }
 
-export default function LearnPage() {
+function LearnPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const groupId = searchParams.get('groupId')
@@ -116,6 +117,7 @@ export default function LearnPage() {
       <div className="mb-6 text-center">
         <div className="flex items-center justify-center gap-2">
           <h1 className="text-3xl font-bold">{item.word}</h1>
+          <PronounceButton word={item.word} />
           <button
             onClick={async () => {
               try {
@@ -198,5 +200,13 @@ export default function LearnPage() {
         <div className="mb-4 text-center text-sm text-stone-400 dark:text-stone-500">例句生成中，先看释义</div>
       )}
     </div>
+  )
+}
+
+export default function LearnPage() {
+  return (
+    <Suspense fallback={<div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>}>
+      <LearnPageContent />
+    </Suspense>
   )
 }

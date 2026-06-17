@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import PronounceButton from '@/components/PronounceButton'
 
 type ReviewItem = {
   id: string
@@ -203,6 +204,7 @@ export default function ReviewPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold">{item.userWord.word.text}</h2>
+              <PronounceButton word={item.userWord.word.text} />
               <button
                 onClick={() => toggleBookmark(item.userWord.word.id)}
                 className={`text-base ${bookmarks[item.userWord.word.id] ? 'text-amber-500' : 'text-stone-300 hover:text-amber-400 dark:text-stone-600 dark:hover:text-amber-400'}`}
