@@ -26,6 +26,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ bookmarked: updated.bookmarked })
   } catch (err: any) {
     console.error('bookmark toggle error:', err)
-    return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
