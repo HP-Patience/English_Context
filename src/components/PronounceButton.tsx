@@ -97,6 +97,7 @@ export default function PronounceButton({ word }: { word: string }) {
     <button
       onClick={play}
       disabled={playing}
+      type="button"
       className={`inline-flex items-center justify-center rounded-md p-1.5 transition ${
         playing
           ? 'text-amber-500 animate-pulse'
