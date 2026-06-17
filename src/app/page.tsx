@@ -15,6 +15,11 @@ function getStage(name: string): string {
 
 const STAGE_ORDER = ['高频词', '中频词', '低频词', '偶考词', '基础词', '补充词']
 
+interface BeforeInstallPromptEvent {
+  prompt: () => void
+  userChoice: Promise<{ outcome: string }>
+}
+
 export default function HomePage() {
   const router = useRouter()
   const [stats, setStats] = useState<any>(null)
@@ -22,7 +27,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set(['高频词']))
   const [showInstallBanner, setShowInstallBanner] = useState(false)
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {
     const dismissedAt = localStorage.getItem('pwa-install-dismissed')
@@ -30,7 +35,7 @@ export default function HomePage() {
 
     const handler = (e: Event) => {
       e.preventDefault()
-      setDeferredPrompt(e)
+      setDeferredPrompt(e as unknown as BeforeInstallPromptEvent)
       setShowInstallBanner(true)
     }
     window.addEventListener('beforeinstallprompt', handler)

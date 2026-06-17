@@ -50,6 +50,14 @@ export async function GET() {
     return '其他'
   }
 
+  /** Format a Date to YYYY-MM-DD in local timezone. */
+  function fmt(d: Date): string {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
   const stageMap = new Map<string, { total: number; learned: number; totalMastery: number }>()
   for (const g of groups) {
     const stage = getStage(g.name)
@@ -166,7 +174,7 @@ export async function GET() {
   })
   const goalMap = new Map<string, (typeof goalRecords)[0]>()
   for (const r of goalRecords) {
-    goalMap.set(r.date.toISOString().split('T')[0], r)
+    goalMap.set(fmt(r.date), r)
   }
   const goalHeatmap: Array<{
     date: string
@@ -176,7 +184,7 @@ export async function GET() {
   }> = []
   const d = new Date(goalStart)
   for (let i = 0; i < 30; i++) {
-    const key = d.toISOString().split('T')[0]
+    const key = fmt(d)
     const record = goalMap.get(key)
     goalHeatmap.push({
       date: key,

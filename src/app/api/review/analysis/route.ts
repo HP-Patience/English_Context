@@ -78,30 +78,34 @@ export async function GET() {
     const avgInterval = Math.round((agg._avg.interval ?? 0) * 10) / 10
 
     // Last 7 days pass rate
-    const recentPassRate = []
+    const recentPassRatePromises = []
     for (let i = 6; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
       const start = new Date(d.getFullYear(), d.getMonth(), d.getDate())
       const end = new Date(start.getTime() + 86400000)
-      const total = await prisma.reviewLog.count({
-        where: {
-          reviewSession: { userId },
-          createdAt: { gte: start, lt: end },
-        },
-      })
-      const passed = await prisma.reviewLog.count({
-        where: {
-          reviewSession: { userId },
-          createdAt: { gte: start, lt: end },
-          result: 'pass',
-        },
-      })
-      recentPassRate.push({
-        date: start.toISOString().split('T')[0],
-        rate: total > 0 ? Math.round((passed / total) * 100) : 0,
-      })
+      recentPassRatePromises.push(
+        Promise.all([
+          prisma.reviewLog.count({
+            where: {
+              reviewSession: { userId },
+              createdAt: { gte: start, lt: end },
+            },
+          }),
+          prisma.reviewLog.count({
+            where: {
+              reviewSession: { userId },
+              createdAt: { gte: start, lt: end },
+              result: 'pass',
+            },
+          }),
+        ]).then(([total, passed]) => ({
+          date: start.toISOString().split('T')[0],
+          rate: total > 0 ? Math.round((passed / total) * 100) : 0,
+        }))
+      )
     }
+    const recentPassRate = await Promise.all(recentPassRatePromises)
 
     const needsAttention = await prisma.userWordMeaning.count({
       where: { userWord: { userId }, mastery: { lt: 30 }, interval: { gt: 0 } },

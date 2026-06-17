@@ -116,7 +116,7 @@ export default function SettingsPage() {
         <button
           onClick={() => setTab('llm')}
           className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-            tab === 'llm' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-900'
+            tab === 'llm' ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-800 dark:text-stone-100' : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-100'
           }`}
         >
           模型配置
@@ -124,7 +124,7 @@ export default function SettingsPage() {
         <button
           onClick={() => setTab('interests')}
           className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-            tab === 'interests' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-900'
+            tab === 'interests' ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-800 dark:text-stone-100' : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-100'
           }`}
         >
           兴趣领域
@@ -281,11 +281,12 @@ export default function SettingsPage() {
             onClick={async () => {
               setSavingGoal(true)
               try {
-                await fetch('/api/daily-goal', {
+                const res = await fetch('/api/daily-goal', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ target: dailyTarget }),
                 })
+                if (!res.ok) throw new Error('Save failed')
                 setGoalSaved(true)
                 setTimeout(() => setGoalSaved(false), 2000)
               } finally {

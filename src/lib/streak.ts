@@ -16,8 +16,11 @@ export interface GoalRecord {
 export async function calculateStreak(
   userId: string
 ): Promise<{ current: number; longest: number }> {
+  const oneYearAgo = new Date()
+  oneYearAgo.setDate(oneYearAgo.getDate() - 366)
+
   const records = await prisma.dailyGoal.findMany({
-    where: { userId },
+    where: { userId, date: { gte: oneYearAgo } },
     orderBy: { date: 'desc' },
     select: { date: true, completed: true },
   })
