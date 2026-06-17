@@ -8,6 +8,14 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'ContextVocab — 语境背单词',
   description: '通过个性化语境背英语单词',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+  },
+  other: {
+    'theme-color': '#1c1917',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
