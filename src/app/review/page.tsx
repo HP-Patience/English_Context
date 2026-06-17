@@ -122,8 +122,8 @@ export default function ReviewPage() {
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">完成了 {idx} 个单词</p>
         <div className="flex justify-center gap-3">
           <button onClick={() => router.push('/learn')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">查看单词</button>
-          <button onClick={() => router.push('/review/analysis')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">错词分析</button>
           <button onClick={() => router.push('/')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">学新词</button>
+          <button onClick={() => router.push('/review/analysis')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">错词分析</button>
         </div>
       </div>
     )
