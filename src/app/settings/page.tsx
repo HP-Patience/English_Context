@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<'llm' | 'interests'>('llm')
+  const [tab, setTab] = useState<'llm' | 'interests' | 'goal'>('llm')
   const [baseURL, setBaseURL] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
@@ -21,6 +21,9 @@ export default function SettingsPage() {
   // test connection
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; reply?: string; error?: string } | null>(null)
+  const [dailyTarget, setDailyTarget] = useState(30)
+  const [savingGoal, setSavingGoal] = useState(false)
+  const [goalSaved, setGoalSaved] = useState(false)
 
   useEffect(() => {
     fetch('/api/settings/llm')
@@ -29,6 +32,15 @@ export default function SettingsPage() {
         setBaseURL(data.baseURL || '')
         setModel(data.model || '')
         setHasKey(data.hasKey)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/daily-goal')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.target) setDailyTarget(data.target)
       })
       .catch(() => {})
   }, [])
@@ -116,6 +128,14 @@ export default function SettingsPage() {
           }`}
         >
           兴趣领域
+        </button>
+        <button
+          onClick={() => setTab('goal')}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
+            tab === 'goal' ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-800 dark:text-stone-100' : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-100'
+          }`}
+        >
+          每日目标
         </button>
       </div>
 
@@ -227,7 +247,7 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
-      ) : (
+      ) : tab === 'interests' ? (
         <div className="text-center">
           <p className="mb-4 text-sm text-stone-500">
             选择兴趣领域，AI 将生成贴合这些领域的例句
@@ -238,6 +258,45 @@ export default function SettingsPage() {
           >
             前往兴趣设置
           </a>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <p className="text-sm text-stone-500 dark:text-stone-400">
+            设定每日学习目标，完成打卡记录连续天数。
+          </p>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
+              每日目标词数
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={500}
+              value={dailyTarget}
+              onChange={(e) => setDailyTarget(parseInt(e.target.value) || 1)}
+              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm focus:border-stone-900 focus:outline-none dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:focus:border-stone-400"
+            />
+          </div>
+          <button
+            onClick={async () => {
+              setSavingGoal(true)
+              try {
+                await fetch('/api/daily-goal', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ target: dailyTarget }),
+                })
+                setGoalSaved(true)
+                setTimeout(() => setGoalSaved(false), 2000)
+              } finally {
+                setSavingGoal(false)
+              }
+            }}
+            disabled={savingGoal}
+            className="w-full rounded-lg bg-stone-900 py-3 font-medium text-white hover:bg-stone-800 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
+          >
+            {savingGoal ? '保存中...' : goalSaved ? '✓ 已保存' : '保存目标'}
+          </button>
         </div>
       )}
     </div>
