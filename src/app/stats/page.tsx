@@ -1,0 +1,176 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+
+type Stats = {
+  overall: { totalWords: number; learnedWords: number; avgMastery: number }
+  masteryDistribution: { low: number; medium: number; high: number; mastered: number }
+  stages: Array<{ name: string; total: number; learned: number; avgMastery: number }>
+  weakGroups: Array<{ id: string; name: string; total: number; learned: number; avgMastery: number }>
+  reviewForecast: Array<{ date: string; dueCount: number }>
+  dailyActivity: Array<{ date: string; count: number }>
+}
+
+function maxVal(arr: Array<{ count: number }>): number {
+  return Math.max(...arr.map((d) => d.count), 1)
+}
+
+function Bar({ value, max, className }: { value: number; max: number; className: string }) {
+  return (
+    <div className="h-full w-full overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+      <div className={`h-full rounded-full transition-all ${className}`} style={{ width: `${(value / max) * 100}%` }} />
+    </div>
+  )
+}
+
+export default function StatsPage() {
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
+  }
+
+  if (!stats) {
+    return <div className="py-16 text-center text-sm text-stone-400">无法加载统计数据</div>
+  }
+
+  const formatDate = (d: string) => {
+    const parts = d.split('-')
+    return `${parts[1]}/${parts[2]}`
+  }
+
+  return (
+    <div className="mx-auto max-w-lg space-y-6">
+      <h1 className="text-2xl font-bold text-stone-900 dark:text-stone-100">学习统计</h1>
+
+      {/* Overall progress */}
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">总进度</h2>
+        <div className="flex items-baseline gap-1">
+          <span className="text-3xl font-bold text-stone-900 dark:text-stone-100">{stats.overall.learnedWords}</span>
+          <span className="text-sm text-stone-400 dark:text-stone-500">/ {stats.overall.totalWords} 词</span>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+          <div className="h-full rounded-full bg-stone-900 transition-all dark:bg-stone-400" style={{ width: `${(stats.overall.learnedWords / stats.overall.totalWords) * 100}%` }} />
+        </div>
+        {stats.overall.avgMastery > 0 && (
+          <p className="mt-2 text-xs text-stone-400 dark:text-stone-500">
+            平均掌握率 {stats.overall.avgMastery}%
+          </p>
+        )}
+      </div>
+
+      {/* Mastery distribution */}
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">掌握分布</h2>
+        <div className="space-y-2">
+          {[
+            { key: 'mastered', label: '掌握 (75-100%)', color: 'bg-green-500', value: stats.masteryDistribution.mastered },
+            { key: 'high', label: '良好 (50-75%)', color: 'bg-emerald-400', value: stats.masteryDistribution.high },
+            { key: 'medium', label: '一般 (25-50%)', color: 'bg-amber-400', value: stats.masteryDistribution.medium },
+            { key: 'low', label: '初学 (0-25%)', color: 'bg-red-400', value: stats.masteryDistribution.low },
+          ].map((item) => (
+            <div key={item.key} className="flex items-center gap-3 text-xs">
+              <span className="w-24 text-stone-600 dark:text-stone-400">{item.label}</span>
+              <div className="flex-1">
+                <div className="h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+                  <div className={`h-full rounded-full ${item.color}`} style={{ width: `${(item.value / Math.max(stats.overall.learnedWords, 1)) * 100}%` }} />
+                </div>
+              </div>
+              <span className="w-8 text-right text-stone-500 dark:text-stone-400">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stage progress */}
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">各阶段进度</h2>
+        <div className="space-y-3">
+          {stats.stages.map((s) => (
+            <div key={s.name}>
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className="font-medium text-stone-700 dark:text-stone-300">{s.name}</span>
+                <span className="text-stone-400 dark:text-stone-500">
+                  {s.learned}/{s.total} · {s.avgMastery}%
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+                <div className="h-full rounded-full bg-stone-900 transition-all dark:bg-stone-400" style={{ width: `${(s.learned / s.total) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Weak groups */}
+      {stats.weakGroups.length > 0 && (
+        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+          <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">薄弱分组</h2>
+          <div className="space-y-2">
+            {stats.weakGroups.map((g) => (
+              <div key={g.id} className="flex items-center justify-between text-xs">
+                <span className="text-stone-700 dark:text-stone-300">{g.name}</span>
+                <span className="text-red-500 dark:text-red-400">{g.avgMastery}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Review forecast */}
+      {stats.reviewForecast.length > 0 && (
+        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+          <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">未来 7 天复习量</h2>
+          <div className="flex items-end gap-1.5" style={{ height: '80px' }}>
+            {stats.reviewForecast.map((d) => {
+              const max = maxVal(stats.reviewForecast.map((d) => ({ count: d.dueCount })))
+              const height = max > 0 ? (d.dueCount / max) * 100 : 0
+              return (
+                <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+                  <span className="text-[10px] text-stone-400 dark:text-stone-500">{d.dueCount}</span>
+                  <div className="w-full rounded-t-md bg-amber-400" style={{ height: `${height}%`, minHeight: d.dueCount > 0 ? '4px' : '0' }} />
+                  <span className="text-[10px] text-stone-400 dark:text-stone-500">{formatDate(d.date)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Daily activity */}
+      {stats.dailyActivity.length > 0 && (
+        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+          <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">近 30 天学习记录</h2>
+          <div className="flex items-end gap-[3px]" style={{ height: '60px' }}>
+            {stats.dailyActivity.map((d) => {
+              const max = maxVal(stats.dailyActivity)
+              const height = max > 0 ? (d.count / max) * 100 : 0
+              return (
+                <div
+                  key={d.date}
+                  className="flex-1 rounded-t-sm bg-stone-400 dark:bg-stone-500"
+                  style={{ height: `${height}%`, minHeight: d.count > 0 ? '2px' : '0' }}
+                  title={`${d.date}: ${d.count} 词`}
+                />
+              )
+            })}
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] text-stone-400 dark:text-stone-500">
+            <span>{stats.dailyActivity[0]?.date?.slice(5) || ''}</span>
+            <span>{stats.dailyActivity[stats.dailyActivity.length - 1]?.date?.slice(5) || ''}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
