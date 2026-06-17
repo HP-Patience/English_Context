@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
+import { cachedFetch, invalidateCache } from '@/lib/api-cache'
 
 type ReviewItem = {
   id: string
@@ -26,8 +27,7 @@ export default function ReviewPage() {
   const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    fetch('/api/review-queue')
-      .then((r) => r.json())
+    cachedFetch<ReviewItem[]>('/api/review-queue')
       .then((data) => {
         setQueue(data)
         const bm: Record<string, boolean> = {}
@@ -101,6 +101,10 @@ export default function ReviewPage() {
           flippedToForgot: selfRate === 'forgot',
         }),
       })
+      invalidateCache('/api/kaoyan/stats')
+      invalidateCache('/api/daily-goal')
+      invalidateCache('/api/stats')
+      invalidateCache('/api/review/analysis')
     } catch {}
     setSubmitting(false)
     if (idx < queue.length - 1) {

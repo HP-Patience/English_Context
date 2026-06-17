@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { cachedFetch } from '@/lib/api-cache'
 
 type BookmarkItem = {
   id: string
@@ -27,8 +29,7 @@ export default function BookmarksPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/bookmarks')
-      .then((r) => r.json())
+    cachedFetch<{ bookmarks: BookmarkItem[] }>('/api/bookmarks')
       .then((d) => setItems(d.bookmarks))
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -64,7 +65,12 @@ export default function BookmarksPage() {
             className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900"
           >
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100">{item.word.text}</h3>
+              <Link
+                href={`/word/${item.word.id}`}
+                className="text-lg font-bold text-stone-900 hover:text-amber-600 dark:text-stone-100 dark:hover:text-amber-400"
+              >
+                {item.word.text}
+              </Link>
               <button
                 onClick={() => handleUnbookmark(item.word.id)}
                 className="rounded-lg px-2 py-1 text-xs text-stone-400 hover:bg-stone-100 hover:text-red-500 dark:hover:bg-stone-800"

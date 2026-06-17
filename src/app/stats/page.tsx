@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { cachedFetch } from '@/lib/api-cache'
 
 type Stats = {
   overall: { totalWords: number; learnedWords: number; avgMastery: number }
@@ -22,8 +23,7 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/stats')
-      .then((r) => r.json())
+    cachedFetch<Stats>('/api/stats')
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoading(false))

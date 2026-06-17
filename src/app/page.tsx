@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { cachedFetch } from '@/lib/api-cache'
 
 function getStage(name: string): string {
   if (name.startsWith('高频词')) return '高频词'
@@ -54,17 +55,15 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    fetch('/api/kaoyan/stats')
-      .then((r) => r.json())
+    cachedFetch('/api/kaoyan/stats')
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
-    fetch('/api/daily-goal')
-      .then((r) => r.json())
-      .then((data) => {
+    cachedFetch('/api/daily-goal')
+      .then((data: any) => {
         if (!data.error) setDailyGoal(data)
       })
       .catch(() => {})
@@ -95,6 +94,12 @@ export default function HomePage() {
       else next.add(stage)
       return next
     })
+  }
+
+  const prefetchLearn = (groupId: string) => {
+    router.prefetch(`/learn?groupId=${groupId}`)
+    // Also warm the API cache
+    cachedFetch(`/api/kaoyan/learn?groupId=${groupId}`).catch(() => {})
   }
 
   if (loading) {
@@ -191,6 +196,7 @@ export default function HomePage() {
                     <button
                       key={g.id}
                       onClick={() => router.push(`/learn?groupId=${g.id}`)}
+                      onMouseEnter={() => prefetchLearn(g.id)}
                       className="flex w-full items-center justify-between px-4 py-3 pl-8 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800"
                     >
                       <div>

@@ -18,6 +18,20 @@ type LearnItem = {
   groupId: string
 }
 
+function highlightWord(sentence: string, word: string) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp(`(${escaped})`, 'gi')
+  const clean = sentence.replace(/\*\*/g, '')
+  const parts = clean.split(re)
+  const result: Array<{ text: string; highlight: boolean }> = []
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    if (!part) continue
+    result.push({ text: part, highlight: i % 2 === 1 })
+  }
+  return result
+}
+
 function LearnPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -30,7 +44,6 @@ function LearnPageContent() {
   const [revealed, setRevealed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [bookmarked, setBookmarked] = useState(false)
-
   const fetchNext = useCallback(async () => {
     if (!groupId) return
     setLoading(true)
@@ -78,7 +91,23 @@ function LearnPageContent() {
   }
 
   if (loading) {
-    return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
+    return (
+      <div className="mx-auto max-w-lg">
+        <div className="mb-6 flex animate-pulse flex-col items-center gap-3">
+          <div className="h-9 w-40 rounded bg-stone-200 dark:bg-stone-700" />
+          <div className="h-5 w-24 rounded bg-stone-100 dark:bg-stone-800" />
+        </div>
+        <div className="mb-8 animate-pulse rounded-xl border border-stone-200 p-6 dark:border-stone-700">
+          <div className="h-6 w-full rounded bg-stone-100 dark:bg-stone-800" />
+          <div className="mt-2 h-6 w-3/4 rounded bg-stone-100 dark:bg-stone-800" />
+        </div>
+        <div className="grid animate-pulse grid-cols-3 gap-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-20 rounded-xl bg-stone-100 dark:bg-stone-800" />
+          ))}
+        </div>
+      </div>
+    )
   }
 
   if (done) {
@@ -105,11 +134,7 @@ function LearnPageContent() {
   }
 
   const sentenceParts = item.sentence
-    ? item.sentence.split(/\*\*(.+?)\*\*/g).map((part, i) =>
-        i % 2 === 1
-          ? { text: part, highlight: true }
-          : { text: part, highlight: false }
-      ).filter(p => p.text)
+    ? highlightWord(item.sentence, item.word)
     : []
 
   return (

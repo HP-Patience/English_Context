@@ -37,17 +37,16 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  // Find first word that has unlearned meanings
+  // Find first word that has unlearned meanings (without sentence query in loop)
+  let foundUwmId: string | null = null
+  let responseData: Record<string, unknown> | null = null
+
   for (const item of items) {
     for (const meaning of item.word.meanings) {
       const uwm = meaning.userWordMeanings[0]
       if (uwm && uwm.mastery === 0 && uwm.interval === 0) {
-        // Get first sentence for this meaning
-        const sentence = await prisma.generatedSentence.findFirst({
-          where: { userWordMeaningId: uwm.id },
-          orderBy: { lastUsedAt: 'desc' },
-        })
-        return NextResponse.json({
+        foundUwmId = uwm.id
+        responseData = {
           id: uwm.id,
           wordId: item.word.id,
           word: item.word.text,
@@ -56,12 +55,24 @@ export async function GET(req: NextRequest) {
           definitionCn: meaning.definitionCn,
           wordMastery: calcMastery(uwm.easeFactor),
           meaningMastery: uwm.mastery,
-          sentence: sentence?.sentenceText || null,
-          sentenceCn: sentence?.sentenceCn || null,
           groupId,
-        })
+        }
+        break
       }
     }
+    if (foundUwmId) break
+  }
+
+  if (responseData && foundUwmId) {
+    const sentence = await prisma.generatedSentence.findFirst({
+      where: { userWordMeaningId: foundUwmId },
+      orderBy: { lastUsedAt: 'desc' },
+    })
+    return NextResponse.json({
+      ...responseData,
+      sentence: sentence?.sentenceText || null,
+      sentenceCn: sentence?.sentenceCn || null,
+    })
   }
 
   // Check if all done in this group

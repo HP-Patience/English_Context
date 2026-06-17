@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { cachedFetch } from '@/lib/api-cache'
 
 type SearchResult = {
   id: string
@@ -32,7 +34,7 @@ type SearchResult = {
   }>
 }
 
-export default function SearchPage() {
+function SearchPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialQ = searchParams.get('q') || ''
@@ -55,8 +57,9 @@ export default function SearchPage() {
     setLoading(true)
     setSearched(true)
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
-      const data = await res.json()
+      const data = await cachedFetch<{ results: SearchResult[] }>(
+        `/api/search?q=${encodeURIComponent(q)}`,
+      )
       setResults(data.results)
     } catch {
       setResults([])
@@ -68,6 +71,13 @@ export default function SearchPage() {
   useEffect(() => {
     if (initialQ) doSearch(initialQ)
   }, [initialQ, doSearch])
+
+  // Debounced auto-search on input change (don't update URL until submit)
+  useEffect(() => {
+    if (!query.trim() || query === initialQ) return
+    const timer = setTimeout(() => doSearch(query), 300)
+    return () => clearTimeout(timer)
+  }, [query, doSearch, initialQ])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -117,7 +127,12 @@ export default function SearchPage() {
               className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:shadow-none dark:border-stone-700 dark:bg-stone-900"
             >
               <div className="mb-2 flex items-baseline justify-between">
-                <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100">{word.text}</h3>
+                <Link
+                  href={`/word/${word.id}`}
+                  className="text-lg font-bold text-stone-900 hover:text-amber-600 dark:text-stone-100 dark:hover:text-amber-400"
+                >
+                  {word.text}
+                </Link>
                 {userWord && (
                   <span className={`text-xs font-medium ${masteryColor(userWord.mastery)}`}>
                     {masteryLabel(userWord.mastery)}
@@ -174,5 +189,13 @@ export default function SearchPage() {
         })}
       </div>
     </div>
+  )
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>}>
+      <SearchPageContent />
+    </Suspense>
   )
 }
