@@ -39,23 +39,25 @@ export default function PronounceButton({ word }: { word: string }) {
 
     try {
       // 懒加载 TTS 配置 (仅首次点击)
-      if (!config) {
+      let cfg = config
+      if (!cfg) {
         const res = await fetch('/api/settings/tts')
-        if (res.ok) {
-          const data = await res.json()
+        const data: TtsConfig | null = res.ok ? await res.json() : null
+        if (data) {
           setConfig(data)
+          cfg = data // 直接用新数据, 避免闭包陈旧
         }
       }
 
-      const cfg = config || { provider: 'browser', baseURL: '', voice: '', hasKey: false }
+      const activeCfg = cfg ?? { provider: 'browser', baseURL: '', voice: '', hasKey: false }
 
-      if (cfg.provider !== 'browser' && cfg.hasKey) {
+      if (activeCfg.provider !== 'browser' && activeCfg.hasKey) {
         // 外部 API TTS
         try {
           const res = await fetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: word, voice: cfg.voice || undefined }),
+            body: JSON.stringify({ text: word, voice: activeCfg.voice || undefined }),
           })
           if (res.ok) {
             const blob = await res.blob()
