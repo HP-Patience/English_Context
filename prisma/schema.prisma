@@ -12,8 +12,9 @@ model User {
   email     String?  @unique
   name      String?
   interests String?  @default("[]") // JSON array
-  llmConfig String?  // JSON: { baseURL, apiKey, model }
-  createdAt DateTime @default(now())
+  llmConfig   String?   // JSON: { baseURL, apiKey, model }
+  dailyTarget Int       @default(30)
+  createdAt   DateTime  @default(now())
 
   words          UserWord[]
   reviewSessions ReviewSession[]
@@ -137,4 +138,17 @@ model ReviewLog {
 
   reviewSession   ReviewSession   @relation(fields: [reviewSessionId], references: [id])
   userWordMeaning UserWordMeaning @relation(fields: [userWordMeaningId], references: [id])
+}
+
+model DailyGoal {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime
+  target    Int
+  learned   Int      @default(0)
+  reviewed  Int      @default(0)
+  completed Boolean  @default(false)
+
+  @@unique([userId, date])
+  @@index([userId])
 }
