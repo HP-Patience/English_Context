@@ -54,3 +54,4 @@ scripts/.migrate-cache/
 *.tsbuildinfo
 next-env.d.ts
 .playwright-mcp/
+.gstack/
