@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
+import { highlightWord } from '@/lib/highlight'
 import { cachedFetch, invalidateCache } from '@/lib/api-cache'
 
 type ReviewItem = {
@@ -45,13 +46,6 @@ export default function ReviewPage() {
     if (!item) return { text: '', cn: null }
     const sorted = [...item.sentences].sort((a) => (a.contextTopic === 'interest_tuned' ? -1 : 1))
     return { text: sorted[0]?.sentenceText ?? '', cn: sorted[0]?.sentenceCn ?? null }
-  }
-
-  function highlightWord(sentence: string, word: string): string[] {
-    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const re = new RegExp(`(${escaped})`, 'gi')
-    const clean = sentence.replace(/\*\*/g, '')
-    return clean.replace(re, '==$1==').split(/(==[^=]+==)/g)
   }
 
   function handleRate(rate: 'clear' | 'vague' | 'forgot') {
@@ -166,12 +160,12 @@ export default function ReviewPage() {
         {sentence.text && (
           <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
             {parts.map((part, i) =>
-              part.startsWith('==') && part.endsWith('==') ? (
+              part.highlight ? (
                 <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">
-                  {part.slice(2, -2)}
+                  {part.text}
                 </span>
               ) : (
-                <span key={i}>{part}</span>
+                <span key={i}>{part.text}</span>
               )
             )}
           </p>
