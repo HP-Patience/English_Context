@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { cachedFetch } from '@/lib/api-cache'
+import { highlightWord } from '@/lib/highlight'
 
 type SearchResult = {
   id: string
@@ -224,11 +225,20 @@ function SearchPageContent() {
                         <span className="ml-1 text-stone-500 dark:text-stone-400">· {m.definitionCn}</span>
                       )}
                     </p>
-                    {sentence && (
-                      <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500 italic">
-                        {sentence.sentenceText}
-                      </p>
-                    )}
+                    {sentence && (() => {
+                      const parts = highlightWord(sentence.sentenceText, word.text)
+                      return (
+                        <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500 italic">
+                          {parts.map((part, j) =>
+                            part.highlight ? (
+                              <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                            ) : (
+                              <span key={j}>{part.text}</span>
+                            )
+                          )}
+                        </p>
+                      )
+                    })()}
                   </div>
                 )
               })}
