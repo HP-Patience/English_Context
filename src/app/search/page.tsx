@@ -150,7 +150,7 @@ function SearchPageContent() {
                         {m.partOfSpeech}
                       </span>{' '}
                       {m.definition}
-                      {m.definitionCn && (
+                      {m.definitionCn && m.definitionCn !== m.definition && (
                         <span className="ml-1 text-stone-500 dark:text-stone-400">· {m.definitionCn}</span>
                       )}
                     </p>

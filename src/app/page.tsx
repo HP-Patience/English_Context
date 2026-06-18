@@ -56,17 +56,12 @@ export default function HomePage() {
 
   useEffect(() => {
     cachedFetch('/api/kaoyan/stats')
-      .then(setStats)
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    cachedFetch('/api/daily-goal')
       .then((data: any) => {
-        if (!data.error) setDailyGoal(data)
+        setStats(data)
+        if (data.dailyGoal) setDailyGoal(data.dailyGoal)
       })
       .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   // Group groups by stage, aggregate stats

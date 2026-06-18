@@ -2,20 +2,33 @@ import { NextResponse } from 'next/server'
 import { prisma, getLocalUserId } from '@/lib/prisma'
 import { calculateStreak } from '@/lib/streak'
 
+export const maxDuration = 30
+
 export async function GET() {
   const userId = await getLocalUserId()
 
-  // Overall counts
-  const totalWords = await prisma.word.count({ where: { language: 'en' } })
-  const learnedWords = await prisma.userWord.count({
-    where: { userId, mastery: { gt: 0 } },
-  })
+  // All independent queries in parallel
+  const [
+    totalWords,
+    learnedWords,
+    userWords,
+    groups,
+    groupItems,
+    userWordMap,
+    reviewSessions,
+    goalRecords,
+  ] = await Promise.all([
+    prisma.word.count({ where: { language: 'en' } }),
+    prisma.userWord.count({ where: { userId, mastery: { gt: 0 } } }),
+    prisma.userWord.findMany({ where: { userId }, select: { mastery: true, wordId: true } }),
+    prisma.wordGroup.findMany({ orderBy: { sortOrder: 'asc' }, select: { id: true, name: true, sortOrder: true } }),
+    prisma.wordGroupItem.findMany({ select: { wordGroupId: true, wordId: true } }),
+    prisma.userWord.findMany({ where: { userId }, select: { wordId: true, mastery: true } }),
+    prisma.reviewSession.findMany({ where: { userId }, select: { id: true } }),
+    prisma.dailyGoal.findMany({ where: { userId, date: { gte: new Date(Date.now() - 29 * 86400000) } }, orderBy: { date: 'asc' } }),
+  ])
 
   // Mastery distribution
-  const userWords = await prisma.userWord.findMany({
-    where: { userId },
-    select: { mastery: true },
-  })
   const dist = { low: 0, medium: 0, high: 0, mastered: 0 }
   for (const uw of userWords) {
     if (uw.mastery >= 75) dist.mastered++
@@ -24,21 +37,19 @@ export async function GET() {
     else if (uw.mastery > 0) dist.low++
   }
 
-  // Stage-level progress
-  const groups = await prisma.wordGroup.findMany({
-    orderBy: { sortOrder: 'asc' },
-    include: {
-      words: {
-        include: {
-          word: {
-            include: {
-              userWords: { where: { userId } },
-            },
-          },
-        },
-      },
-    },
-  })
+  // Avg mastery
+  const avgMastery = learnedWords > 0
+    ? Math.round(userWords.reduce((s, u) => s + u.mastery, 0) / learnedWords)
+    : 0
+
+  // Stage progress - group group items by wordGroupId
+  const itemByGroup = new Map<string, string[]>()
+  for (const gi of groupItems) {
+    if (!itemByGroup.has(gi.wordGroupId)) itemByGroup.set(gi.wordGroupId, [])
+    itemByGroup.get(gi.wordGroupId)!.push(gi.wordId)
+  }
+
+  const uwByWord = new Map(userWordMap.map((uw) => [uw.wordId, uw.mastery]))
 
   function getStage(name: string): string {
     if (name.startsWith('高频词')) return '高频词'
@@ -50,25 +61,18 @@ export async function GET() {
     return '其他'
   }
 
-  /** Format a Date to YYYY-MM-DD in local timezone. */
-  function fmt(d: Date): string {
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
-  }
-
   const stageMap = new Map<string, { total: number; learned: number; totalMastery: number }>()
   for (const g of groups) {
     const stage = getStage(g.name)
     if (!stageMap.has(stage)) stageMap.set(stage, { total: 0, learned: 0, totalMastery: 0 })
     const entry = stageMap.get(stage)!
-    for (const gi of g.words) {
-      const uw = gi.word.userWords[0]
+    const wordIds = itemByGroup.get(g.id) || []
+    for (const wid of wordIds) {
       entry.total++
-      if (uw && uw.mastery > 0) {
+      const m = uwByWord.get(wid)
+      if (m && m > 0) {
         entry.learned++
-        entry.totalMastery += uw.mastery
+        entry.totalMastery += m
       }
     }
   }
@@ -86,62 +90,67 @@ export async function GET() {
       }
     })
 
-  // Weak groups (bottom 5 by avgMastery)
-  const weakGroupsRaw = await Promise.all(
-    groups.map(async (g) => {
-      const total = g.words.length
-      let totalMastery = 0
-      let learnedCount = 0
-      for (const gi of g.words) {
-        const uw = gi.word.userWords[0]
-        if (uw && uw.mastery > 0) {
-          totalMastery += uw.mastery
-          learnedCount++
-        }
+  // Weak groups - process in JS from already fetched data
+  const weakGroupsRaw = groups.map((g) => {
+    const wordIds = itemByGroup.get(g.id) || []
+    let totalMastery = 0
+    let learnedCount = 0
+    for (const wid of wordIds) {
+      const m = uwByWord.get(wid)
+      if (m && m > 0) {
+        totalMastery += m
+        learnedCount++
       }
-      return {
-        id: g.id,
-        name: g.name,
-        total,
-        learned: learnedCount,
-        avgMastery: learnedCount > 0 ? Math.round(totalMastery / learnedCount) : 0,
-      }
-    })
-  )
+    }
+    return {
+      id: g.id,
+      name: g.name,
+      total: wordIds.length,
+      learned: learnedCount,
+      avgMastery: learnedCount > 0 ? Math.round(totalMastery / learnedCount) : 0,
+    }
+  })
   const weakGroups = weakGroupsRaw
     .filter((g) => g.learned > 0)
     .sort((a, b) => a.avgMastery - b.avgMastery)
     .slice(0, 5)
 
-  // Review forecast: next 7 days
-  const forecastDays = 7
-  const reviewForecast: Array<{ date: string; dueCount: number }> = []
-  for (let i = 0; i < forecastDays; i++) {
-    const date = new Date()
-    date.setDate(date.getDate() + i)
-    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const endOfDay = new Date(startOfDay.getTime() + 86400000)
+  // Review forecast - single query
+  const today = new Date()
+  const forecastStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const forecastEnd = new Date(forecastStart.getTime() + 7 * 86400000)
 
-    const count = await prisma.userWordMeaning.count({
-      where: {
-        userWord: { userId },
-        nextReviewAt: { gte: startOfDay, lt: endOfDay },
-        interval: { gt: 0 },
-      },
-    })
-    reviewForecast.push({
-      date: startOfDay.toISOString().split('T')[0],
-      dueCount: count,
-    })
+  const sessionIds = reviewSessions.map((s) => s.id)
+
+  const forecastRaw = await prisma.reviewLog.groupBy({
+    by: ['createdAt'],
+    where: {
+      reviewSessionId: { in: sessionIds },
+      createdAt: { gte: forecastStart, lt: forecastEnd },
+    },
+    _count: { id: true },
+  })
+  const forecastCounts = new Map<string, number>()
+  for (const r of forecastRaw) {
+    const key = r.createdAt.toISOString().split('T')[0]
+    forecastCounts.set(key, (forecastCounts.get(key) || 0) + r._count.id)
   }
 
-  // Daily activity: last 30 days from ReviewLog
+  const reviewForecast: Array<{ date: string; dueCount: number }> = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(forecastStart)
+    d.setDate(d.getDate() + i)
+    const key = d.toISOString().split('T')[0]
+    reviewForecast.push({ date: key, dueCount: forecastCounts.get(key) || 0 })
+  }
+
+  // Daily activity - use sessionIds from above
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-  const logs = await prisma.reviewLog.findMany({
+  const logDates = await prisma.reviewLog.findMany({
     where: {
-      reviewSession: { userId },
+      reviewSessionId: { in: sessionIds },
       createdAt: { gte: thirtyDaysAgo },
     },
     select: { createdAt: true },
@@ -149,39 +158,29 @@ export async function GET() {
   })
 
   const dailyMap = new Map<string, number>()
-  const today = new Date()
   for (let i = 29; i >= 0; i--) {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
-    const key = d.toISOString().split('T')[0]
-    dailyMap.set(key, 0)
+    dailyMap.set(d.toISOString().split('T')[0], 0)
   }
-  for (const log of logs) {
+  for (const log of logDates) {
     const key = log.createdAt.toISOString().split('T')[0]
     if (dailyMap.has(key)) dailyMap.set(key, dailyMap.get(key)! + 1)
   }
-  const dailyActivity = Array.from(dailyMap.entries()).map(([date, count]) => ({
-    date,
-    count,
-  }))
+  const dailyActivity = Array.from(dailyMap.entries()).map(([date, count]) => ({ date, count }))
 
-  // Daily goal heatmap data
+  // Goal heatmap
+  function fmt(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
   const goalStart = new Date(today)
   goalStart.setDate(goalStart.getDate() - 29)
-  const goalRecords = await prisma.dailyGoal.findMany({
-    where: { userId, date: { gte: goalStart } },
-    orderBy: { date: 'asc' },
-  })
   const goalMap = new Map<string, (typeof goalRecords)[0]>()
   for (const r of goalRecords) {
     goalMap.set(fmt(r.date), r)
   }
-  const goalHeatmap: Array<{
-    date: string
-    learned: number
-    target: number
-    completed: boolean
-  }> = []
+  const goalHeatmap: Array<{ date: string; learned: number; target: number; completed: boolean }> = []
   const d = new Date(goalStart)
   for (let i = 0; i < 30; i++) {
     const key = fmt(d)
@@ -198,7 +197,7 @@ export async function GET() {
   const streak = await calculateStreak(userId)
 
   return NextResponse.json({
-    overall: { totalWords, learnedWords, avgMastery: learnedWords > 0 ? Math.round(userWords.reduce((s, u) => s + u.mastery, 0) / learnedWords) : 0 },
+    overall: { totalWords, learnedWords, avgMastery },
     masteryDistribution: dist,
     stages,
     weakGroups,

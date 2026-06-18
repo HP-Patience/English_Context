@@ -86,7 +86,7 @@ export default function BookmarksPage() {
                   {m.partOfSpeech}
                 </span>{' '}
                 <span className="text-stone-700 dark:text-stone-300">{m.definition}</span>
-                {m.definitionCn && (
+                {m.definitionCn && m.definitionCn !== m.definition && (
                   <span className="ml-1 text-stone-500 dark:text-stone-400">· {m.definitionCn}</span>
                 )}
               </div>

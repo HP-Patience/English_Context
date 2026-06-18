@@ -34,7 +34,7 @@ export default function AnalysisPage() {
 
   useEffect(() => {
     fetch('/api/review/analysis')
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -44,7 +44,7 @@ export default function AnalysisPage() {
     return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
   }
 
-  if (!data) {
+  if (!data?.trend) {
     return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">暂无数据</div>
   }
 

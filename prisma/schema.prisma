@@ -139,6 +139,11 @@ model ReviewLog {
 
   reviewSession   ReviewSession   @relation(fields: [reviewSessionId], references: [id])
   userWordMeaning UserWordMeaning @relation(fields: [userWordMeaningId], references: [id])
+
+  @@index([reviewSessionId])
+  @@index([userWordMeaningId])
+  @@index([createdAt])
+  @@index([reviewSessionId, createdAt])
 }
 
 model DailyGoal {
