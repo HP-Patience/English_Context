@@ -13,11 +13,24 @@
 ## 技术栈
 
 - Next.js (App Router)
-- Prisma + SQLite
+- Prisma + PostgreSQL (本地/Neon)
 - Tailwind CSS
 - DeepSeek / OpenAI API
 
-## 快速开始
+## 本地开发
+
+### 前置依赖
+
+- **Node.js 20+**
+- **PostgreSQL 16+** — [下载安装](https://www.postgresql.org/download/windows/)
+  - 安装时密码设 `local`，端口 `5432`
+  - 创建数据库：
+
+```bash
+psql -U postgres -c "CREATE DATABASE english_context;"
+```
+
+### 启动
 
 ```bash
 # 安装依赖
@@ -27,12 +40,20 @@ npm install
 cp .env.example .env
 # 在 .env 中填入 OPENAI_API_KEY
 
-# 初始化数据库
+# 初始化数据库表
 npx prisma db push
 
 # 启动开发服务器
 npm run dev
 ```
+
+访问 [http://localhost:3000](http://localhost:3000)
+
+### 部署
+
+Vercel 部署自动使用 Neon PostgreSQL（通过 Vercel Dashboard 配置 `DATABASE_URL`）。
+
+本地 `.env.local` 由 `vercel env pull` 自动填充，包含生产数据库连接串。
 
 访问 [http://localhost:3000](http://localhost:3000)
 
