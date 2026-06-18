@@ -26,7 +26,7 @@ export default function HomePage() {
   const [stats, setStats] = useState<any>(null)
   const [dailyGoal, setDailyGoal] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set(['高频词']))
+  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set())
   const [showInstallBanner, setShowInstallBanner] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
 
