@@ -83,6 +83,20 @@ export default function WordDetailPage() {
     } catch {}
   }
 
+  function highlightWord(sentence: string, word: string) {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(`(${escaped})`, 'gi')
+    const clean = sentence.replace(/\*\*/g, '')
+    const parts = clean.split(re)
+    const result: Array<{ text: string; highlight: boolean }> = []
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      if (!part) continue
+      result.push({ text: part, highlight: i % 2 === 1 })
+    }
+    return result
+  }
+
   function masteryLabel(m: number): string {
     if (m >= 75) return '已掌握'
     if (m >= 25) return '学习中'
@@ -190,7 +204,13 @@ export default function WordDetailPage() {
                     className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900"
                   >
                     <p className="text-sm leading-relaxed text-stone-800 dark:text-stone-200">
-                      {s.sentenceText}
+                      {highlightWord(s.sentenceText, word.text).map((part, j) =>
+                        part.highlight ? (
+                          <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                        ) : (
+                          <span key={j}>{part.text}</span>
+                        )
+                      )}
                     </p>
                     {s.sentenceCn && (
                       <p className="mt-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400">

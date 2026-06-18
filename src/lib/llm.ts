@@ -52,9 +52,20 @@ async function callLLM(prompt: string): Promise<string | null> {
 }
 
 export async function getWordData(word: string) {
-  const prompt = `Return the word "${word}" with its common meanings as a JSON array.
+  const prompt = `Return the word "${word}" with its REAL dictionary meanings as a JSON array.
 Each entry: {"partOfSpeech": "noun|verb|adjective|etc", "definition": "English short definition", "definitionCn": "中文释义"}
-Return max 4 meanings. Return only JSON, no extra text.`
+
+Rules:
+- Only include REAL meanings that exist in dictionaries. DO NOT make up meanings.
+- The English definition and Chinese translation must be different languages, not the same text.
+- Max 4 most common meanings.
+- If unsure about a meaning, omit it.
+
+Example for "run":
+[{"partOfSpeech": "verb", "definition": "move quickly on foot", "definitionCn": "跑"},
+ {"partOfSpeech": "noun", "definition": "a jog or trip", "definitionCn": "跑步"}]
+
+Return only JSON array, no extra text.`
 
   const raw = await callLLM(prompt)
   if (!raw) return [{ partOfSpeech: 'unknown', definition: word, definitionCn: word }]
@@ -94,13 +105,15 @@ User interests: ${topicList || 'general'}
 
 For EACH meaning, return JSON with:
 - "index": number (1-based, matching the meanings above)
-- "general": an English example sentence in general context
+- "general": an English example sentence in general context (MUST contain the word "${word}" itself)
 - "generalCn": 上面句子的中文翻译
-- "interestTuned": an English sentence relevant to user's interests
+- "interestTuned": an English sentence relevant to user's interests (MUST contain the word "${word}" itself)
 - "interestTunedCn": 上面句子的中文翻译
 - "synonym": a common synonym word
 - "synonymSentence": an English sentence using the synonym
 - "synonymSentenceCn": 上面句子的中文翻译
+
+CRITICAL: The "general" and "interestTuned" sentences MUST literally include the word "${word}". If the sentence does not contain "${word}", it is wrong. Use the exact word "${word}", not a synonym or paraphrase.
 
 Return a JSON object with key "sentences" containing an array. Only JSON.`
 

@@ -48,8 +48,10 @@ export default function ReviewPage() {
   }
 
   function highlightWord(sentence: string, word: string): string[] {
-    const re = new RegExp(`(${word})`, 'gi')
-    return sentence.replace(re, '==$1==').split(/(==[^=]+==)/g)
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(`(${escaped})`, 'gi')
+    const clean = sentence.replace(/\*\*/g, '')
+    return clean.replace(re, '==$1==').split(/(==[^=]+==)/g)
   }
 
   function handleRate(rate: 'clear' | 'vague' | 'forgot') {
