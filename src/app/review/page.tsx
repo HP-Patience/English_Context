@@ -5,6 +5,32 @@ import { useRouter } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
 import { highlightWord } from '@/lib/highlight'
 import { cachedFetch, invalidateCache } from '@/lib/api-cache'
+import AnalysisPanel from '@/components/AnalysisPanel'
+
+type TabType = 'review' | 'analysis'
+
+function TabBar({ tab, onTabChange }: { tab: TabType; onTabChange: (t: TabType) => void }) {
+  return (
+    <div className="mb-6 flex gap-1 rounded-lg bg-stone-100 p-1 dark:bg-stone-800">
+      <button
+        onClick={() => onTabChange('review')}
+        className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
+          tab === 'review' ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-stone-100' : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-100'
+        }`}
+      >
+        复习
+      </button>
+      <button
+        onClick={() => onTabChange('analysis')}
+        className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
+          tab === 'analysis' ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-stone-100' : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-100'
+        }`}
+      >
+        错词分析
+      </button>
+    </div>
+  )
+}
 
 type ReviewItem = {
   id: string
@@ -26,6 +52,7 @@ export default function ReviewPage() {
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(true)
   const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({})
+  const [tab, setTab] = useState<'review' | 'analysis'>('review')
 
   useEffect(() => {
     cachedFetch<ReviewItem[]>('/api/review-queue')
@@ -113,18 +140,23 @@ export default function ReviewPage() {
     }
   }
 
-  if (loading) return <p className="text-center text-stone-500 dark:text-stone-400">加载中...</p>
+  if (loading) return (
+    <div className="mx-auto max-w-lg">
+      <TabBar tab={tab} onTabChange={setTab} />
+      <p className="text-center text-stone-500 dark:text-stone-400">加载中...</p>
+    </div>
+  )
 
   if (done) {
     return (
       <div className="mx-auto max-w-lg pt-12 text-center">
+        <TabBar tab={tab} onTabChange={setTab} />
         <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">✓</p>
         <h2 className="mb-1 text-xl font-semibold">复习完成</h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">完成了 {idx} 个单词</p>
         <div className="flex justify-center gap-3">
           <button onClick={() => router.push('/learn')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">查看单词</button>
           <button onClick={() => router.push('/')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">学新词</button>
-          <button onClick={() => router.push('/review/analysis')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">错词分析</button>
         </div>
       </div>
     )
@@ -133,10 +165,19 @@ export default function ReviewPage() {
   if (!item && queue.length === 0) {
     return (
       <div className="mx-auto max-w-lg pt-12 text-center">
-        <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">📚</p>
+        <TabBar tab={tab} onTabChange={setTab} />
         <h2 className="mb-1 text-xl font-semibold">暂无复习</h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">学些新词再来</p>
         <button onClick={() => router.push('/')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">学新词</button>
+      </div>
+    )
+  }
+
+  if (tab === 'analysis') {
+    return (
+      <div className="mx-auto max-w-lg">
+        <TabBar tab={tab} onTabChange={setTab} />
+        <AnalysisPanel />
       </div>
     )
   }
@@ -147,6 +188,7 @@ export default function ReviewPage() {
 
   return (
     <div className="mx-auto max-w-lg">
+      <TabBar tab={tab} onTabChange={setTab} />
       {/* progress bar */}
       <div className="mb-6 flex items-center gap-3">
         <div className="h-1 flex-1 rounded-full bg-stone-200 dark:bg-stone-800">

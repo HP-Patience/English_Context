@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import ExportPanel from '@/components/ExportPanel'
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<'llm' | 'interests' | 'goal' | 'tts'>('llm')
+  const [tab, setTab] = useState<'llm' | 'interests' | 'goal' | 'tts' | 'export'>('llm')
   const [baseURL, setBaseURL] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
@@ -144,6 +145,14 @@ export default function SettingsPage() {
           }`}
         >
           发音
+        </button>
+        <button
+          onClick={() => setTab('export')}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
+            tab === 'export' ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-800 dark:text-stone-100' : 'text-stone-500 hover:text-stone-900 dark:hover:text-stone-100'
+          }`}
+        >
+          导出
         </button>
       </div>
 
@@ -309,6 +318,10 @@ export default function SettingsPage() {
         </div>
       ) : tab === 'tts' ? (
         <TtsConfigPanel />
+      ) : tab === 'export' ? (
+        <div className="space-y-5">
+          <ExportPanel />
+        </div>
       ) : null}
     </div>
   )

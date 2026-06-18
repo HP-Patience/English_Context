@@ -4,14 +4,10 @@ import { useState } from 'react'
 import ThemeToggle from './ThemeToggle'
 
 const navLinks = [
-  { href: '/', label: '学习' },
   { href: '/review', label: '复习' },
-  { href: '/review/analysis', label: '分析' },
   { href: '/search', label: '搜索' },
   { href: '/stats', label: '统计' },
   { href: '/bookmarks', label: '难词本' },
-  { href: '/export', label: '导出' },
-  { href: '/manual', label: '+手动' },
   { href: '/settings', label: '设置' },
 ]
 
