@@ -47,6 +47,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# migration cache
+scripts/.migrate-cache/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
