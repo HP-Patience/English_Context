@@ -25,7 +25,9 @@ export default function PronounceButton({ word }: { word: string }) {
   // 页面切换时停止播放
   useEffect(() => {
     return () => {
-      if (window.speechSynthesis) window.speechSynthesis.cancel()
+      if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel()
+      }
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current = null
@@ -78,12 +80,33 @@ export default function PronounceButton({ word }: { word: string }) {
 
       // 浏览器 speechSynthesis (兜底)
       if (window.speechSynthesis) {
-        window.speechSynthesis.cancel() // 取消上一次
+        // 不要 cancel() — Chrome 上 cancel 后立即 speak 会导致无声音 (已知 bug)
+        // 只有正在播放才 cancel, 避免打断静默状态
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel()
+        }
+
+        // 确保拿到英语语音 (Chrome 异步加载)
+        let voices = window.speechSynthesis.getVoices()
+        if (!voices.length) {
+          await new Promise<void>(r => {
+            window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; r() }
+            setTimeout(r, 300)
+          })
+          voices = window.speechSynthesis.getVoices()
+        }
+        const enVoice = voices.find(v => v.lang.startsWith('en'))
+
         const utterance = new SpeechSynthesisUtterance(word)
         utterance.lang = 'en-US'
         utterance.rate = 0.9
-        utterance.onend = () => setPlaying(false)
-        utterance.onerror = () => setPlaying(false)
+        if (enVoice) utterance.voice = enVoice
+
+        // 安全释放 playing (onend/onerror 有时不触发)
+        const safetyTimer = setTimeout(() => setPlaying(false), 5000)
+        utterance.onend = () => { clearTimeout(safetyTimer); setPlaying(false) }
+        utterance.onerror = () => { clearTimeout(safetyTimer); setPlaying(false) }
+
         window.speechSynthesis.speak(utterance)
       } else {
         setPlaying(false)
