@@ -37,5 +37,14 @@ export async function GET(
     return NextResponse.json({ error: 'Word not found' }, { status: 404 })
   }
 
+  // Strip meanings with no content (hallucinated batch-ai leftovers)
+  word.meanings = word.meanings.filter((m) => {
+    const hasExample = m.example !== null
+    const hasSentences = m.userWordMeanings.some(
+      (uwm) => uwm.sentences.length > 0,
+    )
+    return hasExample || hasSentences
+  })
+
   return NextResponse.json({ word })
 }

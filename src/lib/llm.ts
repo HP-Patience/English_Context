@@ -58,6 +58,8 @@ Each entry: {"partOfSpeech": "noun|verb|adjective|etc", "definition": "English s
 Rules:
 - Only include REAL meanings that exist in dictionaries. DO NOT make up meanings.
 - The English definition and Chinese translation must be different languages, not the same text.
+- "definition" MUST be English only. NEVER write Chinese in the definition field.
+- "definitionCn" MUST be Chinese only.
 - Max 4 most common meanings.
 - If unsure about a meaning, omit it.
 
@@ -72,7 +74,9 @@ Return only JSON array, no extra text.`
 
   try {
     const data = JSON.parse(raw)
-    return Array.isArray(data) ? data : []
+    if (!Array.isArray(data)) return []
+    // Post-validate: reject entries where definition is Chinese (CJK characters)
+    return data.filter((m: any) => !/[一-鿿]/.test(m.definition))
   } catch {
     return [{ partOfSpeech: 'unknown', definition: word, definitionCn: word }]
   }
@@ -83,6 +87,11 @@ interface SentenceResult {
   general: string
   interestTuned: string
   synonymSentence: string
+}
+
+function sentenceContainsWord(sentence: string, word: string): boolean {
+  const clean = sentence.replace(/\*\*(.*?)\*\*/g, '$1')
+  return clean.toLowerCase().includes(word.toLowerCase())
 }
 
 export async function generateSentences(
@@ -149,20 +158,27 @@ Return a JSON object with key "sentences" containing an array. Only JSON.`
     const m = meanings[idx]
     const uwmId = userWordMeaningIds[idx]
 
-    if (item.general && uwmId) {
+    const general = (item.general && sentenceContainsWord(item.general, word))
+      ? item.general
+      : `"${word}" means: ${m.definition}`
+    const interestTuned = (item.interestTuned && sentenceContainsWord(item.interestTuned, word))
+      ? item.interestTuned
+      : `"${word}" in ${topicList || 'daily'} context.`
+
+    if (general && uwmId) {
       await prisma.generatedSentence.create({
         data: {
           userWordMeaningId: uwmId, meaningId: m.id,
-          sentenceText: item.general, sentenceCn: item.generalCn ?? null,
+          sentenceText: general, sentenceCn: item.generalCn ?? null,
           contextTopic: 'general', interestTuned: false, source: 'learning',
         },
       })
     }
-    if (item.interestTuned && uwmId) {
+    if (interestTuned && uwmId) {
       await prisma.generatedSentence.create({
         data: {
           userWordMeaningId: uwmId, meaningId: m.id,
-          sentenceText: item.interestTuned, sentenceCn: item.interestTunedCn ?? null,
+          sentenceText: interestTuned, sentenceCn: item.interestTunedCn ?? null,
           contextTopic: 'interest_tuned', interestTuned: true, source: 'learning',
         },
       })
@@ -180,8 +196,8 @@ Return a JSON object with key "sentences" containing an array. Only JSON.`
 
     results.push({
       meaningId: m.id,
-      general: item.general ?? '',
-      interestTuned: item.interestTuned ?? '',
+      general: general ?? '',
+      interestTuned: interestTuned ?? '',
       synonymSentence: item.synonymSentence ?? '',
     })
   }

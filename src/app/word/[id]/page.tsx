@@ -168,7 +168,7 @@ export default function WordDetailPage() {
                 )}
               </div>
               <p className="text-base font-medium text-stone-900 dark:text-stone-100">{m.definition}</p>
-              {m.definitionCn && (
+              {m.definitionCn && m.definitionCn !== m.definition && (
                 <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{m.definitionCn}</p>
               )}
             </div>
