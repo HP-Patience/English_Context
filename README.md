@@ -23,39 +23,60 @@
 
 - **Node.js 20+**
 - **PostgreSQL 16+** — [下载安装](https://www.postgresql.org/download/windows/)
-  - 安装时密码设 `local`，端口 `5432`
-  - 创建数据库：
+
+### 首次启动
 
 ```bash
-psql -U postgres -c "CREATE DATABASE english_context;"
-```
-
-### 启动
-
-```bash
-# 安装依赖
+# 1. 安装依赖
 npm install
 
-# 设置环境变量
+# 2. 设置环境变量
 cp .env.example .env
-# 在 .env 中填入 OPENAI_API_KEY
+# 编辑 .env，填入 OPENAI_API_KEY
+# .env 中 DATABASE_URL 默认指向 localhost，密码改为你的 PG 密码
 
-# 初始化数据库表
+# 3. 创建数据库
+psql -U postgres -c "CREATE DATABASE english_context;"
+
+# 4. 初始化数据库表
 npx prisma db push
 
-# 启动开发服务器
+# 5. 启动
 npm run dev
 ```
 
-访问 [http://localhost:3000](http://localhost:3000)
+> **注意**: 如果有 `.env.local`（由 `vercel env pull` 生成），它优先于 `.env`。如需本地开发，删除或覆盖 `.env.local` 中的 `DATABASE_URL` 为本地连接串：
+> ```
+> DATABASE_URL="postgresql://postgres:你的密码@localhost:5432/english_context"
+> ```
 
-### 部署
+访问 [http://localhost:3456](http://localhost:3456)
 
-Vercel 部署自动使用 Neon PostgreSQL（通过 Vercel Dashboard 配置 `DATABASE_URL`）。
+### 初始化数据
 
-本地 `.env.local` 由 `vercel env pull` 自动填充，包含生产数据库连接串。
+```bash
+# 从 txt 导入词库
+node scripts/import-new.js
 
-访问 [http://localhost:3000](http://localhost:3000)
+# AI 生成释义和例句（需要 OPENAI_API_KEY）
+node scripts/generate-meanings.js
+```
+
+## 数据同步
+
+### 从 Neon 拉到本地（初始化用）
+
+```bash
+node scripts/dump-neon.mjs | PGPASSWORD=local psql -U postgres -d english_context
+```
+
+### 从本地推回 Neon（同步学习进度到 Vercel 生产环境）
+
+```bash
+node scripts/sync-to-neon.mjs
+```
+
+推表：`UserWord`（掌握度）、`UserWordMeaning`（各义项数据）、`ReviewLog`（复习记录）、`DailyGoal`（每日打卡）。
 
 ## 项目结构
 
