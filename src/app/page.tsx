@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { cachedFetch } from '@/lib/api-cache'
 
@@ -91,11 +91,16 @@ export default function HomePage() {
     })
   }
 
-  const prefetchLearn = (groupId: string) => {
-    router.prefetch(`/learn?groupId=${groupId}`)
-    // Also warm the API cache
-    cachedFetch(`/api/kaoyan/learn?groupId=${groupId}`).catch(() => {})
-  }
+  const prefetchLearn = useCallback((() => {
+    let timer: ReturnType<typeof setTimeout>
+    return (groupId: string) => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        router.prefetch(`/learn?groupId=${groupId}`)
+        cachedFetch(`/api/kaoyan/learn?groupId=${groupId}`).catch(() => {})
+      }, 100)
+    }
+  })(), [router])
 
   if (loading) {
     return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
