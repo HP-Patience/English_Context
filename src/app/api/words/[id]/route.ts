@@ -17,6 +17,7 @@ export async function GET(
             where: { userWord: { userId } },
             include: {
               sentences: {
+                where: { source: { not: 'synonym_test' } },
                 orderBy: { lastUsedAt: 'desc' },
               },
             },

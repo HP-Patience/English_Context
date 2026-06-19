@@ -274,7 +274,7 @@ export default function ReviewPage() {
               <span className="text-xs text-stone-400 dark:text-stone-500">{item.mastery}%</span>
             </div>
             <p className="text-sm leading-relaxed text-stone-700 dark:text-stone-300">{item.meaning.definition}</p>
-            {item.meaning.definitionCn && (
+            {item.meaning.definitionCn && item.meaning.definitionCn !== item.meaning.definition && (
               <p className="mt-2 border-t border-stone-100 pt-2 text-sm font-medium text-stone-900 dark:border-stone-800 dark:text-stone-100">
                 {item.meaning.definitionCn}
               </p>

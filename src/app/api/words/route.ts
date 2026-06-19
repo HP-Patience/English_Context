@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     where: { userId },
     include: {
       word: true,
-      meanings: { include: { meaning: true, sentences: { take: 1, orderBy: { createdAt: 'desc' } } } },
+      meanings: { include: { meaning: true, sentences: { where: { source: { not: 'synonym_test' } }, take: 1, orderBy: { createdAt: 'desc' } } } },
     },
     orderBy: { createdAt: 'desc' },
   })

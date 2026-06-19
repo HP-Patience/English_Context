@@ -222,10 +222,7 @@ function SearchPageContent() {
                       <span className="text-xs font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
                         {m.partOfSpeech}
                       </span>{' '}
-                      {m.definition}
-                      {m.definitionCn && m.definitionCn !== m.definition && (
-                        <span className="ml-1 text-stone-500 dark:text-stone-400">· {m.definitionCn}</span>
-                      )}
+                      {m.definitionCn || m.definition}
                     </div>
                     {sentence && (() => {
                       const parts = highlightWord(sentence.sentenceText, word.text)

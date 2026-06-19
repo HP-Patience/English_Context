@@ -13,7 +13,7 @@ export async function GET() {
     include: {
       meaning: true,
       userWord: { include: { word: true } },
-      sentences: { orderBy: { lastUsedAt: 'desc' }, take: 3 },
+      sentences: { where: { source: { not: 'synonym_test' } }, orderBy: { lastUsedAt: 'desc' }, take: 3 },
     },
     orderBy: { nextReviewAt: 'asc' },
     take: 50,

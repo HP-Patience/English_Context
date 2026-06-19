@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
             where: { userWord: { userId } },
             include: {
               sentences: {
+                where: { source: { not: 'synonym_test' } },
                 take: 1,
                 orderBy: { lastUsedAt: 'desc' },
               },
