@@ -216,8 +216,8 @@ function SearchPageContent() {
                 const uwm = m.userWordMeanings[0]
                 const sentence = uwm?.sentences[0]
                 return (
-                  <div key={m.id} className="mb-2 last:mb-0">
-                    <p className="text-sm text-stone-700 dark:text-stone-300">
+                  <div key={m.id} className="mb-4 last:mb-0">
+                    <div className="my-0 text-sm text-stone-700 dark:text-stone-300">
                       <span className="text-xs font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
                         {m.partOfSpeech}
                       </span>{' '}
@@ -225,23 +225,26 @@ function SearchPageContent() {
                       {m.definitionCn && m.definitionCn !== m.definition && (
                         <span className="ml-1 text-stone-500 dark:text-stone-400">· {m.definitionCn}</span>
                       )}
-                    </p>
+                    </div>
                     {sentence && (() => {
                       const parts = highlightWord(sentence.sentenceText, word.text)
                       return (
                         <div>
-                          <div className="mb-0.5 flex justify-end">
+                          <div className="flex items-center gap-1 text-xs text-stone-400 dark:text-stone-500">
+                            <span className="flex-1">
+                              {parts.map((part, j) =>
+                                part.highlight ? (
+                                  <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                                ) : (
+                                  <span key={j}>{part.text}</span>
+                                )
+                              )}
+                            </span>
                             <SentenceTTSButton text={sentence.sentenceText} />
                           </div>
-                          <p className="text-xs text-stone-400 dark:text-stone-500 italic">
-                            {parts.map((part, j) =>
-                              part.highlight ? (
-                                <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
-                              ) : (
-                                <span key={j}>{part.text}</span>
-                              )
-                            )}
-                          </p>
+                          {sentence.sentenceCn && (
+                            <div className="text-xs text-stone-500 dark:text-stone-400">{sentence.sentenceCn}</div>
+                          )}
                         </div>
                       )
                     })()}

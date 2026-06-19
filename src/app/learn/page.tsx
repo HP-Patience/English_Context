@@ -32,6 +32,10 @@ function LearnPageContent() {
   const [revealed, setRevealed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [bookmarked, setBookmarked] = useState(false)
+  const [selfRate, setSelfRate] = useState<'clear' | 'vague' | 'forgot' | null>(null)
+  const [showForgotAfterClear, setShowForgotAfterClear] = useState(false)
+  const [stack, setStack] = useState<LearnItem[]>([])
+  const [showPrevItem, setShowPrevItem] = useState<LearnItem | null>(null)
   const fetchNext = useCallback(async () => {
     if (!groupId) return
     setLoading(true)
@@ -57,7 +61,10 @@ function LearnPageContent() {
 
   async function handleRate(grade: number) {
     if (!item) return
+    const rate: 'clear' | 'vague' | 'forgot' = grade === 4 ? 'clear' : grade === 2 ? 'vague' : 'forgot'
+    setSelfRate(rate)
     setRevealed(true)
+    if (rate === 'clear') setShowForgotAfterClear(true)
     await fetch('/api/kaoyan/learn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -65,7 +72,35 @@ function LearnPageContent() {
     })
   }
 
+  function handleForgotAfterClear() {
+    if (!item) return
+    setShowForgotAfterClear(false)
+    setSelfRate('forgot')
+    fetch('/api/kaoyan/learn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userWordMeaningId: item.id, grade: 0, flippedToForgot: true }),
+    })
+  }
+
+  function handleBack() {
+    if (stack.length === 0) return
+    const prev = stack[stack.length - 1]
+    setStack(s => s.slice(0, -1))
+    setShowPrevItem(prev)
+  }
+
+  function handleBackToCurrent() {
+    setShowPrevItem(null)
+  }
+
   async function handleNext() {
+    if (item && selfRate !== null) {
+      setStack(s => [...s, item])
+    }
+    setSelfRate(null)
+    setShowForgotAfterClear(false)
+    setRevealed(false)
     fetchNext()
   }
 
@@ -112,6 +147,56 @@ function LearnPageContent() {
     )
   }
 
+  if (showPrevItem) {
+    const prevParts = showPrevItem.sentence ? highlightWord(showPrevItem.sentence, showPrevItem.word) : []
+    return (
+      <div className="mx-auto max-w-lg">
+        <div className="mb-6 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <h1 className="text-3xl font-bold">{showPrevItem.word}</h1>
+            <PronounceButton word={showPrevItem.word} />
+          </div>
+          <div className="mt-2 text-sm text-stone-500 dark:text-stone-400">
+            {showPrevItem.definitionCn}
+          </div>
+          <span className="mt-2 inline-block rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+            掌握 {showPrevItem.wordMastery}%
+          </span>
+        </div>
+
+        {showPrevItem.sentence && (
+          <div className="mb-8">
+            <div className="mb-1.5 flex justify-end">
+              <SentenceTTSButton text={showPrevItem.sentence} />
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
+              <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
+                {prevParts.map((part, i) =>
+                  part.highlight ? (
+                    <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                  ) : (
+                    <span key={i}>{part.text}</span>
+                  )
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {showPrevItem.sentence && showPrevItem.sentenceCn && (
+          <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
+            <span className="mb-1.5 block text-xs font-medium text-stone-400 dark:text-stone-500">译文</span>
+            <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-400">{showPrevItem.sentenceCn}</p>
+          </div>
+        )}
+
+        <button onClick={handleBackToCurrent} className="w-full rounded-xl bg-stone-900 px-4 py-3.5 text-sm font-medium text-white shadow-sm transition hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 dark:shadow-none">
+          继续学新词
+        </button>
+      </div>
+    )
+  }
+
   if (!item) {
     return (
       <div className="mx-auto max-w-lg pt-12 text-center">
@@ -127,6 +212,13 @@ function LearnPageContent() {
 
   return (
     <div className="mx-auto max-w-lg">
+      {stack.length > 0 && (
+        <div className="mb-4">
+          <button onClick={handleBack} className="flex items-center gap-1 text-sm text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">
+            ← 上一个
+          </button>
+        </div>
+      )}
       <div className="mb-6 text-center">
         <div className="flex items-center justify-center gap-2">
           <h1 className="text-3xl font-bold">{item.word}</h1>
@@ -159,7 +251,7 @@ function LearnPageContent() {
         )}
       </div>
 
-      {item.sentence && !revealed && (
+      {item.sentence && (
         <div className="mb-8">
           <div className="mb-1.5 flex justify-end">
             <SentenceTTSButton text={item.sentence} />
@@ -191,6 +283,15 @@ function LearnPageContent() {
             </div>
           )}
         </div>
+      )}
+
+      {showForgotAfterClear && (
+        <button
+          onClick={handleForgotAfterClear}
+          className="mb-3 w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-400 shadow-sm transition hover:border-red-200 hover:text-red-500 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500 dark:shadow-none dark:hover:border-red-400"
+        >
+          忘记
+        </button>
       )}
 
       {!revealed ? (

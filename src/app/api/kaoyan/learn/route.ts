@@ -93,11 +93,13 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const userId = await getLocalUserId()
-  const { userWordMeaningId, grade } = await req.json()
+  const { userWordMeaningId, grade, flippedToForgot } = await req.json()
 
   if (!userWordMeaningId || grade === undefined) {
     return NextResponse.json({ error: 'Invalid data' }, { status: 400 })
   }
+
+  const finalGrade = flippedToForgot ? 0 : Math.round(grade)
 
   const uwm = await prisma.userWordMeaning.findFirst({
     where: { id: userWordMeaningId, userWord: { userId } },
@@ -105,7 +107,7 @@ export async function POST(req: NextRequest) {
   })
   if (!uwm) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const sm2 = calculateSM2(uwm.easeFactor, uwm.interval, grade)
+  const sm2 = calculateSM2(uwm.easeFactor, uwm.interval, finalGrade)
 
   await prisma.userWordMeaning.update({
     where: { id: userWordMeaningId },
@@ -144,34 +146,36 @@ export async function POST(req: NextRequest) {
       userWordMeaningId,
       sentenceText: '',
       testLevel: 1,
-      result: grade >= 3 ? 'pass' : 'fail',
+      result: finalGrade >= 3 ? 'pass' : 'fail',
     },
   })
 
-  // Upsert today's daily goal
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { dailyTarget: true },
-  })
-  const goal = await prisma.dailyGoal.upsert({
-    where: { userId_date: { userId, date: today } },
-    update: { learned: { increment: 1 } },
-    create: {
-      userId,
-      date: today,
-      target: user?.dailyTarget ?? 30,
-      learned: 1,
-      reviewed: 0,
-    },
-  })
-  if (goal.learned >= goal.target && !goal.completed) {
-    await prisma.dailyGoal.update({
-      where: { id: goal.id },
-      data: { completed: true },
+  if (!flippedToForgot) {
+    // Upsert today's daily goal
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { dailyTarget: true },
     })
+    const goal = await prisma.dailyGoal.upsert({
+      where: { userId_date: { userId, date: today } },
+      update: { learned: { increment: 1 } },
+      create: {
+        userId,
+        date: today,
+        target: user?.dailyTarget ?? 30,
+        learned: 1,
+        reviewed: 0,
+      },
+    })
+    if (goal.learned >= goal.target && !goal.completed) {
+      await prisma.dailyGoal.update({
+        where: { id: goal.id },
+        data: { completed: true },
+      })
+    }
   }
 
-  return NextResponse.json({ grade, newMastery, wordMastery: avgMastery })
+  return NextResponse.json({ grade: finalGrade, newMastery, wordMastery: avgMastery })
 }
