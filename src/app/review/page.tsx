@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
+import SentenceTTSButton from '@/components/SentenceTTSButton'
 import { highlightWord } from '@/lib/highlight'
 import { cachedFetch, invalidateCache } from '@/lib/api-cache'
 import AnalysisPanel from '@/components/AnalysisPanel'
@@ -200,17 +201,22 @@ export default function ReviewPage() {
       {/* sentence */}
       <div className="mb-6">
         {sentence.text && (
-          <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
-            {parts.map((part, i) =>
-              part.highlight ? (
-                <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">
-                  {part.text}
-                </span>
-              ) : (
-                <span key={i}>{part.text}</span>
-              )
-            )}
-          </p>
+          <div>
+            <div className="mb-1.5 flex justify-end">
+              <SentenceTTSButton text={sentence.text} />
+            </div>
+            <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
+              {parts.map((part, i) =>
+                part.highlight ? (
+                  <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">
+                    {part.text}
+                  </span>
+                ) : (
+                  <span key={i}>{part.text}</span>
+                )
+              )}
+            </p>
+          </div>
         )}
       </div>
 

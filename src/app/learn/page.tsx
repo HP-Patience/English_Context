@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
+import SentenceTTSButton from '@/components/SentenceTTSButton'
 import { highlightWord } from '@/lib/highlight'
 
 type LearnItem = {
@@ -159,16 +160,21 @@ function LearnPageContent() {
       </div>
 
       {item.sentence && !revealed && (
-        <div className="mb-8 rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
-          <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
-            {sentenceParts.map((part, i) =>
-              part.highlight ? (
-                <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
-              ) : (
-                <span key={i}>{part.text}</span>
-              )
-            )}
-          </p>
+        <div className="mb-8">
+          <div className="mb-1.5 flex justify-end">
+            <SentenceTTSButton text={item.sentence} />
+          </div>
+          <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
+            <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
+              {sentenceParts.map((part, i) =>
+                part.highlight ? (
+                  <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                ) : (
+                  <span key={i}>{part.text}</span>
+                )
+              )}
+            </p>
+          </div>
         </div>
       )}
 

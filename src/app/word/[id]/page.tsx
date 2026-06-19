@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
+import SentenceTTSButton from '@/components/SentenceTTSButton'
 import { highlightWord } from '@/lib/highlight'
 
 type WordDetail = {
@@ -186,29 +187,32 @@ export default function WordDetailPage() {
             return (
               <div key={m.id} className="space-y-2">
                 {sentences.map((s, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900"
-                  >
-                    <p className="text-sm leading-relaxed text-stone-800 dark:text-stone-200">
-                      {highlightWord(s.sentenceText, word.text).map((part, j) =>
-                        part.highlight ? (
-                          <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
-                        ) : (
-                          <span key={j}>{part.text}</span>
-                        )
-                      )}
-                    </p>
-                    {s.sentenceCn && (
-                      <p className="mt-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
-                        {s.sentenceCn}
+                  <div key={i}>
+                    <div className="mb-1 flex justify-end">
+                      <SentenceTTSButton text={s.sentenceText} />
+                    </div>
+                    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900"
+                    >
+                      <p className="text-sm leading-relaxed text-stone-800 dark:text-stone-200">
+                        {highlightWord(s.sentenceText, word.text).map((part, j) =>
+                          part.highlight ? (
+                            <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                          ) : (
+                            <span key={j}>{part.text}</span>
+                          )
+                        )}
                       </p>
-                    )}
+                      {s.sentenceCn && (
+                        <p className="mt-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+                          {s.sentenceCn}
+                        </p>
+                      )}
                     {s.contextTopic && (
                       <span className="mt-1.5 inline-block rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-400 dark:bg-stone-800 dark:text-stone-500">
                         {s.contextTopic}
                       </span>
                     )}
+                    </div>
                   </div>
                 ))}
               </div>
