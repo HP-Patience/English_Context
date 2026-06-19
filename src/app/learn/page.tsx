@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
 import { highlightWord } from '@/lib/highlight'
+import Loading from '@/components/Loading'
 
 type LearnItem = {
   id: string
@@ -324,7 +325,7 @@ function LearnPageContent() {
 
 export default function LearnPage() {
   return (
-    <Suspense fallback={<div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>}>
+    <Suspense fallback={<Loading />}>
       <LearnPageContent />
     </Suspense>
   )

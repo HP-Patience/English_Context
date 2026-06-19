@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { cachedFetch } from '@/lib/api-cache'
+import Loading from '@/components/Loading'
+import Card from '@/components/Card'
 
 type Analysis = {
   topFailed: Array<{
@@ -33,15 +36,14 @@ export default function AnalysisPanel() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/review/analysis')
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    cachedFetch<Analysis>('/api/review/analysis')
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
   if (loading) {
-    return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
+    return <Loading />
   }
 
   if (!data?.trend) {
@@ -75,7 +77,7 @@ export default function AnalysisPanel() {
 
       {/* Trend line */}
       {data.trend.recentPassRate.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card>
           <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">近7天通过率</h2>
           <svg viewBox="0 0 280 60" className="w-full" style={{ height: '80px' }}>
             <polyline
@@ -101,12 +103,12 @@ export default function AnalysisPanel() {
             <span>{data.trend.recentPassRate[0]?.date?.slice(5)}</span>
             <span>{data.trend.recentPassRate[data.trend.recentPassRate.length - 1]?.date?.slice(5)}</span>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Top failed words */}
       {data.topFailed.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card>
           <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">高频错词 Top 20</h2>
           <div className="divide-y divide-stone-100 dark:divide-stone-800">
             {data.topFailed.map((item) => (
@@ -126,12 +128,12 @@ export default function AnalysisPanel() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Lowest mastery words */}
       {data.lowestMastery.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card>
           <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">掌握度最低 Top 20</h2>
           <div className="divide-y divide-stone-100 dark:divide-stone-800">
             {data.lowestMastery.map((item) => (
@@ -151,7 +153,7 @@ export default function AnalysisPanel() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Empty state */}

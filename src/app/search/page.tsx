@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { cachedFetch } from '@/lib/api-cache'
 import { highlightWord } from '@/lib/highlight'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
+import Loading from '@/components/Loading'
 
 type SearchResult = {
   id: string
@@ -283,7 +284,7 @@ function SearchPageContent() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>}>
+    <Suspense fallback={<Loading />}>
       <SearchPageContent />
     </Suspense>
   )

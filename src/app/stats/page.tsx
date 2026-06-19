@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { cachedFetch } from '@/lib/api-cache'
 import InfoButton from '@/components/InfoButton'
+import Loading from '@/components/Loading'
+import Card from '@/components/Card'
 
 type Stats = {
   overall: { totalWords: number; learnedWords: number; avgMastery: number }
@@ -31,7 +33,7 @@ export default function StatsPage() {
   }, [])
 
   if (loading) {
-    return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
+    return <Loading />
   }
 
   if (!stats) {
@@ -56,7 +58,7 @@ export default function StatsPage() {
       </div>
 
       {/* Overall progress */}
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+      <Card>
         <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">总进度</h2>
         <div className="flex items-baseline gap-1">
           <span className="text-3xl font-bold text-stone-900 dark:text-stone-100">{stats.overall.learnedWords}</span>
@@ -70,11 +72,11 @@ export default function StatsPage() {
             平均掌握率 {stats.overall.avgMastery}%
           </p>
         )}
-      </div>
+      </Card>
 
       {/* Streak and daily goal */}
       {stats.streak && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card>
           <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">连续打卡</h2>
           <div className="flex items-center gap-8">
             <div className="text-center">
@@ -86,12 +88,12 @@ export default function StatsPage() {
               <p className="text-xs text-stone-400 dark:text-stone-500">最长连续</p>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Goal heatmap */}
       {stats.goalHeatmap && stats.goalHeatmap.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card>
           <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">近 30 天打卡</h2>
           <div className="grid grid-cols-15 gap-[3px]" style={{ gridTemplateColumns: 'repeat(15, 1fr)' }}>
             {stats.goalHeatmap.map((d) => {
@@ -112,11 +114,11 @@ export default function StatsPage() {
               )
             })}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Mastery distribution */}
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+      <Card>
         <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">掌握分布</h2>
         <div className="space-y-2">
           {[
@@ -136,10 +138,10 @@ export default function StatsPage() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Stage progress */}
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+      <Card>
         <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">各阶段进度</h2>
         <div className="space-y-3">
           {stats.stages.map((s) => (
@@ -156,11 +158,11 @@ export default function StatsPage() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Weak groups */}
       {stats.weakGroups.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card>
           <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">薄弱分组</h2>
           <div className="space-y-2">
             {stats.weakGroups.map((g) => (
@@ -170,12 +172,12 @@ export default function StatsPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Review forecast */}
       {stats.reviewForecast.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card>
           <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">未来 7 天复习量</h2>
           <div className="flex items-end gap-1.5" style={{ height: '80px' }}>
             {stats.reviewForecast.map((d) => {
@@ -190,12 +192,12 @@ export default function StatsPage() {
               )
             })}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Daily activity */}
       {stats.dailyActivity.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card>
           <h2 className="mb-3 text-sm font-medium text-stone-600 dark:text-stone-400">近 30 天学习记录</h2>
           <div className="flex items-end gap-[3px]" style={{ height: '60px' }}>
             {stats.dailyActivity.map((d) => {
@@ -215,7 +217,7 @@ export default function StatsPage() {
             <span>{stats.dailyActivity[0]?.date?.slice(5) || ''}</span>
             <span>{stats.dailyActivity[stats.dailyActivity.length - 1]?.date?.slice(5) || ''}</span>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   )

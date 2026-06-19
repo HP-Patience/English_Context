@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma, getLocalUserId } from '@/lib/prisma'
 import { calculateStreak } from '@/lib/streak'
+import { getStage } from '@/lib/stages'
 
 export const maxDuration = 30
 
@@ -50,16 +51,6 @@ export async function GET() {
   }
 
   const uwByWord = new Map(userWordMap.map((uw) => [uw.wordId, uw.mastery]))
-
-  function getStage(name: string): string {
-    if (name.startsWith('高频词')) return '高频词'
-    if (name.startsWith('中频词')) return '中频词'
-    if (name.startsWith('低频词')) return '低频词'
-    if (name.startsWith('偶考词')) return '偶考词'
-    if (name.startsWith('基础词')) return '基础词'
-    if (name.startsWith('补充词')) return '补充词'
-    return '其他'
-  }
 
   const stageMap = new Map<string, { total: number; learned: number; totalMastery: number }>()
   for (const g of groups) {

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
 import { highlightWord } from '@/lib/highlight'
+import Loading from '@/components/Loading'
 
 type WordDetail = {
   id: string
@@ -99,7 +100,7 @@ export default function WordDetailPage() {
   }
 
   if (loading) {
-    return <div className="mx-auto max-w-lg py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
+    return <div className="mx-auto max-w-lg"><Loading /></div>
   }
 
   if (error || !word) {

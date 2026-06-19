@@ -1,22 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Loading from '@/components/Loading'
+import { getStage, STAGE_ORDER } from '@/lib/stages'
 
 type GroupInfo = { id: string; name: string; total: number; learned: number }
 type ExportWord = { word: string; meanings: Array<{ pos: string; definitionCn: string | null; example: string | null }> }
 type ExportGroup = { id: string; name: string; words: ExportWord[] }
-
-function getStage(name: string): string {
-  if (name.startsWith('高频词')) return '高频词'
-  if (name.startsWith('中频词')) return '中频词'
-  if (name.startsWith('低频词')) return '低频词'
-  if (name.startsWith('偶考词')) return '偶考词'
-  if (name.startsWith('基础词')) return '基础词'
-  if (name.startsWith('补充词')) return '补充词'
-  return '其他'
-}
-
-const STAGE_ORDER = ['高频词', '中频词', '低频词', '偶考词', '基础词', '补充词']
 
 export default function ExportPage() {
   const [groups, setGroups] = useState<GroupInfo[]>([])
@@ -131,7 +121,7 @@ export default function ExportPage() {
   }
 
   if (loading) {
-    return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
+    return <Loading />
   }
 
   return (

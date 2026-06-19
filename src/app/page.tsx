@@ -3,18 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { cachedFetch } from '@/lib/api-cache'
-
-function getStage(name: string): string {
-  if (name.startsWith('高频词')) return '高频词'
-  if (name.startsWith('中频词')) return '中频词'
-  if (name.startsWith('低频词')) return '低频词'
-  if (name.startsWith('偶考词')) return '偶考词'
-  if (name.startsWith('基础词')) return '基础词'
-  if (name.startsWith('补充词')) return '补充词'
-  return '其他'
-}
-
-const STAGE_ORDER = ['高频词', '中频词', '低频词', '偶考词', '基础词', '补充词']
+import Loading from '@/components/Loading'
+import Card from '@/components/Card'
+import { getStage, STAGE_ORDER } from '@/lib/stages'
 
 interface BeforeInstallPromptEvent {
   prompt: () => void
@@ -113,7 +104,7 @@ export default function HomePage() {
 
       {/* Daily goal progress */}
       {dailyGoal && (
-        <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <Card className="mb-6">
           <div className="mb-1 flex items-center justify-between text-sm">
             <span className="font-medium text-stone-700 dark:text-stone-300">
               🔥 连续 {dailyGoal.streak?.current ?? 0} 天
@@ -140,7 +131,7 @@ export default function HomePage() {
               ✓ 今日目标达成
             </p>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Stage sections (collapsible) */}
@@ -229,7 +220,7 @@ export default function HomePage() {
 
       {/* Empty state */}
       {stages.length === 0 && (
-        <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">词库加载中...</div>
+        <Loading text="词库加载中..." />
       )}
 
       {/* Bottom actions */}

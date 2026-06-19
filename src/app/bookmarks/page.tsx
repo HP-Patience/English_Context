@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { cachedFetch } from '@/lib/api-cache'
+import Loading from '@/components/Loading'
 
 type BookmarkItem = {
   id: string
@@ -45,7 +46,7 @@ export default function BookmarksPage() {
   }
 
   if (loading) {
-    return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
+    return <Loading />
   }
 
   return (
