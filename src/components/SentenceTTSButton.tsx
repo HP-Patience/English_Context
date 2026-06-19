@@ -9,7 +9,10 @@ type TtsConfig = {
   hasKey: boolean
 }
 
+const clean = (s: string) => s.replace(/\*\*(.+?)\*\*/g, '$1')
+
 export default function SentenceTTSButton({ text }: { text: string }) {
+  const cleaned = clean(text)
   const [playing, setPlaying] = useState(false)
   const [config, setConfig] = useState<TtsConfig | null>(null)
   const [supported, setSupported] = useState(true)
@@ -55,7 +58,7 @@ export default function SentenceTTSButton({ text }: { text: string }) {
           const res = await fetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, voice: activeCfg.voice || undefined }),
+            body: JSON.stringify({ text: cleaned, voice: activeCfg.voice || undefined }),
           })
           if (res.ok) {
             const blob = await res.blob()
@@ -89,7 +92,7 @@ export default function SentenceTTSButton({ text }: { text: string }) {
         }
         const enVoice = voices.find(v => v.lang.startsWith('en'))
 
-        const utterance = new SpeechSynthesisUtterance(text)
+        const utterance = new SpeechSynthesisUtterance(cleaned)
         utterance.lang = 'en-US'
         utterance.rate = 0.9
         if (enVoice) utterance.voice = enVoice
