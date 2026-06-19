@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { cachedFetch } from '@/lib/api-cache'
+import InfoButton from '@/components/InfoButton'
 
 type Stats = {
   overall: { totalWords: number; learnedWords: number; avgMastery: number }
@@ -44,7 +45,15 @@ export default function StatsPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <h1 className="text-2xl font-bold text-stone-900 dark:text-stone-100">学习统计</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-stone-900 dark:text-stone-100">学习统计</h1>
+        <InfoButton>
+          <h3 className="mb-2 text-sm font-semibold text-stone-900 dark:text-stone-100">学习统计</h3>
+          <p className="text-xs leading-relaxed text-stone-600 dark:text-stone-400">
+            查看学习数据统计，包括总进度、连续打卡天数、掌握分布、各阶段进度、薄弱分组、未来复习量预测和每日学习记录。帮助你了解整体学习情况和趋势。
+          </p>
+        </InfoButton>
+      </div>
 
       {/* Overall progress */}
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">

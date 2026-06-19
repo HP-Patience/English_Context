@@ -28,6 +28,12 @@ next-env.d.ts
 .DS_Store
 *.pem
 
+# claude code
+.claude/
+
+# generated service worker
+public/sw.js
+
 # database
 prisma/dev.db
 
