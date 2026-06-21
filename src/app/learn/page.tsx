@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
@@ -43,9 +43,32 @@ function LearnPageContent() {
   const [stack, setStack] = useState<LearnItem[]>([])
   const [showPrevItem, setShowPrevItem] = useState<LearnItem | null>(null)
   const [startingRound, setStartingRound] = useState(false)
+  const nextPrefetchRef = useRef<any>(null)
+
+  const prefetchNext = useCallback(async () => {
+    if (!groupId) return
+    try {
+      const params = round > 0 ? `?groupId=${groupId}&round=${round}` : `?groupId=${groupId}`
+      const res = await fetch(`/api/kaoyan/learn${params}`)
+      nextPrefetchRef.current = await res.json()
+    } catch { /* prefetch errors non-critical */ }
+  }, [groupId, round])
 
   const fetchNext = useCallback(async () => {
     if (!groupId) return
+    if (nextPrefetchRef.current) {
+      const data = nextPrefetchRef.current
+      nextPrefetchRef.current = null
+      setRevealed(false)
+      if (data.done) {
+        setDone(true)
+        setDoneInfo(data)
+      } else {
+        setItem(data)
+        setBookmarked(data.bookmarked ?? false)
+      }
+      return
+    }
     setLoading(true)
     setRevealed(false)
     try {
@@ -79,6 +102,7 @@ function LearnPageContent() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userWordMeaningId: item.id, grade }),
     })
+    prefetchNext()
   }
 
   function handleForgotAfterClear() {
