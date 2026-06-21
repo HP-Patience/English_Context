@@ -29,13 +29,14 @@ async function fetchStats(userId: string) {
 
   // 1 round trip: group-level progress with names, sorted
   const groups = await prisma.$queryRaw<
-    { id: string; name: string; total: number; learned: number }[]
+    { id: string; name: string; total: number; learned: number; currentRound: number }[]
   >`
     SELECT
       wg.id,
       wg.name,
       COUNT(*)::int AS total,
-      COUNT(CASE WHEN uw.mastery > 0 THEN 1 END)::int AS learned
+      COUNT(CASE WHEN uw.mastery > 0 THEN 1 END)::int AS learned,
+      COALESCE(MAX(uw."learnRound"), 0)::int AS "currentRound"
     FROM "WordGroupItem" wgi
     JOIN "Word" w ON w.id = wgi."wordId"
     JOIN "WordGroup" wg ON wg.id = wgi."wordGroupId"

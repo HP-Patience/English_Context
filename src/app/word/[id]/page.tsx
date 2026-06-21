@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
+import SelectionSearch from '@/components/SelectionSearch'
 import { highlightWord } from '@/lib/highlight'
 import Loading from '@/components/Loading'
 
@@ -169,7 +170,7 @@ export default function WordDetailPage() {
                   </span>
                 )}
               </div>
-              <p className="text-base font-medium text-stone-900 dark:text-stone-100">{m.definition}</p>
+              <SelectionSearch><p className="text-base font-medium text-stone-900 dark:text-stone-100">{m.definition}</p></SelectionSearch>
               {m.definitionCn && m.definitionCn !== m.definition && (
                 <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{m.definitionCn}</p>
               )}
@@ -194,15 +195,17 @@ export default function WordDetailPage() {
                     </div>
                     <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900"
                     >
-                      <p className="text-sm leading-relaxed text-stone-800 dark:text-stone-200">
-                        {highlightWord(s.sentenceText, word.text).map((part, j) =>
-                          part.highlight ? (
-                            <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
-                          ) : (
-                            <span key={j}>{part.text}</span>
-                          )
-                        )}
-                      </p>
+                      <SelectionSearch>
+                        <p className="text-sm leading-relaxed text-stone-800 dark:text-stone-200">
+                          {highlightWord(s.sentenceText, word.text).map((part, j) =>
+                            part.highlight ? (
+                              <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                            ) : (
+                              <span key={j}>{part.text}</span>
+                            )
+                          )}
+                        </p>
+                      </SelectionSearch>
                       {s.sentenceCn && (
                         <p className="mt-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
                           {s.sentenceCn}

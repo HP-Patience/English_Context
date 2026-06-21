@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { cachedFetch } from '@/lib/api-cache'
 import Loading from '@/components/Loading'
@@ -84,11 +85,12 @@ export default function HomePage() {
 
   const prefetchLearn = useCallback((() => {
     let timer: ReturnType<typeof setTimeout>
-    return (groupId: string) => {
+    return (groupId: string, r?: number) => {
       clearTimeout(timer)
       timer = setTimeout(() => {
-        router.prefetch(`/learn?groupId=${groupId}`)
-        cachedFetch(`/api/kaoyan/learn?groupId=${groupId}`).catch(() => {})
+        const url = `/learn?groupId=${groupId}${r ? `&round=${r}` : ''}`
+        router.prefetch(url)
+        cachedFetch(`/api/kaoyan/learn${r ? `?groupId=${groupId}&round=${r}` : `?groupId=${groupId}`}`).catch(() => {})
       }, 100)
     }
   })(), [router])
@@ -184,32 +186,39 @@ export default function HomePage() {
               {isExpanded && (
                 <div className="border-t border-stone-100 dark:border-stone-700">
                   {stage.groups.map((g: any) => (
-                    <button
-                      key={g.id}
-                      onClick={() => router.push(`/learn?groupId=${g.id}`)}
-                      onMouseEnter={() => prefetchLearn(g.id)}
-                      className="flex w-full items-center justify-between px-4 py-3 pl-8 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800"
-                    >
-                      <div>
-                        <p className="text-sm text-stone-700 dark:text-stone-300">{g.name}</p>
-                        <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
-                          {g.total} 词 · {g.learned} 已学
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-12 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
-                          <div
-                            className="h-full rounded-full bg-stone-900 transition-all dark:bg-stone-100"
-                            style={{
-                              width: `${g.total > 0 ? (g.learned / g.total) * 100 : 0}%`,
-                            }}
-                          />
+                    <div key={g.id} className="flex items-stretch">
+                      <button
+                        onClick={() => router.push(`/learn?groupId=${g.id}${g.currentRound > 0 ? `&round=${g.currentRound}` : ''}`)}
+                        onMouseEnter={() => prefetchLearn(g.id, g.currentRound)}
+                        className="flex flex-1 items-center justify-between px-4 py-3 pl-8 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800"
+                      >
+                        <div>
+                          <p className="text-sm text-stone-700 dark:text-stone-300">{g.name}</p>
+                          <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
+                            {g.total} 词 · {g.learned} 已学{g.currentRound > 0 ? ` · 第 ${g.currentRound} 轮` : ''}
+                          </p>
                         </div>
-                        <span className="text-xs text-stone-400 dark:text-stone-500">
-                          {g.learned}/{g.total}
-                        </span>
-                      </div>
-                    </button>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-12 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+                            <div
+                              className="h-full rounded-full bg-stone-900 transition-all dark:bg-stone-100"
+                              style={{
+                                width: `${g.total > 0 ? (g.learned / g.total) * 100 : 0}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs text-stone-400 dark:text-stone-500">
+                            {g.learned}/{g.total}
+                          </span>
+                        </div>
+                      </button>
+                      <Link
+                        href={`/list/${g.id}`}
+                        className="flex items-center border-l border-stone-100 px-3 text-xs text-stone-400 transition hover:text-stone-600 dark:border-stone-700 dark:hover:text-stone-300"
+                      >
+                        列表
+                      </Link>
+                    </div>
                   ))}
                 </div>
               )}

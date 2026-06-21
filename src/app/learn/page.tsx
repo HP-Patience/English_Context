@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
+import SelectionSearch from '@/components/SelectionSearch'
 import { highlightWord } from '@/lib/highlight'
 import Loading from '@/components/Loading'
 
@@ -19,12 +20,16 @@ type LearnItem = {
   sentence: string | null
   sentenceCn: string | null
   groupId: string
+  round?: number
+  roundProgress?: { completed: number; total: number }
 }
 
 function LearnPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const groupId = searchParams.get('groupId')
+  const roundParam = searchParams.get('round')
+  const round = roundParam ? parseInt(roundParam, 10) : 0
 
   const [item, setItem] = useState<LearnItem | null>(null)
   const [loading, setLoading] = useState(true)
@@ -37,12 +42,15 @@ function LearnPageContent() {
   const [showForgotAfterClear, setShowForgotAfterClear] = useState(false)
   const [stack, setStack] = useState<LearnItem[]>([])
   const [showPrevItem, setShowPrevItem] = useState<LearnItem | null>(null)
+  const [startingRound, setStartingRound] = useState(false)
+
   const fetchNext = useCallback(async () => {
     if (!groupId) return
     setLoading(true)
     setRevealed(false)
     try {
-      const res = await fetch(`/api/kaoyan/learn?groupId=${groupId}`)
+      const params = round > 0 ? `?groupId=${groupId}&round=${round}` : `?groupId=${groupId}`
+      const res = await fetch(`/api/kaoyan/learn${params}`)
       const data = await res.json()
       if (data.done) {
         setDone(true)
@@ -56,7 +64,7 @@ function LearnPageContent() {
     } finally {
       setLoading(false)
     }
-  }, [groupId])
+  }, [groupId, round])
 
   useEffect(() => { if (groupId) fetchNext() }, [groupId, fetchNext])
 
@@ -135,14 +143,41 @@ function LearnPageContent() {
   }
 
   if (done) {
+    const nextRound = doneInfo?.round != null ? doneInfo.round + 1 : round + 1
     return (
       <div className="mx-auto max-w-lg pt-12 text-center">
         <p className="mb-2 text-5xl font-light text-stone-300 dark:text-stone-600">🎉</p>
-        <h2 className="mb-1 text-xl font-semibold">本阶段完成</h2>
+        <h2 className="mb-1 text-xl font-semibold">
+          {doneInfo?.round ? `第 ${doneInfo.round} 轮完成` : '本阶段完成'}
+        </h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">已学 {doneInfo?.learned || '全部'} 词</p>
-        <div className="flex justify-center gap-3">
-          <button onClick={() => router.push('/')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">返回首页</button>
-          <button onClick={() => router.push('/review')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">去复习</button>
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex justify-center gap-3">
+            <button onClick={() => router.push('/')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">返回首页</button>
+            <button onClick={() => router.push('/review')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">去复习</button>
+          </div>
+          <button
+            onClick={async () => {
+              setStartingRound(true)
+              try {
+                const res = await fetch('/api/kaoyan/learn/start-round', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ groupId }),
+                })
+                const data = await res.json()
+                if (data.round) {
+                  router.push(`/learn?groupId=${groupId}&round=${data.round}`)
+                }
+              } catch {
+                setStartingRound(false)
+              }
+            }}
+            disabled={startingRound}
+            className="text-sm font-medium text-amber-600 hover:text-amber-700 disabled:opacity-50 dark:text-amber-400 dark:hover:text-amber-300"
+          >
+            {startingRound ? '...' : `开始第 ${nextRound} 轮`}
+          </button>
         </div>
       </div>
     )
@@ -170,17 +205,19 @@ function LearnPageContent() {
             <div className="mb-1.5 flex justify-end">
               <SentenceTTSButton text={showPrevItem.sentence} />
             </div>
-            <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
-              <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
-                {prevParts.map((part, i) =>
-                  part.highlight ? (
-                    <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
-                  ) : (
-                    <span key={i}>{part.text}</span>
-                  )
-                )}
-              </p>
-            </div>
+            <SelectionSearch>
+              <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
+                <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
+                  {prevParts.map((part, i) =>
+                    part.highlight ? (
+                      <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                    ) : (
+                      <span key={i}>{part.text}</span>
+                    )
+                  )}
+                </p>
+              </div>
+            </SelectionSearch>
           </div>
         )}
 
@@ -213,6 +250,12 @@ function LearnPageContent() {
 
   return (
     <div className="mx-auto max-w-lg">
+      {round > 0 && item?.roundProgress && (
+        <div className="mb-2 flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+          <span>第 {round} 轮</span>
+          <span>{item.roundProgress.completed}/{item.roundProgress.total}</span>
+        </div>
+      )}
       {stack.length > 0 && (
         <div className="mb-4">
           <button onClick={handleBack} className="flex items-center gap-1 text-sm text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">
@@ -257,17 +300,19 @@ function LearnPageContent() {
           <div className="mb-1.5 flex justify-end">
             <SentenceTTSButton text={item.sentence} />
           </div>
-          <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
-            <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
-              {sentenceParts.map((part, i) =>
-                part.highlight ? (
-                  <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
-                ) : (
-                  <span key={i}>{part.text}</span>
-                )
-              )}
-            </p>
-          </div>
+          <SelectionSearch>
+            <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
+              <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
+                {sentenceParts.map((part, i) =>
+                  part.highlight ? (
+                    <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                  ) : (
+                    <span key={i}>{part.text}</span>
+                  )
+                )}
+              </p>
+            </div>
+          </SelectionSearch>
         </div>
       )}
 

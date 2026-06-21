@@ -10,12 +10,13 @@ export async function GET(req: NextRequest) {
   const userId = await getLocalUserId()
   const { searchParams } = new URL(req.url)
   const groupId = searchParams.get('groupId')
+  const roundParam = searchParams.get('round')
+  const round = roundParam ? parseInt(roundParam, 10) : 0
 
   if (!groupId) {
     return NextResponse.json({ error: 'groupId required' }, { status: 400 })
   }
 
-  // Find next unlearned word in this group
   const items = await prisma.wordGroupItem.findMany({
     where: { wordGroupId: groupId },
     orderBy: { sortOrder: 'asc' },
@@ -37,7 +38,79 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  // Find first word that has unlearned meanings (without sentence query in loop)
+  if (round >= 1) {
+    // Round N: show words where learnRound >= round, unrated first
+    const roundItems = items.filter(item => {
+      const uw = item.word.userWords[0]
+      return uw && uw.learnRound >= round
+    })
+
+    // Count completed for this round
+    const totalInRound = roundItems.length
+    let completedCount = 0
+    for (const item of roundItems) {
+      const allUwms = item.word.meanings.flatMap(m => m.userWordMeanings)
+      if (allUwms.length > 0 && allUwms.every(uwm => uwm.lastRatedAt !== null)) {
+        completedCount++
+      }
+    }
+
+    // Find first uncompleted word, ordered by lastRatedAt ASC NULLS FIRST
+    const uncompleted = roundItems
+      .filter(item => {
+        const allUwms = item.word.meanings.flatMap(m => m.userWordMeanings)
+        return allUwms.length > 0 && allUwms.some(uwm => uwm.lastRatedAt === null)
+      })
+      .sort((a, b) => {
+        const aUwm = a.word.meanings.flatMap(m => m.userWordMeanings).find(uwm => uwm.lastRatedAt === null)
+        const bUwm = b.word.meanings.flatMap(m => m.userWordMeanings).find(uwm => uwm.lastRatedAt === null)
+        // Items with null lastRatedAt come first; then sort by sortOrder
+        if (aUwm && !bUwm) return -1
+        if (!aUwm && bUwm) return 1
+        return a.sortOrder - b.sortOrder
+      })
+
+    if (uncompleted.length === 0) {
+      return NextResponse.json({
+        done: true,
+        groupId,
+        total: totalInRound,
+        learned: completedCount,
+        round,
+      })
+    }
+
+    const target = uncompleted[0]
+    const firstUwm = target.word.meanings.flatMap(m => m.userWordMeanings).find(uwm => uwm.lastRatedAt === null)
+    const meaning = target.word.meanings.find(m => m.userWordMeanings.some(uwm => uwm.id === firstUwm?.id))
+
+    if (!firstUwm || !meaning) {
+      return NextResponse.json({ done: true, groupId, round })
+    }
+
+    const sentence = await prisma.generatedSentence.findFirst({
+      where: { userWordMeaningId: firstUwm.id },
+      orderBy: { lastUsedAt: 'desc' },
+    })
+
+    return NextResponse.json({
+      id: firstUwm.id,
+      wordId: target.word.id,
+      word: target.word.text,
+      bookmarked: target.word.userWords[0]?.bookmarked ?? false,
+      pos: meaning.partOfSpeech,
+      definitionCn: meaning.definitionCn,
+      wordMastery: calcMastery(firstUwm.easeFactor),
+      meaningMastery: firstUwm.mastery,
+      groupId,
+      round,
+      roundProgress: { completed: completedCount, total: totalInRound },
+      sentence: sentence?.sentenceText || null,
+      sentenceCn: sentence?.sentenceCn || null,
+    })
+  }
+
+  // Round 0 (default): current behavior — find unlearned meanings
   let foundUwmId: string | null = null
   let responseData: Record<string, unknown> | null = null
 
@@ -119,9 +192,10 @@ export async function POST(req: NextRequest) {
   })
 
   const newMastery = calcMastery(sm2.easeFactor)
+  const now = new Date()
   await prisma.userWordMeaning.update({
     where: { id: userWordMeaningId },
-    data: { mastery: newMastery },
+    data: { mastery: newMastery, lastRatedAt: now },
   })
 
   // Recalc word-level mastery
@@ -133,7 +207,7 @@ export async function POST(req: NextRequest) {
   )
   await prisma.userWord.update({
     where: { id: uwm.userWordId },
-    data: { mastery: avgMastery },
+    data: { mastery: avgMastery, lastRatedAt: now },
   })
 
   // Log review

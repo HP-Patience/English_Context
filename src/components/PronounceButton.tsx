@@ -9,7 +9,10 @@ export default function PronounceButton({ word }: { word: string }) {
 
   return (
     <button
-      onClick={play}
+      onClick={(e) => {
+        e.stopPropagation()
+        play()
+      }}
       disabled={playing}
       type="button"
       className={`inline-flex items-center justify-center rounded-md p-1.5 transition ${

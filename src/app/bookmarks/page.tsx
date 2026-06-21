@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { cachedFetch } from '@/lib/api-cache'
+import SelectionSearch from '@/components/SelectionSearch'
 import Loading from '@/components/Loading'
 
 type BookmarkItem = {
@@ -86,7 +87,7 @@ export default function BookmarksPage() {
                 <span className="text-xs font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
                   {m.partOfSpeech}
                 </span>{' '}
-                <span className="text-stone-700 dark:text-stone-300">{m.definition}</span>
+                <SelectionSearch><span className="text-stone-700 dark:text-stone-300">{m.definition}</span></SelectionSearch>
                 {m.definitionCn && m.definitionCn !== m.definition && (
                   <span className="ml-1 text-stone-500 dark:text-stone-400">· {m.definitionCn}</span>
                 )}

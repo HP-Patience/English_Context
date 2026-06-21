@@ -73,6 +73,8 @@ model UserWord {
   status    String   @default("learning") // learning | reviewing | mastered
   mastery   Float    @default(0) // 0-100, aggregated from sub-meanings
   bookmarked Boolean @default(false)
+  learnRound Int     @default(0) // 0=initial, 1=round1 done, 2=round2, etc.
+  lastRatedAt DateTime?
   createdAt DateTime @default(now())
 
   user    User    @relation(fields: [userId], references: [id])
@@ -91,6 +93,7 @@ model UserWordMeaning {
   nextReviewAt    DateTime @default(now())
   currentTestLevel Int     @default(0) // 0-3
   mastery         Float    @default(0) // 0-100
+  lastRatedAt     DateTime?
 
   userWord     UserWord           @relation(fields: [userWordId], references: [id])
   meaning       Meaning            @relation(fields: [meaningId], references: [id])
