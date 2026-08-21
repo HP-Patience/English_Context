@@ -39,17 +39,20 @@ function makeMaps({ mismatchedMeaning = false, alphaPhonetic = null, betaPhoneti
       ['beta', { id: 'word-beta', text: 'beta', phonetic: betaPhonetic }],
     ]),
     meaningMap: new Map([
-      ['alpha', { id: 'meaning-alpha', wordId: mismatchedMeaning ? 'different-word' : 'word-alpha', definitionCn: '阿尔法' }],
-      ['beta', { id: 'meaning-beta', wordId: 'word-beta', definitionCn: '贝塔' }],
+      ['alpha', { id: 'meaning-alpha', wordId: mismatchedMeaning ? 'different-word' : 'word-alpha', partOfSpeech: 'n.', definition: 'alpha fixture meaning', definitionCn: '阿尔法' }],
+      ['beta', { id: 'meaning-beta', wordId: 'word-beta', partOfSpeech: 'n.', definition: 'beta fixture meaning', definitionCn: '贝塔' }],
     ]),
   }
 }
 
 async function makeDraftPrisma({ alphaPhonetic = null, betaPhonetic = null } = {}) {
-  const { wordMap } = makeMaps({ alphaPhonetic, betaPhonetic })
+  const { wordMap, meaningMap } = makeMaps({ alphaPhonetic, betaPhonetic })
   const prisma = createFakeStoryPrisma({
     wordGroups: [{
-      words: [...wordMap.values()].map((word, index) => ({ sortOrder: index + 1, word })),
+      words: [...wordMap.values()].map((word, index) => ({
+        sortOrder: index + 1,
+        word: { ...word, meanings: [meaningMap.get(word.text)] },
+      })),
     }],
   })
   const course = await createOrResumeDraftCourse({ prisma, fingerprints })

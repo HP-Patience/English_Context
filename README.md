@@ -90,6 +90,8 @@ node scripts/generate-meanings.js
 
 ### 运行时验证
 
+> **当前 lint 状态：** `npm run lint` 目前会因已知的仓库既有债务退出非零，基线是 **130 problems（36 errors、94 warnings）**。Task 8 改动文件的精确 ESLint 命令必须单独通过；全量 lint 仍需运行并确认计数没有新增。
+
 ```bash
 # 确定性 route/service/persistence smoke（不读小说、不调用 LLM、不连接真实 DB）
 npm run test:runtime -- scripts/test/story-runtime-smoke.mjs
@@ -100,9 +102,16 @@ npm run test:runtime
 # 全部离线故事流水线测试
 npm run test:story
 
-# 类型、lint 与生产构建
+# 类型检查
 npx tsc --noEmit
+
+# Task 8 改动文件 lint：必须退出 0
+npx eslint scripts/test/story-runtime-smoke.mjs scripts/test/helpers/fake-story-prisma.mjs scripts/test/story-lesson-repository.test.mjs scripts/test/runtime-tests.mjs vitest.config.ts
+
+# 仓库全量 lint：当前预期退出非零，但必须保持上述既有基线不变
 npm run lint
+
+# 生产构建
 npm run build
 ```
 

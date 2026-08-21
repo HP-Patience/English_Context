@@ -1,12 +1,98 @@
-import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { readdir, readFile } from 'node:fs/promises'
+import { dirname, extname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 import { createFakeStoryPrisma } from './helpers/fake-story-prisma.mjs'
+
+const LOCAL_USER_ID = 'story-runtime-smoke-user'
+const ROW_SOURCE_SUMMARY_SENTINEL = 'PRIVATE_ROW_SOURCE_SUMMARY_SENTINEL'
+const ROW_CONTINUITY_NOTES_SENTINEL = 'PRIVATE_ROW_CONTINUITY_NOTES_SENTINEL'
+const JSON_SOURCE_SUMMARY_SENTINEL = 'PRIVATE_JSON_SOURCE_SUMMARY_SENTINEL'
+const JSON_CONTINUITY_NOTES_SENTINEL = 'PRIVATE_JSON_CONTINUITY_NOTES_SENTINEL'
+
+const runtimeBoundary = vi.hoisted(() => {
+  const novelFileName = '蛊真人.txt'
+
+  function pathText(value) {
+    if (typeof value === 'string') return value
+    if (value instanceof URL) return value.href
+    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) return value.toString('utf8')
+    return null
+  }
+
+  function assertSafePath(value, operation) {
+    const raw = pathText(value)
+    if (!raw) return
+    let decoded = raw
+    try {
+      decoded = decodeURIComponent(raw)
+    } catch {
+      // Invalid URL escaping is irrelevant unless the literal novel filename is present.
+    }
+    const basename = decoded.normalize('NFC').replaceAll('\\', '/').split('/').at(-1)
+    if (basename === novelFileName) {
+      throw new Error(`Story runtime attempted ${operation} on the raw novel path`)
+    }
+  }
+
+  function blockOfflineModule(moduleId) {
+    throw new Error(`Story runtime imported offline generation module: ${moduleId}`)
+  }
+
+  return { assertSafePath, blockOfflineModule }
+})
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal()
+  const guardedNames = [
+    'access', 'accessSync', 'createReadStream', 'existsSync', 'lstat', 'lstatSync',
+    'open', 'openSync', 'readFile', 'readFileSync', 'stat', 'statSync',
+  ]
+  const guarded = Object.fromEntries(guardedNames.map((name) => [name, function guardedFsCall(...args) {
+    runtimeBoundary.assertSafePath(args[0], `node:fs.${name}`)
+    return Reflect.apply(actual[name], actual.default ?? actual, args)
+  }]))
+  const guardedPromises = Object.fromEntries(
+    ['access', 'lstat', 'open', 'readFile', 'stat'].map((name) => [name, async function guardedPromiseCall(...args) {
+      runtimeBoundary.assertSafePath(args[0], `node:fs.promises.${name}`)
+      return Reflect.apply(actual.promises[name], actual.promises, args)
+    }]),
+  )
+  return {
+    ...actual,
+    ...guarded,
+    promises: { ...actual.promises, ...guardedPromises },
+    default: { ...actual.default, ...guarded, promises: { ...actual.promises, ...guardedPromises } },
+  }
+})
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal()
+  const guarded = Object.fromEntries(
+    ['access', 'lstat', 'open', 'readFile', 'stat'].map((name) => [name, async function guardedPromiseCall(...args) {
+      runtimeBoundary.assertSafePath(args[0], `node:fs/promises.${name}`)
+      return Reflect.apply(actual[name], actual.default ?? actual, args)
+    }]),
+  )
+  return { ...actual, ...guarded, default: { ...actual.default, ...guarded } }
+})
+
+vi.mock('../parse-novel.mjs', () => runtimeBoundary.blockOfflineModule('../parse-novel.mjs'))
+vi.mock('../build-story-outline.mjs', () => runtimeBoundary.blockOfflineModule('../build-story-outline.mjs'))
+vi.mock('../generate-story-lessons.mjs', () => runtimeBoundary.blockOfflineModule('../generate-story-lessons.mjs'))
+vi.mock('../validate-story-lessons.mjs', () => runtimeBoundary.blockOfflineModule('../validate-story-lessons.mjs'))
+vi.mock('../lib/input-fingerprint.mjs', () => runtimeBoundary.blockOfflineModule('../lib/input-fingerprint.mjs'))
+vi.mock('../lib/llm-json.mjs', () => runtimeBoundary.blockOfflineModule('../lib/llm-json.mjs'))
+vi.mock('../lib/novel-parser.mjs', () => runtimeBoundary.blockOfflineModule('../lib/novel-parser.mjs'))
+vi.mock('../lib/story-content.mjs', () => runtimeBoundary.blockOfflineModule('../lib/story-content.mjs'))
+vi.mock('../lib/story-lesson-generator.mjs', () => runtimeBoundary.blockOfflineModule('../lib/story-lesson-generator.mjs'))
+vi.mock('../lib/story-lesson-repository.mjs', () => runtimeBoundary.blockOfflineModule('../lib/story-lesson-repository.mjs'))
+vi.mock('../lib/story-outline.mjs', () => runtimeBoundary.blockOfflineModule('../lib/story-outline.mjs'))
+vi.mock('../lib/story-source-coverage.mjs', () => runtimeBoundary.blockOfflineModule('../lib/story-source-coverage.mjs'))
+vi.mock('../lib/word-import.js', () => runtimeBoundary.blockOfflineModule('../lib/word-import.js'))
 
 const injected = vi.hoisted(() => ({
   prisma: {},
@@ -22,20 +108,36 @@ vi.mock('openai', () => {
   throw new Error('Runtime smoke loaded OpenAI; ready lessons must not require a runtime LLM')
 })
 
-import { GET as getLessons } from '../../src/app/api/story/lessons/route'
-import { GET as getLesson } from '../../src/app/api/story/lessons/[id]/route'
-import { POST as postProgress } from '../../src/app/api/story/lessons/[id]/progress/route'
-import { GET as getReviewQueue, POST as postReview } from '../../src/app/api/story/review/route'
+const [
+  { GET: getLessons },
+  { GET: getLesson },
+  { POST: postProgress },
+  { GET: getReviewQueue, POST: postReview },
+] = await Promise.all([
+  import('../../src/app/api/story/lessons/route'),
+  import('../../src/app/api/story/lessons/[id]/route'),
+  import('../../src/app/api/story/lessons/[id]/progress/route'),
+  import('../../src/app/api/story/review/route'),
+])
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-function makeContent({ id, order, title, words }) {
+const fixtureTimestamp = new Date('2026-08-21T00:00:00.000Z')
+
+function makeContent({
+  id,
+  order,
+  title,
+  words,
+  sourceSummary = 'Synthetic fixture summary; no novel text.',
+  continuityNotes = 'Synthetic fixture continuity.',
+}) {
   return JSON.stringify({
     title,
     order,
     sourceChapterStart: `fixture-${id}-start`,
     sourceChapterEnd: `fixture-${id}-end`,
-    sourceSummary: 'Synthetic fixture summary; no novel text.',
-    continuityNotes: 'Synthetic fixture continuity.',
+    sourceSummary,
+    continuityNotes,
     paragraphs: [
       {
         sceneTitle: 'Synthetic courtyard',
@@ -57,15 +159,17 @@ function makeContent({ id, order, title, words }) {
   })
 }
 
-function createSeededPrisma() {
+async function createSeededPrisma() {
   const words = [
     {
       id: 'fixture-word-resolve',
       text: 'resolve',
       phonetic: '/rɪˈzɒlv/',
+      language: 'en',
       glossCn: '决心',
       meanings: [{
         id: 'fixture-meaning-resolve',
+        wordId: 'fixture-word-resolve',
         partOfSpeech: 'n.',
         definition: 'firm determination',
         definitionCn: '坚定决心',
@@ -76,9 +180,11 @@ function createSeededPrisma() {
       id: 'fixture-word-vigilant',
       text: 'vigilant',
       phonetic: '/ˈvɪdʒɪlənt/',
+      language: 'en',
       glossCn: '警觉的',
       meanings: [{
         id: 'fixture-meaning-vigilant',
+        wordId: 'fixture-word-vigilant',
         partOfSpeech: 'adj.',
         definition: 'watchful for danger',
         definitionCn: '对危险保持警觉',
@@ -89,9 +195,11 @@ function createSeededPrisma() {
       id: 'fixture-word-advance',
       text: 'advance',
       phonetic: '/ədˈvɑːns/',
+      language: 'en',
       glossCn: '前进',
       meanings: [{
         id: 'fixture-meaning-advance',
+        wordId: 'fixture-word-advance',
         partOfSpeech: 'v.',
         definition: 'move forward',
         definitionCn: '向前推进',
@@ -99,16 +207,63 @@ function createSeededPrisma() {
       }],
     },
   ]
-  const prisma = createFakeStoryPrisma({ wordGroups: [{ id: 'fixture-group', words }] })
+  const prisma = createFakeStoryPrisma({
+    wordGroups: [{ id: 'fixture-group', name: 'Synthetic fixture group', sortOrder: 1, words }],
+  })
+
+  await prisma.user.upsert({
+    where: { id: LOCAL_USER_ID },
+    update: {},
+    create: {
+      id: LOCAL_USER_ID,
+      email: 'story-runtime-smoke@example.invalid',
+      name: 'Story Runtime Smoke User',
+      interests: '[]',
+      dailyTarget: 30,
+      ttsConfig: '{}',
+      createdAt: fixtureTimestamp,
+    },
+  })
 
   prisma.state.courses.set('fixture-ready-course', {
-    id: 'fixture-ready-course', version: 1, status: 'ready', readySlot: 'ready',
+    id: 'fixture-ready-course',
+    version: 1,
+    status: 'ready',
+    readySlot: 'ready',
+    sourceFingerprint: 'fixture-source-fingerprint-ready',
+    summaryFingerprint: 'fixture-summary-fingerprint-ready',
+    outlineFingerprint: 'fixture-outline-fingerprint-ready',
+    assignmentFingerprint: 'fixture-assignment-fingerprint-ready',
+    generationError: null,
+    publishedAt: fixtureTimestamp,
+    archivedAt: null,
+    createdAt: fixtureTimestamp,
+    updatedAt: fixtureTimestamp,
   })
   prisma.state.courses.set('fixture-draft-course', {
-    id: 'fixture-draft-course', version: 2, status: 'draft', readySlot: null,
+    id: 'fixture-draft-course',
+    version: 2,
+    status: 'draft',
+    readySlot: null,
+    sourceFingerprint: 'fixture-source-fingerprint-draft',
+    summaryFingerprint: 'fixture-summary-fingerprint-draft',
+    outlineFingerprint: 'fixture-outline-fingerprint-draft',
+    assignmentFingerprint: 'fixture-assignment-fingerprint-draft',
+    generationError: null,
+    publishedAt: null,
+    archivedAt: null,
+    createdAt: fixtureTimestamp,
+    updatedAt: fixtureTimestamp,
   })
 
   const firstLessonWords = words.slice(0, 2)
+  const lessonDefaults = {
+    wordGroupId: 'fixture-group',
+    generationError: null,
+    generatedAt: fixtureTimestamp,
+    createdAt: fixtureTimestamp,
+    updatedAt: fixtureTimestamp,
+  }
   prisma.state.lessons.set('fixture-lesson-1', {
     id: 'fixture-lesson-1',
     courseId: 'fixture-ready-course',
@@ -116,8 +271,18 @@ function createSeededPrisma() {
     title: 'Synthetic lesson one',
     sourceChapterStart: 'fixture-one-start',
     sourceChapterEnd: 'fixture-one-end',
-    contentJson: makeContent({ id: 'one', order: 1, title: 'Synthetic lesson one', words: firstLessonWords }),
+    sourceSummary: ROW_SOURCE_SUMMARY_SENTINEL,
+    continuityNotes: ROW_CONTINUITY_NOTES_SENTINEL,
+    contentJson: makeContent({
+      id: 'one',
+      order: 1,
+      title: 'Synthetic lesson one',
+      words: firstLessonWords,
+      sourceSummary: JSON_SOURCE_SUMMARY_SENTINEL,
+      continuityNotes: JSON_CONTINUITY_NOTES_SENTINEL,
+    }),
     status: 'ready',
+    ...lessonDefaults,
   })
   prisma.state.lessons.set('fixture-lesson-2', {
     id: 'fixture-lesson-2',
@@ -126,8 +291,11 @@ function createSeededPrisma() {
     title: 'Synthetic lesson two',
     sourceChapterStart: 'fixture-two-start',
     sourceChapterEnd: 'fixture-two-end',
+    sourceSummary: 'Synthetic row summary for lesson two.',
+    continuityNotes: 'Synthetic row continuity for lesson two.',
     contentJson: makeContent({ id: 'two', order: 2, title: 'Synthetic lesson two', words: words.slice(2) }),
     status: 'ready',
+    ...lessonDefaults,
   })
   prisma.state.lessons.set('fixture-hidden-draft-lesson', {
     id: 'fixture-hidden-draft-lesson',
@@ -136,8 +304,11 @@ function createSeededPrisma() {
     title: 'Hidden draft lesson',
     sourceChapterStart: 'hidden',
     sourceChapterEnd: 'hidden',
+    sourceSummary: 'Synthetic hidden summary.',
+    continuityNotes: 'Synthetic hidden continuity.',
     contentJson: makeContent({ id: 'hidden', order: 3, title: 'Hidden draft lesson', words: words.slice(2) }),
     status: 'draft',
+    ...lessonDefaults,
   })
   prisma.state.lessons.set('fixture-other-course-lesson', {
     id: 'fixture-other-course-lesson',
@@ -146,8 +317,11 @@ function createSeededPrisma() {
     title: 'Other course lesson',
     sourceChapterStart: 'other',
     sourceChapterEnd: 'other',
+    sourceSummary: 'Synthetic other-course summary.',
+    continuityNotes: 'Synthetic other-course continuity.',
     contentJson: makeContent({ id: 'other', order: 1, title: 'Other course lesson', words: words.slice(2) }),
     status: 'ready',
+    ...lessonDefaults,
   })
 
   for (const [index, word] of firstLessonWords.entries()) {
@@ -158,6 +332,7 @@ function createSeededPrisma() {
       meaningId: word.meanings[0].id,
       sortOrder: index + 1,
       glossCn: word.glossCn,
+      createdAt: fixtureTimestamp,
     })
   }
   prisma.state.lessonWords.set('fixture-next-lesson-word', {
@@ -167,6 +342,7 @@ function createSeededPrisma() {
     meaningId: words[2].meanings[0].id,
     sortOrder: 1,
     glossCn: words[2].glossCn,
+    createdAt: fixtureTimestamp,
   })
   prisma.state.lessonWords.set('fixture-other-course-word', {
     id: 'fixture-other-course-word',
@@ -175,8 +351,10 @@ function createSeededPrisma() {
     meaningId: words[2].meanings[0].id,
     sortOrder: 1,
     glossCn: words[2].glossCn,
+    createdAt: fixtureTimestamp,
   })
 
+  prisma.validateFixture()
   return prisma
 }
 
@@ -199,14 +377,26 @@ async function saveStep(step) {
   )
 }
 
-beforeEach(() => {
-  const prisma = createSeededPrisma()
+async function collectRuntimeFiles(root) {
+  const entries = await readdir(root, { withFileTypes: true })
+  const files = []
+  for (const entry of entries) {
+    const path = join(root, entry.name)
+    if (entry.isDirectory()) files.push(...await collectRuntimeFiles(path))
+    else if (['.ts', '.tsx'].includes(extname(entry.name)) && !entry.name.includes('.test.')) files.push(path)
+  }
+  return files
+}
+
+beforeEach(async () => {
+  injected.userId = LOCAL_USER_ID
+  const prisma = await createSeededPrisma()
   for (const key of Reflect.ownKeys(injected.prisma)) delete injected.prisma[key]
   Object.assign(injected.prisma, prisma)
 })
 
 describe('story runtime smoke', () => {
-  it('persists one ready-course journey through Step1-Step4 without blocking the next lesson', async () => {
+  it('persists one seeded-user ready-course journey through Step1-Step4 without blocking the next lesson', async () => {
     const initialListResponse = await getLessons()
     expect(initialListResponse.status).toBe(200)
     expect(await responseJson(initialListResponse)).toEqual({
@@ -223,7 +413,18 @@ describe('story runtime smoke', () => {
       { params: Promise.resolve({ id: 'fixture-lesson-1' }) },
     )
     expect(detailResponse.status).toBe(200)
-    const initialDetail = (await responseJson(detailResponse)).lesson
+    const detailText = await detailResponse.text()
+    expect(detailText).not.toContain('sourceSummary')
+    expect(detailText).not.toContain('continuityNotes')
+    for (const sentinel of [
+      ROW_SOURCE_SUMMARY_SENTINEL,
+      ROW_CONTINUITY_NOTES_SENTINEL,
+      JSON_SOURCE_SUMMARY_SENTINEL,
+      JSON_CONTINUITY_NOTES_SENTINEL,
+    ]) {
+      expect(detailText).not.toContain(sentinel)
+    }
+    const initialDetail = JSON.parse(detailText).lesson
     expect(initialDetail.content.paragraphs).toEqual([
       expect.objectContaining({
         sceneTitle: 'Synthetic courtyard',
@@ -233,8 +434,6 @@ describe('story runtime smoke', () => {
         ]),
       }),
     ])
-    expect(initialDetail.content).not.toHaveProperty('sourceSummary')
-    expect(initialDetail.content).not.toHaveProperty('continuityNotes')
 
     for (const [step, expected] of [
       [1, { completedStep: 1, currentStep: 2, status: 'learning' }],
@@ -307,7 +506,33 @@ describe('story runtime smoke', () => {
     expect(reloadedList.lessons[1]).toMatchObject({ id: 'fixture-lesson-2', completedStep: 0 })
   })
 
-  it('scopes reads to the ready slot and has no runtime novel or LLM dependency', async () => {
+  it('rejects an unknown local user before any user-scoped progress is persisted', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    injected.userId = 'unknown-story-runtime-user'
+    try {
+      const response = await saveStep(1)
+      expect(response.status).toBe(500)
+      expect(await responseJson(response)).toEqual({ error: 'Internal server error' })
+      expect(injected.prisma.state.userStoryProgress.size).toBe(0)
+      expect(errorSpy).toHaveBeenCalledWith('Failed to save story progress', expect.any(Error))
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  it('installs import tripwires without loading the raw novel or offline generator', async () => {
+    await expect(import('../../蛊真人.txt')).rejects.toThrow('Story runtime attempted to import the raw novel path')
+    const offlineImportError = await import('../parse-novel.mjs').then(
+      () => null,
+      (error) => error,
+    )
+    expect(offlineImportError).toBeInstanceOf(Error)
+    expect(offlineImportError.cause).toMatchObject({
+      message: 'Story runtime imported offline generation module: ../parse-novel.mjs',
+    })
+  })
+
+  it('scopes reads to the ready slot and has no runtime novel, offline generator, or LLM dependency', async () => {
     const hiddenDraft = await getLesson(
       new NextRequest('http://runtime.test/api/story/lessons/fixture-hidden-draft-lesson'),
       { params: Promise.resolve({ id: 'fixture-hidden-draft-lesson' }) },
@@ -319,18 +544,22 @@ describe('story runtime smoke', () => {
     expect(hiddenDraft.status).toBe(404)
     expect(otherCourse.status).toBe(404)
 
-    const rawNovelPath = join(projectRoot, '蛊真人.txt')
-    expect(existsSync(rawNovelPath)).toBe(false)
-
     const runtimeFiles = [
-      'src/app/api/story/lessons/route.ts',
-      'src/app/api/story/lessons/[id]/route.ts',
-      'src/app/api/story/lessons/[id]/progress/route.ts',
-      'src/app/api/story/review/route.ts',
-      'src/lib/story-service.ts',
-      'src/lib/story-review.ts',
+      ...await collectRuntimeFiles(join(projectRoot, 'src', 'app', 'story')),
+      ...await collectRuntimeFiles(join(projectRoot, 'src', 'app', 'api', 'story')),
+      ...await collectRuntimeFiles(join(projectRoot, 'src', 'components', 'story')),
+      ...(await collectRuntimeFiles(join(projectRoot, 'src', 'lib')))
+        .filter((file) => /^story-/.test(file.split(/[\\/]/).at(-1)) || file.endsWith(`${join('src', 'lib', 'prisma')}.ts`)),
     ]
-    const runtimeSource = (await Promise.all(runtimeFiles.map((file) => readFile(join(projectRoot, file), 'utf8')))).join('\n')
-    expect(runtimeSource).not.toMatch(/蛊真人\.txt|from ['"](?:@\/lib\/llm|openai|node:fs|node:fs\/promises)['"]|scripts\/(?:parse-novel|generate-story-lessons)/)
+    expect(runtimeFiles.length).toBeGreaterThan(6)
+
+    for (const file of runtimeFiles) {
+      const source = await readFile(file, 'utf8')
+      const label = relative(projectRoot, file)
+      expect(source, label).not.toContain('蛊真人.txt')
+      expect(source, label).not.toMatch(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"]node:fs(?:\/promises)?['"]/)
+      expect(source, label).not.toMatch(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:openai|@\/lib\/llm)['"]/)
+      expect(source, label).not.toMatch(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"][^'"]*scripts[\\/][^'"]*['"]/)
+    }
   })
 })
