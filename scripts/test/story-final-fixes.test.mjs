@@ -295,7 +295,9 @@ function makePublicationPrisma() {
       },
       async findMany({ where } = {}) { return [...state.courses.values()].filter((row) => matches(row, where)) },
       async findUnique({ where, include } = {}) {
-        const row = state.courses.get(where.id) ?? null
+        const row = where.readySlot
+          ? [...state.courses.values()].find((course) => course.readySlot === where.readySlot) ?? null
+          : state.courses.get(where.id) ?? null
         if (!row || !include?.lessons) return row
         return { ...row, lessons: [...state.lessons.values()].filter((lesson) => lesson.courseId === row.id).sort((a, b) => a.order - b.order) }
       },
@@ -359,11 +361,12 @@ const fingerprints = {
   assignmentFingerprint: 'assignment',
 }
 
-test('ready-course lookup rejects status/slot invariant drift', async () => {
+test('ready-course lookup is bound to the unique ready slot instead of stale ready statuses', async () => {
   const prisma = makePublicationPrisma()
   prisma.state.courses.set('ready-a', { id: 'ready-a', version: 1, status: READY_COURSE_STATUS, readySlot: null, ...fingerprints })
   prisma.state.courses.set('ready-b', { id: 'ready-b', version: 2, status: READY_COURSE_STATUS, readySlot: null, ...fingerprints })
-  await assert.rejects(findReadyCourse(prisma), /publication invariant.*2 courses have ready status/i)
+
+  assert.equal(await findReadyCourse(prisma), null)
 })
 
 test('draft lesson writes recheck course mutability before any lesson upsert', async () => {

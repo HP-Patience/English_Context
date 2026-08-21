@@ -15,7 +15,7 @@
     "story:outline": "node scripts/build-story-outline.mjs",
     "story:generate": "node scripts/generate-story-lessons.mjs",
     "story:validate": "node scripts/validate-story-lessons.mjs",
-    "test:runtime": "vitest run src/lib/*.test.ts"
+    "test:runtime": "vitest run src/lib"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

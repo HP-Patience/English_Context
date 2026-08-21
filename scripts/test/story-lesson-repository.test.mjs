@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createOrResumeDraftCourse, persistDraftLesson } from '../lib/story-lesson-repository.mjs'
+import { createOrResumeDraftCourse, findReadyCourse, persistDraftLesson } from '../lib/story-lesson-repository.mjs'
 import { validateReadyLessons } from '../validate-story-lessons.mjs'
 import { createFakeStoryPrisma } from './helpers/fake-story-prisma.mjs'
 
@@ -180,4 +180,43 @@ test('story validation proves a bijection between target segments and StoryLesso
   assert.equal(wrongReport.ok, false)
   assert.match(wrongReport.errors.join('\n'), /row word gamma does not match content target word beta/)
   assert.match(wrongReport.errors.join('\n'), /row glossCn 错误释义 does not match content gloss 贝塔/)
+})
+
+
+test('ready-course lookup uses the unique ready slot and validates the returned row', async () => {
+  const calls = []
+  const prisma = {
+    storyCourse: {
+      async findUnique(args) {
+        calls.push(['findUnique', args])
+        return { id: 'course-ready', status: 'ready', readySlot: 'ready' }
+      },
+      async findMany() {
+        throw new Error('ready-course lookup must not use non-transactional status/slot scans')
+      },
+    },
+  }
+
+  const course = await findReadyCourse(prisma)
+
+  assert.equal(course.id, 'course-ready')
+  assert.deepEqual(calls, [['findUnique', { where: { readySlot: 'ready' } }]])
+})
+
+test('ready-course lookup rejects a ready-slot row that is not published', async () => {
+  const prisma = {
+    storyCourse: {
+      async findUnique() {
+        return { id: 'course-draft', status: 'draft', readySlot: 'ready' }
+      },
+      async findMany() {
+        throw new Error('ready-course lookup must not use non-transactional status/slot scans')
+      },
+    },
+  }
+
+  await assert.rejects(
+    findReadyCourse(prisma),
+    /publication invariant violated: course course-draft occupies the ready slot with status draft/,
+  )
 })

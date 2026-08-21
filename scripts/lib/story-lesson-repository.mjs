@@ -212,16 +212,11 @@ async function markLessonFailed(prisma, courseId, lessonDocument, error) {
 }
 
 async function assertSingleReadyCourse(prisma) {
-  const readyByStatus = await prisma.storyCourse.findMany({ where: { status: READY_COURSE_STATUS } })
-  const readyBySlot = await prisma.storyCourse.findMany({ where: { readySlot: READY_COURSE_SLOT } })
-  if (readyByStatus.length > 1) throw new Error(`publication invariant violated: ${readyByStatus.length} courses have ready status`)
-  if (readyBySlot.length > 1) throw new Error(`publication invariant violated: ${readyBySlot.length} courses occupy the ready slot`)
-  const statusCourse = readyByStatus[0] ?? null
-  const slotCourse = readyBySlot[0] ?? null
-  if (statusCourse && statusCourse.readySlot !== READY_COURSE_SLOT) throw new Error(`publication invariant violated: ready course ${statusCourse.id} does not occupy the ready slot`)
-  if (slotCourse && slotCourse.status !== READY_COURSE_STATUS) throw new Error(`publication invariant violated: course ${slotCourse.id} occupies the ready slot with status ${slotCourse.status}`)
-  if (statusCourse && slotCourse && statusCourse.id !== slotCourse.id) throw new Error('publication invariant violated: ready status and ready slot identify different courses')
-  return statusCourse ?? slotCourse
+  const course = await prisma.storyCourse.findUnique({ where: { readySlot: READY_COURSE_SLOT } })
+  if (!course) return null
+  if (course.readySlot !== READY_COURSE_SLOT) throw new Error(`publication invariant violated: ready course lookup returned course ${course.id} without the ready slot`)
+  if (course.status !== READY_COURSE_STATUS) throw new Error(`publication invariant violated: course ${course.id} occupies the ready slot with status ${course.status}`)
+  return course
 }
 
 function normalizeFingerprints(fingerprints) {
