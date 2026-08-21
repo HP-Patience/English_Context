@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client'
+
 import { STORY_ERROR_CODES, StoryDomainError } from './story-errors'
 import { calculateSM2 } from './sm2'
 
@@ -447,13 +449,8 @@ async function findReadyLessonWordForReview(
 }
 
 function isRetryableStoryReviewConflict(error: unknown): boolean {
-  const maybeCode = typeof error === 'object' && error !== null && 'code' in error
-    ? (error as { code?: unknown }).code
-    : undefined
-  if (maybeCode === 'P2002' || maybeCode === 'P2034' || maybeCode === '40001') return true
-
-  const message = error instanceof Error ? error.message : String(error)
-  return /unique constraint|serializable|serialization|write conflict|transaction conflict|deadlock/i.test(message)
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    && (error.code === 'P2002' || error.code === 'P2034')
 }
 
 

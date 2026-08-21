@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -100,7 +101,7 @@ type AttemptCreateConflictHook = (
   args: { data: Omit<StoryReviewAttemptRow, 'id'> },
   state: ReviewState,
   calls: string[],
-) => Error | null | undefined
+) => unknown
 
 type CreateReviewPrismaOptions = {
   courses?: CourseRow[]
@@ -364,6 +365,13 @@ function createReviewPrisma({
   return client
 }
 
+function prismaKnownRequestError(code: 'P2002' | 'P2034', message: string) {
+  return new Prisma.PrismaClientKnownRequestError(message, {
+    code,
+    clientVersion: Prisma.prismaVersion.client,
+  })
+}
+
 describe('mapStoryResultToGrade', () => {
   it('maps story recall outcomes onto the exact SM-2 grades', () => {
     expect(mapStoryResultToGrade('forgotten')).toBe(0)
@@ -533,9 +541,7 @@ describe('submitStoryReview', () => {
           mastery: 57,
           lastRatedAt: args.data.createdAt,
         }
-        const error = new Error('Unique constraint failed on StoryReviewAttempt') as Error & { code: string }
-        error.code = 'P2002'
-        return error
+        return prismaKnownRequestError('P2002', 'Unique constraint failed on StoryReviewAttempt')
       },
     })
 
@@ -553,9 +559,7 @@ describe('submitStoryReview', () => {
     const prisma = createReviewPrisma({
       onAttemptCreate() {
         conflictCount += 1
-        const error = new Error('transaction conflict') as Error & { code: string }
-        error.code = 'P2034'
-        return error
+        return prismaKnownRequestError('P2034', 'Transaction failed due to a write conflict')
       },
     })
 
@@ -563,6 +567,25 @@ describe('submitStoryReview', () => {
       submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now }),
     ).rejects.toMatchObject({ code: STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED })
     expect(conflictCount).toBe(3)
+  })
+
+  it.each([
+    ['message lookalike', new Error('transaction conflict while proxying a request')],
+    ['plain P2002-shaped object', { code: 'P2002', message: 'Unique constraint failed' }],
+    ['plain P2034-shaped object', { code: 'P2034', message: 'Transaction failed due to a write conflict' }],
+  ])('does not retry an untrusted %s', async (_label, infrastructureError) => {
+    let attemptCount = 0
+    const prisma = createReviewPrisma({
+      onAttemptCreate() {
+        attemptCount += 1
+        return infrastructureError
+      },
+    })
+
+    await expect(
+      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now }),
+    ).rejects.toBe(infrastructureError)
+    expect(attemptCount).toBe(1)
   })
 
   it('rejects lesson words outside the current ready course or before Step3', async () => {

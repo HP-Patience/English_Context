@@ -415,6 +415,17 @@ describe('POST /api/story/review', () => {
     consoleError.mockRestore()
   })
 
+  it('does not treat a plain Prisma-code-shaped rejection as retry exhaustion', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.submitStoryReview.mockRejectedValue({ code: 'P2002', message: 'Unique constraint failed' })
+
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'remembered' }))
+
+    expect(response.status).toBe(500)
+    await expect(responseJson(response)).resolves.toEqual({ error: 'Internal server error' })
+    consoleError.mockRestore()
+  })
+
   it('returns a generic 500 without leaking internal database errors', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     mocks.submitStoryReview.mockRejectedValue(new Error('postgresql://secret@db.internal:5432/story'))

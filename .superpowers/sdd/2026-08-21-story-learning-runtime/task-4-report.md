@@ -215,3 +215,78 @@ The build emitted only the pre-existing workspace-root inference warning caused 
 - `StoryDomainError` uses an `instanceof` guard so arbitrary infrastructure errors or code-shaped objects cannot opt themselves into a `404`/`409` response.
 - Deep relative imports are used for `story-api-types` in dynamic Route Handler files because the current Vitest route-contract setup does not resolve an otherwise-unmocked `@/lib/story-api-types` alias. Type checking, lint, and production build pass.
 - The production build reports the repository's existing multiple-lockfile workspace-root warning. No Task 4 build failure or functional blocker remains.
+
+## Scoped re-review round 2 — trusted Prisma retry classification
+
+### Review finding
+
+The review retry loop still accepted arbitrary `code` properties and message fragments such as `transaction conflict`, `unique constraint`, or `deadlock`. A plain object such as `{ code: 'P2002' }` or an unrelated infrastructure `Error` with a lookalike message could therefore be retried three times and replaced with `STORY_REVIEW_RETRY_EXHAUSTED`, incorrectly producing HTTP `409` instead of a generic `500`.
+
+### Fix
+
+- `isRetryableStoryReviewConflict` now accepts only verified `Prisma.PrismaClientKnownRequestError` instances.
+- Only Prisma known request codes `P2002` and `P2034` are retryable.
+- Message matching, plain code-shaped objects, and the unverified `40001` shape fallback were removed.
+- No test-only predicate was needed because tests construct the real Prisma known request error class.
+- Real `P2002` still supports the concurrent identical-retry path and returns the committed result without reapplying SM-2.
+- Real `P2034` still retries three times; exhaustion becomes the typed `STORY_REVIEW_RETRY_EXHAUSTED` domain error and remains HTTP `409`.
+- Arbitrary message lookalikes and plain `P2002`/`P2034` objects propagate unchanged from the service and remain generic HTTP `500` at the route boundary.
+
+### Round 2 TDD evidence
+
+RED command:
+
+```text
+npm run test:runtime -- src/lib/story-review.test.ts src/lib/story-api-types.test.ts
+```
+
+Observed before the implementation change:
+
+```text
+Test Files 1 failed | 1 passed
+Tests 3 failed | 34 passed
+
+The message-lookalike, plain-P2002, and plain-P2034 service regressions each received
+STORY_REVIEW_RETRY_EXHAUSTED instead of the original infrastructure error.
+```
+
+Focused GREEN:
+
+```text
+npm run test:runtime -- src/lib/story-review.test.ts src/lib/story-api-types.test.ts
+Test Files 2 passed
+Tests 37 passed
+```
+
+### Round 2 validation
+
+```text
+npm run test:runtime
+Test Files 4 passed
+Tests 51 passed
+
+npm run test:story
+54 passed / 0 failed
+
+npx tsc --noEmit
+exit 0
+
+npx eslint src/lib/story-review.ts src/lib/story-review.test.ts src/lib/story-api-types.test.ts src/app/api/story/review/route.ts
+exit 0
+
+npm run build
+Next.js 16.2.9 production build passed; 38 static pages generated and all story API routes were included.
+
+git diff --check
+exit 0
+```
+
+The build again emitted only the pre-existing multiple-lockfile workspace-root inference warning.
+
+### Round 2 self-review
+
+- Confirmed the retry decision no longer reads mutable error messages or trusts arbitrary code-bearing objects.
+- Confirmed real Prisma `P2002` and `P2034` instances are the only retryable error cases.
+- Confirmed identical duplicate retries remain idempotent `200` and immutable-round result conflicts remain typed `409` responses.
+- Confirmed retry exhaustion remains a typed `409`, while lookalike infrastructure failures remain generic `500` responses without leaked details.
+- Confirmed the change is limited to the story-review retry boundary and its service/route regression tests.
