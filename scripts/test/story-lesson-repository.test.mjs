@@ -174,6 +174,29 @@ function makePersistedLesson({ rows = undefined } = {}) {
   }
 }
 
+test('story validation returns structured errors for missing, non-string, or blank content phonetics', () => {
+  for (const phonetic of [undefined, 42, '   ']) {
+    const lesson = makePersistedLesson()
+    const content = JSON.parse(lesson.contentJson)
+    content.paragraphs[0].segments[1].phonetic = phonetic
+    lesson.contentJson = JSON.stringify(content)
+
+    let report
+    assert.doesNotThrow(() => {
+      report = validateReadyLessons({
+        lessons: [lesson],
+        allWordTexts: ['alpha', 'beta'],
+        expectedWordCount: 2,
+        minLessons: 1,
+        maxLessons: 1,
+        maxWordsPerLesson: 100,
+      })
+    })
+    assert.equal(report.ok, false)
+    assert.match(report.errors.join('\n'), /phonetic must be a non-empty string/i)
+  }
+})
+
 test('story validation proves a bijection between target segments and StoryLessonWord rows', () => {
   const validReport = validateReadyLessons({
     lessons: [makePersistedLesson()],

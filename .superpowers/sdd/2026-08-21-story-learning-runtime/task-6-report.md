@@ -314,3 +314,47 @@ exit 0
 ```
 
 The build emitted only the previously documented multiple-lockfile workspace-root warning. No generated client or build output is included in the scoped source diff.
+
+## Task 6 fix round 3 — safe malformed-phonetic publication validation
+
+Scoped re-review found that publication validation recorded malformed generated-content phonetics in the corpus report, but then re-read the unchecked value and called `.trim()` directly. A stale, legacy, or malformed draft with an undefined or non-string `segment.phonetic` therefore threw a raw `TypeError` before the normal structured failure report could be returned or written.
+
+### Strict TDD regression
+
+A focused repository/publication regression was added first for three malformed values: missing (`undefined`), non-string (`42`), and blank (`"   "`). The test requires `validateReadyLessons` not to throw, requires `report.ok === false`, and verifies the normal `phonetic must be a non-empty string` validation error.
+
+The initial RED run reproduced the review finding:
+
+```text
+npm run test:story -- scripts/test/story-lesson-repository.test.mjs
+TypeError: Cannot read properties of undefined (reading 'trim')
+    at validateReadyLessons (.../scripts/validate-story-lessons.mjs:130:55)
+```
+
+The validator now normalizes content phonetics only after a string type check. Persisted/content mismatch comparison runs only when the content phonetic is non-empty; malformed values remain the responsibility of the existing corpus validator and are returned through its structured report. Matching valid phonetics retain the previous publication behavior.
+
+### Round 3 verification evidence
+
+```text
+# Focused publication/generation/final-fix validation coverage
+npm run test:story -- scripts/test/story-lesson-repository.test.mjs scripts/test/story-lesson-generator.test.mjs scripts/test/story-final-fixes.test.mjs
+31 passed / 0 failed
+
+# Full offline story/data pipeline
+npm run test:story
+64 passed / 0 failed
+
+# TypeScript
+npx tsc --noEmit
+exit 0
+
+# Changed production/test files
+npx eslint scripts/validate-story-lessons.mjs scripts/test/story-lesson-repository.test.mjs
+exit 0
+
+# Diff hygiene
+git diff --check
+exit 0
+```
+
+No runtime or build-affecting files changed in round 3, so runtime tests and a production build were not required or run. The change is limited to safe publication validation, its focused regression, and this report section.
