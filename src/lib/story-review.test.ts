@@ -5,6 +5,7 @@ import {
   mapStoryResultToGrade,
   submitStoryReview,
 } from './story-review'
+import { STORY_ERROR_CODES } from './story-errors'
 
 type CourseRow = { id: string; status: string; readySlot: string | null }
 type UserStoryProgressRow = {
@@ -486,6 +487,17 @@ describe('submitStoryReview', () => {
     expect(prisma.state.wordProgress.find((row) => row.lessonWordId === 'lesson-ready-1-word-1')?.reviewRoundCompleted).toBe(1)
   })
 
+  it('uses the immutable-round conflict code for a duplicate retry with a different result', async () => {
+    const prisma = createReviewPrisma()
+
+    await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'vague', now })
+
+    await expect(
+      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'forgotten', now }),
+    ).rejects.toMatchObject({ code: STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT })
+    expect(prisma.state.attempts).toHaveLength(1)
+  })
+
   it('returns the committed attempt when a concurrent duplicate wins the same round without double-applying SM-2', async () => {
     let injectedConflict = false
     const prisma = createReviewPrisma({
@@ -536,6 +548,23 @@ describe('submitStoryReview', () => {
     expect(prisma.calls.filter((call) => call.startsWith('userWordMeaning.update'))).toHaveLength(0)
   })
 
+  it('uses a stable conflict code when retryable review conflicts are exhausted', async () => {
+    let conflictCount = 0
+    const prisma = createReviewPrisma({
+      onAttemptCreate() {
+        conflictCount += 1
+        const error = new Error('transaction conflict') as Error & { code: string }
+        error.code = 'P2034'
+        return error
+      },
+    })
+
+    await expect(
+      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now }),
+    ).rejects.toMatchObject({ code: STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED })
+    expect(conflictCount).toBe(3)
+  })
+
   it('rejects lesson words outside the current ready course or before Step3', async () => {
     const prisma = createReviewPrisma({
       lessons: [
@@ -546,11 +575,17 @@ describe('submitStoryReview', () => {
       lessonProgress: [step3Progress('lesson-ready-1'), step3Progress('lesson-archived-course')],
     })
 
-    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-archived-course-word-1', result: 'remembered', now })).rejects.toThrow(/not in the current ready story course/)
-    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-unpassed-word-1', result: 'remembered', now })).rejects.toThrow(/Step3/)
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-archived-course-word-1', result: 'remembered', now })).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND,
+      message: expect.stringMatching(/not in the current ready story course/),
+    })
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-unpassed-word-1', result: 'remembered', now })).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.LESSON_WORD_NOT_REVIEWABLE,
+      message: expect.stringMatching(/Step3/),
+    })
   })
 
-  it('rejects an early next-round submission and leaves the existing round intact', async () => {
+  it('rejects a conflicting current-round submission and leaves the existing round intact', async () => {
     const prisma = createReviewPrisma({
       wordProgress: [
         { id: 'progress-round1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', reviewRoundCompleted: 1, nextReviewAt: tomorrow, lastResult: 'vague', lastReviewedAt: yesterday },
@@ -560,7 +595,10 @@ describe('submitStoryReview', () => {
       ],
     })
 
-    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now })).rejects.toThrow(/not due/)
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now })).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT,
+      message: expect.stringMatching(/different result/),
+    })
 
     expect(prisma.state.attempts).toHaveLength(1)
     expect(prisma.state.wordProgress[0]?.reviewRoundCompleted).toBe(1)

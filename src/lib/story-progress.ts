@@ -1,3 +1,5 @@
+import { STORY_ERROR_CODES, StoryDomainError } from './story-errors'
+
 export type StoryFirstPassStep = 1 | 2 | 3
 export type StoryLessonStep = StoryFirstPassStep | 4
 
@@ -47,7 +49,10 @@ export function completeFirstPass(
   const nextStep = getNextStep(progress)
 
   if (step !== nextStep) {
-    throw new Error(`Cannot complete Step${step} before Step${nextStep}`)
+    throw new StoryDomainError(
+      STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT,
+      `Cannot complete Step${step} before Step${nextStep}`,
+    )
   }
 
   const completedSteps = [...progress.completedSteps, step]

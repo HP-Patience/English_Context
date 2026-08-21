@@ -1,3 +1,4 @@
+import { STORY_ERROR_CODES, StoryDomainError } from './story-errors'
 import { completeFirstPass, getNextStep, initialProgress } from './story-progress'
 import type { StoryFirstPassStep, StoryLessonStep, StoryProgressState, StoryProgressStatus } from './story-progress'
 import { parseStoryContent } from './story-types'
@@ -269,12 +270,22 @@ export async function saveFirstPassStep({
 
   return client.$transaction(async (tx) => {
     const course = await findReadyCourse(tx)
-    if (!course) throw new Error('No ready story course is published')
+    if (!course) {
+      throw new StoryDomainError(
+        STORY_ERROR_CODES.READY_COURSE_NOT_FOUND,
+        'No ready story course is published',
+      )
+    }
 
     const lesson = await tx.storyLesson.findFirst({
       where: { id: lessonId, courseId: course.id, status: READY_STATUS },
     })
-    if (!lesson) throw new Error(`Story lesson is not ready or does not exist: ${lessonId}`)
+    if (!lesson) {
+      throw new StoryDomainError(
+        STORY_ERROR_CODES.LESSON_NOT_FOUND,
+        `Story lesson is not ready or does not exist: ${lessonId}`,
+      )
+    }
 
     const existing = asProgressRowOrNull(await tx.userStoryProgress.findUnique({
       where: { userId_lessonId: { userId, lessonId } },

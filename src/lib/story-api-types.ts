@@ -1,3 +1,4 @@
+import { STORY_ERROR_CODES, isStoryDomainError } from './story-errors'
 import type {
   StoryLessonDetail,
   StoryLessonListItem,
@@ -145,25 +146,21 @@ export function serializeStoryReviewResult(result: StoryReviewResult): StoryRevi
 }
 
 export function classifyStoryApiError(error: unknown): StoryApiErrorStatus {
-  const message = error instanceof Error ? error.message : String(error)
+  if (!isStoryDomainError(error)) return 500
 
-  if (
-    /No ready story course is published/.test(message) ||
-    /Story lesson is not ready or does not exist/.test(message) ||
-    /not in the current ready story course/.test(message) ||
-    /before Step3 is completed/.test(message)
-  ) {
-    return 404
+  switch (error.code) {
+    case STORY_ERROR_CODES.READY_COURSE_NOT_FOUND:
+    case STORY_ERROR_CODES.LESSON_NOT_FOUND:
+    case STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND:
+    case STORY_ERROR_CODES.LESSON_WORD_NOT_REVIEWABLE:
+      return 404
+    case STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT:
+    case STORY_ERROR_CODES.REVIEW_NOT_DUE:
+    case STORY_ERROR_CODES.REVIEW_ROUNDS_COMPLETE:
+    case STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT:
+    case STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED:
+      return 409
+    default:
+      return 500
   }
-
-  if (
-    /Cannot complete Step\d before Step\d/.test(message) ||
-    /not due for review/.test(message) ||
-    /already completed all \d+ review rounds/.test(message) ||
-    /already committed with a different result/.test(message)
-  ) {
-    return 409
-  }
-
-  return 500
 }

@@ -1,3 +1,4 @@
+import { STORY_ERROR_CODES, StoryDomainError } from './story-errors'
 import { calculateSM2 } from './sm2'
 
 const READY_COURSE_SLOT = 'ready'
@@ -216,20 +217,20 @@ export async function submitStoryReview({
 }: StoryReviewParams & { lessonWordId: string; result: StoryReviewSubmissionResult }): Promise<StoryReviewResult> {
   const client = asPrisma(prisma)
   const grade = mapStoryResultToGrade(result)
-  let lastConflict: unknown
-
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await submitStoryReviewOnce({ client, userId, lessonWordId, result, grade, now })
     } catch (error) {
       if (!isRetryableStoryReviewConflict(error)) throw error
-      lastConflict = error
       const committed = await reloadCommittedStoryReviewResult({ client, userId, lessonWordId, result, grade })
       if (committed) return committed
     }
   }
 
-  throw lastConflict instanceof Error ? lastConflict : new Error('Story review submission conflicted and could not be reloaded')
+  throw new StoryDomainError(
+    STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED,
+    'Story review submission conflicted after retries',
+  )
 }
 
 async function submitStoryReviewOnce({
@@ -249,7 +250,12 @@ async function submitStoryReviewOnce({
 }): Promise<StoryReviewResult> {
   return client.$transaction(async (tx) => {
     const course = await findReadyCourse(tx)
-    if (!course) throw new Error('No ready story course is published')
+    if (!course) {
+      throw new StoryDomainError(
+        STORY_ERROR_CODES.READY_COURSE_NOT_FOUND,
+        'No ready story course is published',
+      )
+    }
 
     const lessonWord = await findReadyLessonWordForReview(tx, userId, lessonWordId, course.id)
 
@@ -269,12 +275,18 @@ async function submitStoryReviewOnce({
           grade,
         })
       }
-      throw new Error(`Story lesson word is not due for review: ${lessonWordId}`)
+      throw new StoryDomainError(
+        STORY_ERROR_CODES.REVIEW_NOT_DUE,
+        `Story lesson word is not due for review: ${lessonWordId}`,
+      )
     }
 
     const round = (currentProgress?.reviewRoundCompleted ?? 0) + 1
     if (round > MAX_STORY_REVIEW_ROUND) {
-      throw new Error(`Story lesson word already completed all ${MAX_STORY_REVIEW_ROUND} review rounds: ${lessonWordId}`)
+      throw new StoryDomainError(
+        STORY_ERROR_CODES.REVIEW_ROUNDS_COMPLETE,
+        `Story lesson word already completed all ${MAX_STORY_REVIEW_ROUND} review rounds: ${lessonWordId}`,
+      )
     }
 
     const userWord = asUserWordRow(await tx.userWord.upsert({
@@ -372,7 +384,12 @@ async function reloadCommittedStoryReviewResult({
   grade: 0 | 2 | 4
 }): Promise<StoryReviewResult | null> {
   const course = await findReadyCourse(client)
-  if (!course) throw new Error('No ready story course is published')
+  if (!course) {
+    throw new StoryDomainError(
+      STORY_ERROR_CODES.READY_COURSE_NOT_FOUND,
+      'No ready story course is published',
+    )
+  }
 
   const lessonWord = await findReadyLessonWordForReview(client, userId, lessonWordId, course.id)
   const progress = asWordProgressRowOrNull(await client.userStoryWordProgress.findUnique({
@@ -385,7 +402,10 @@ async function reloadCommittedStoryReviewResult({
   }))
   if (!attempt) return null
   if (attempt.result !== result) {
-    throw new Error(`Story review round ${attempt.round} was already committed with a different result`)
+    throw new StoryDomainError(
+      STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT,
+      `Story review round ${attempt.round} was already committed with a different result`,
+    )
   }
 
   return duplicateReviewResult({ tx: client, userId, lessonWord, progress, grade })
@@ -412,10 +432,16 @@ async function findReadyLessonWordForReview(
     },
   }))
   if (!lessonWord) {
-    throw new Error(`Story lesson word is not in the current ready story course: ${lessonWordId}`)
+    throw new StoryDomainError(
+      STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND,
+      `Story lesson word is not in the current ready story course: ${lessonWordId}`,
+    )
   }
   if (!firstLessonProgress(lessonWord.lesson)?.step3CompletedAt) {
-    throw new Error(`Cannot review story lesson word before Step3 is completed: ${lessonWordId}`)
+    throw new StoryDomainError(
+      STORY_ERROR_CODES.LESSON_WORD_NOT_REVIEWABLE,
+      `Cannot review story lesson word before Step3 is completed: ${lessonWordId}`,
+    )
   }
   return lessonWord
 }
@@ -504,7 +530,13 @@ async function duplicateCurrentRound(
   const attempt = asStoryReviewAttemptRowOrNull(await tx.storyReviewAttempt.findUnique({
     where: { userId_lessonWordId_round: { userId, lessonWordId, round: completedRound } },
   }))
-  if (!attempt || attempt.result !== result) return null
+  if (!attempt) return null
+  if (attempt.result !== result) {
+    throw new StoryDomainError(
+      STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT,
+      `Story review round ${attempt.round} was already committed with a different result`,
+    )
+  }
   return attempt
 }
 

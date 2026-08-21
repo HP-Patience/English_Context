@@ -6,6 +6,7 @@ import {
   listStoryLessons,
   saveFirstPassStep,
 } from './story-service'
+import { STORY_ERROR_CODES } from './story-errors'
 
 const readySlot = 'ready'
 
@@ -418,6 +419,14 @@ describe('saveFirstPassStep', () => {
     expect(prisma.calls.some((call: string) => call.startsWith('userStoryProgress.upsert'))).toBe(true)
   })
 
+  it('uses a stable not-found code for lessons outside ready-course visibility', async () => {
+    const prisma = createServicePrisma()
+
+    await expect(
+      saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-hidden', step: 1 }),
+    ).rejects.toMatchObject({ code: STORY_ERROR_CODES.LESSON_NOT_FOUND })
+  })
+
   it('rejects jumping from Step1 straight to Step3', async () => {
     const prisma = createServicePrisma()
 
@@ -425,6 +434,9 @@ describe('saveFirstPassStep', () => {
 
     await expect(
       saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-ready-1', step: 3, now: new Date('2026-08-21T02:00:00.000Z') }),
-    ).rejects.toThrow(/Cannot complete Step3 before Step2/)
+    ).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT,
+      message: expect.stringMatching(/Cannot complete Step3 before Step2/),
+    })
   })
 })

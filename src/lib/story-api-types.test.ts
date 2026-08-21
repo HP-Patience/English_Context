@@ -34,10 +34,12 @@ import { POST as postProgress } from '../app/api/story/lessons/[id]/progress/rou
 import { GET as getLessonWords } from '../app/api/story/lessons/[id]/words/route'
 import { GET as getReviewQueue, POST as postReview } from '../app/api/story/review/route'
 import {
+  classifyStoryApiError,
   parseStoryProgressPayload,
   parseStoryReviewPayload,
   parseStoryWordsQuery,
 } from './story-api-types'
+import { STORY_ERROR_CODES, StoryDomainError } from './story-errors'
 
 const lessonOne = {
   id: 'lesson-1',
@@ -194,6 +196,26 @@ describe('story API payload parsers', () => {
   })
 })
 
+describe('story API error classification', () => {
+  it('maps only stable story domain error codes to contract statuses', () => {
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.READY_COURSE_NOT_FOUND, 'ready course missing'))).toBe(404)
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.LESSON_NOT_FOUND, 'lesson missing'))).toBe(404)
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND, 'word missing'))).toBe(404)
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.LESSON_WORD_NOT_REVIEWABLE, 'Step3 incomplete'))).toBe(404)
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT, 'step conflict'))).toBe(409)
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.REVIEW_NOT_DUE, 'not due'))).toBe(409)
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.REVIEW_ROUNDS_COMPLETE, 'rounds complete'))).toBe(409)
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT, 'result conflict'))).toBe(409)
+    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED, 'retry exhaustion'))).toBe(409)
+  })
+
+  it('keeps infrastructure errors generic even when their messages resemble domain failures', () => {
+    expect(classifyStoryApiError(new Error('database failure: Story lesson is not ready or does not exist'))).toBe(500)
+    expect(classifyStoryApiError(new Error('proxy failure: already committed with a different result'))).toBe(500)
+    expect(classifyStoryApiError({ code: STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED, message: 'untrusted object' })).toBe(500)
+  })
+})
+
 describe('GET /api/story/lessons', () => {
   it('returns ordered lessons, the first incomplete lesson, and the total due count', async () => {
     mocks.listStoryLessons.mockResolvedValue([lessonOne, lessonTwo])
@@ -250,10 +272,10 @@ describe('POST /api/story/lessons/[id]/progress', () => {
   })
 
   it('maps missing lessons to 404 and out-of-sequence transitions to 409', async () => {
-    mocks.saveFirstPassStep.mockRejectedValueOnce(new Error('Story lesson is not ready or does not exist: hidden'))
+    mocks.saveFirstPassStep.mockRejectedValueOnce(new StoryDomainError(STORY_ERROR_CODES.LESSON_NOT_FOUND, 'Story lesson is not ready or does not exist: hidden'))
     const missing = await postProgress(jsonRequest('http://localhost/api/story/lessons/hidden/progress', { step: 1 }), routeContext('hidden'))
 
-    mocks.saveFirstPassStep.mockRejectedValueOnce(new Error('Cannot complete Step3 before Step2'))
+    mocks.saveFirstPassStep.mockRejectedValueOnce(new StoryDomainError(STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT, 'Cannot complete Step3 before Step2'))
     const conflict = await postProgress(jsonRequest('http://localhost/api/story/lessons/lesson-2/progress', { step: 3 }), routeContext('lesson-2'))
 
     expect(missing.status).toBe(404)
@@ -360,14 +382,37 @@ describe('POST /api/story/review', () => {
   })
 
   it('maps unauthorized lesson words to 404 and conflicting immutable-round submissions to 409', async () => {
-    mocks.submitStoryReview.mockRejectedValueOnce(new Error('Story lesson word is not in the current ready story course: hidden-word'))
+    mocks.submitStoryReview.mockRejectedValueOnce(new StoryDomainError(STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND, 'Story lesson word is not in the current ready story course: hidden-word'))
     const unauthorized = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'hidden-word', result: 'remembered' }))
 
-    mocks.submitStoryReview.mockRejectedValueOnce(new Error('Story review round 1 was already committed with a different result'))
+    mocks.submitStoryReview.mockRejectedValueOnce(new StoryDomainError(STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT, 'Story review round 1 was already committed with a different result'))
     const conflict = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'forgotten' }))
 
     expect(unauthorized.status).toBe(404)
     expect(conflict.status).toBe(409)
+  })
+
+  it('maps review retry exhaustion to 409', async () => {
+    mocks.submitStoryReview.mockRejectedValue(new StoryDomainError(
+      STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED,
+      'Story review submission conflicted after retries',
+    ))
+
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'remembered' }))
+
+    expect(response.status).toBe(409)
+    await expect(responseJson(response)).resolves.toEqual({ error: 'Story review conflict' })
+  })
+
+  it('does not map lookalike infrastructure messages to domain statuses', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.submitStoryReview.mockRejectedValue(new Error('database transport failed: already committed with a different result'))
+
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'remembered' }))
+
+    expect(response.status).toBe(500)
+    await expect(responseJson(response)).resolves.toEqual({ error: 'Internal server error' })
+    consoleError.mockRestore()
   })
 
   it('returns a generic 500 without leaking internal database errors', async () => {
