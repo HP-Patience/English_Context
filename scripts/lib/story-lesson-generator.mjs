@@ -89,7 +89,7 @@ export async function generateLesson({
     throw new Error(`invalid generated story lesson: ${validation.errors.join('; ')}`)
   }
 
-  assertLessonTargetsMatchAssignment(validation.value, normalizedWords)
+  assertLessonTargetsMatchAssignment(validation.value, normalizedWords, outlineLesson)
   return validation.value
 }
 
@@ -121,19 +121,64 @@ export function createLessonPrompt({ outlineLesson, words, previousLesson = null
   ].join('\n')
 }
 
-export function assertLessonTargetsMatchAssignment(lessonDocument, words) {
-  const expected = new Set(normalizeAssignedWords(words).map((word) => word.text))
-  const actual = new Set(collectTargetWordSegments(lessonDocument).map((segment) => segment.word.trim()))
-  const missing = [...expected].filter((word) => !actual.has(word))
-  const extra = [...actual].filter((word) => !expected.has(word))
+export function assertLessonTargetsMatchAssignment(lessonDocument, words, outlineLesson = null) {
+  const expectedWords = normalizeAssignedWords(words)
+  const targetSegments = collectTargetWordSegments(lessonDocument)
+  const errors = []
 
-  if (missing.length > 0 || extra.length > 0) {
-    const parts = []
-    if (missing.length > 0) parts.push(`missing target words: ${missing.join(', ')}`)
-    if (extra.length > 0) parts.push(`unexpected target words: ${extra.join(', ')}`)
-    throw new Error(parts.join('; '))
+  if (outlineLesson) {
+    if (lessonDocument.order !== outlineLesson.order) {
+      errors.push(`lesson order ${lessonDocument.order} does not match outline order ${outlineLesson.order}`)
+    }
+    if (String(lessonDocument.sourceChapterStart) !== String(outlineLesson.sourceChapterStart)) {
+      errors.push(`sourceChapterStart ${lessonDocument.sourceChapterStart} does not match outline sourceChapterStart ${outlineLesson.sourceChapterStart}`)
+    }
+    if (String(lessonDocument.sourceChapterEnd) !== String(outlineLesson.sourceChapterEnd)) {
+      errors.push(`sourceChapterEnd ${lessonDocument.sourceChapterEnd} does not match outline sourceChapterEnd ${outlineLesson.sourceChapterEnd}`)
+    }
+  }
+
+  if (targetSegments.length !== expectedWords.length) {
+    errors.push(`target segment count ${targetSegments.length} does not match assigned word count ${expectedWords.length}`)
+  }
+
+  const seenWords = new Set()
+  for (const [index, segment] of targetSegments.entries()) {
+    const displayIndex = index + 1
+    if (seenWords.has(segment.word)) {
+      errors.push(`duplicate target word segment: ${segment.word}`)
+    }
+    seenWords.add(segment.word)
+
+    const expected = expectedWords[index]
+    if (!expected) {
+      errors.push(`unexpected target word at segment ${displayIndex}: ${segment.word}`)
+      continue
+    }
+
+    if (segment.word !== expected.text) {
+      errors.push(`target segment ${displayIndex} word ${segment.word} does not match assigned word ${expected.text}`)
+    }
+    if (segment.wordOrder !== displayIndex) {
+      errors.push(`target segment ${displayIndex} wordOrder ${segment.wordOrder} does not match expected contiguous wordOrder ${displayIndex}`)
+    }
+    const expectedGloss = getWordGloss(expected)
+    if (segment.definitionCn !== expectedGloss) {
+      errors.push(`target segment ${displayIndex} gloss ${segment.definitionCn} does not match assigned gloss ${expectedGloss}`)
+    }
+  }
+
+  for (const expected of expectedWords) {
+    if (!seenWords.has(expected.text)) {
+      errors.push(`missing target words: ${expected.text}`)
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.join('; '))
   }
 }
+
 
 export async function generateLessonsFromAssignments({
   assignments,
@@ -154,10 +199,13 @@ export async function generateLessonsFromAssignments({
     await mkdir(checkpointDir, { recursive: true })
   }
 
+  const firstNonReadyIndex = assignments.findIndex((assignment) => existingLessonsByOrder.get(assignment.lessonOrder)?.status !== 'ready')
+  const regenerateFromIndex = firstNonReadyIndex === -1 ? assignments.length : firstNonReadyIndex
   const generated = []
+
   for (const [index, assignment] of assignments.entries()) {
     const existing = existingLessonsByOrder.get(assignment.lessonOrder)
-    if (existing?.status === 'ready') {
+    if (index < regenerateFromIndex) {
       generated.push(parseLessonContent(existing))
       continue
     }
@@ -165,7 +213,7 @@ export async function generateLessonsFromAssignments({
     const previousLesson = generated[index - 1] ?? null
     const nextLesson = assignments[index + 1]?.outlineLesson ?? null
     const checkpointPath = checkpointDir ? `${checkpointDir}/lesson-${String(assignment.lessonOrder).padStart(4, '0')}.json` : null
-    let lessonDocument = checkpointPath ? await readValidatedLessonCheckpoint(checkpointPath, assignment.words, maxWordsPerLesson) : null
+    let lessonDocument = checkpointPath ? await readValidatedLessonCheckpoint(checkpointPath, assignment.outlineLesson, assignment.words, maxWordsPerLesson) : null
 
     if (!lessonDocument) {
       lessonDocument = await generateLesson({
@@ -189,6 +237,7 @@ export async function generateLessonsFromAssignments({
 
   return generated
 }
+
 
 export function validateCorpus({
   lessons,
@@ -250,7 +299,8 @@ export function validateCorpus({
     if (targets.length > maxWordsPerLesson) {
       errors.push(`${path} has ${targets.length} target words; maximum is ${maxWordsPerLesson}`)
     }
-    for (const word of new Set(targets.map((segment) => segment.word.trim()))) {
+    for (const segment of targets) {
+      const word = segment.word
       const currentCount = seen.get(word) ?? 0
       seen.set(word, currentCount + 1)
     }
@@ -323,12 +373,12 @@ export function parseLessonContent(value) {
   return value
 }
 
-async function readValidatedLessonCheckpoint(path, words, maxWordsPerLesson) {
+async function readValidatedLessonCheckpoint(path, outlineLesson, words, maxWordsPerLesson) {
   try {
     const value = JSON.parse(await readFile(path, 'utf8'))
     const validation = validateLessonDocument(value, { maxTargetWords: maxWordsPerLesson })
     if (!validation.ok) return null
-    assertLessonTargetsMatchAssignment(validation.value, words)
+    assertLessonTargetsMatchAssignment(validation.value, words, outlineLesson)
     return validation.value
   } catch (error) {
     if (error?.code === 'ENOENT') {

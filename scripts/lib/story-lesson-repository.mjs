@@ -51,16 +51,22 @@ export async function persistReadyLesson({ prisma, lessonDocument, wordMap, mean
 }
 
 export function resolveLessonWordRows({ lessonId, lessonDocument, wordMap, meaningMap }) {
-  const firstByWord = new Map()
-  for (const segment of collectTargetWordSegments(lessonDocument)) {
-    const text = segment.word.trim()
-    if (!firstByWord.has(text)) {
-      firstByWord.set(text, segment)
-    }
-  }
-
+  const targetSegments = collectTargetWordSegments(lessonDocument)
+  const seenWords = new Set()
   const rows = []
-  for (const [wordText, segment] of firstByWord.entries()) {
+
+  for (const [index, segment] of targetSegments.entries()) {
+    const expectedSortOrder = index + 1
+    const wordText = segment.word.trim()
+    if (seenWords.has(wordText)) {
+      throw new Error(`duplicate target word segment: ${wordText}`)
+    }
+    seenWords.add(wordText)
+
+    if (segment.wordOrder !== expectedSortOrder) {
+      throw new Error(`target word ${wordText} has wordOrder ${segment.wordOrder}; expected contiguous wordOrder ${expectedSortOrder}`)
+    }
+
     const word = lookup(wordMap, wordText)
     if (!word?.id) {
       throw new Error(`target word not found in Word table: ${wordText}`)
@@ -75,18 +81,23 @@ export function resolveLessonWordRows({ lessonId, lessonDocument, wordMap, meani
       throw new Error(`meaning ${meaning.id} does not belong to word ${wordText} (${word.id})`)
     }
 
+    const assignedGloss = meaning.definitionCn ?? meaning.definition
+    if (typeof assignedGloss === 'string' && segment.definitionCn !== assignedGloss) {
+      throw new Error(`target word ${wordText} gloss ${segment.definitionCn} does not match selected meaning gloss ${assignedGloss}`)
+    }
+
     rows.push({
       lessonId,
       wordId: word.id,
       meaningId: meaning.id,
       sortOrder: segment.wordOrder,
-      glossCn: segment.definitionCn.trim(),
+      glossCn: segment.definitionCn,
     })
   }
 
-  rows.sort((a, b) => a.sortOrder - b.sortOrder || a.wordId.localeCompare(b.wordId))
   return rows
 }
+
 
 export function buildWordAndMeaningMaps(wordGroups) {
   const wordMap = new Map()
@@ -111,12 +122,12 @@ export function buildWordAndMeaningMaps(wordGroups) {
 }
 
 async function createOrUpdateDraftLesson(prisma, lessonDocument) {
-  const existing = await prisma.storyLesson.findFirst({ where: { order: lessonDocument?.order } })
   const data = draftLessonData(lessonDocument)
-  if (existing) {
-    return prisma.storyLesson.update({ where: { id: existing.id }, data })
-  }
-  return prisma.storyLesson.create({ data })
+  return prisma.storyLesson.upsert({
+    where: { order: data.order },
+    create: data,
+    update: data,
+  })
 }
 
 function draftLessonData(lessonDocument) {

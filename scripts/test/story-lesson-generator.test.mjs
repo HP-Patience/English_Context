@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { assignWordsToOutline, generateLesson, validateCorpus } from '../lib/story-lesson-generator.mjs'
+import { assignWordsToOutline, generateLesson, generateLessonsFromAssignments, validateCorpus } from '../lib/story-lesson-generator.mjs'
 
 function words(count, offset = 0) {
   return Array.from({ length: count }, (_, index) => ({
@@ -134,4 +134,138 @@ test('corpus validation reports full coverage, caps, monotonic ranges, and statu
 
   assert.equal(report.ok, true)
   assert.deepEqual(report.errors, [])
+})
+
+
+test('generated lesson must match outline order and source range exactly', async () => {
+  const targetWords = words(1)
+  const outlineLesson = outline(1, 100).lessons[0]
+
+  await assert.rejects(
+    generateLesson({
+      outlineLesson,
+      words: targetWords,
+      previousLesson: null,
+      nextLesson: null,
+      generateJson: async () => ({
+        ...documentFor(outlineLesson, targetWords),
+        order: 2,
+      }),
+    }),
+    /lesson order 2 does not match outline order 1/,
+  )
+
+  await assert.rejects(
+    generateLesson({
+      outlineLesson,
+      words: targetWords,
+      previousLesson: null,
+      nextLesson: null,
+      generateJson: async () => ({
+        ...documentFor(outlineLesson, targetWords),
+        sourceChapterStart: '2',
+      }),
+    }),
+    /sourceChapterStart 2 does not match outline sourceChapterStart 1/,
+  )
+})
+
+test('generated target segments must be assigned words exactly once in assigned order', async () => {
+  const targetWords = words(2)
+  const outlineLesson = outline(1, 100).lessons[0]
+
+  await assert.rejects(
+    generateLesson({
+      outlineLesson,
+      words: targetWords,
+      previousLesson: null,
+      nextLesson: null,
+      generateJson: async () => documentFor(outlineLesson, [targetWords[1], targetWords[0]]),
+    }),
+    /target segment 1 word word2 does not match assigned word word1/,
+  )
+})
+
+test('generated target segments must use contiguous wordOrder and exact assigned glosses', async () => {
+  const targetWords = words(2)
+  const outlineLesson = outline(1, 100).lessons[0]
+
+  await assert.rejects(
+    generateLesson({
+      outlineLesson,
+      words: targetWords,
+      previousLesson: null,
+      nextLesson: null,
+      generateJson: async () => {
+        const doc = documentFor(outlineLesson, targetWords)
+        doc.paragraphs[0].segments[3].wordOrder = 3
+        return doc
+      },
+    }),
+    /wordOrder 3 does not match expected contiguous wordOrder 2/,
+  )
+
+  await assert.rejects(
+    generateLesson({
+      outlineLesson,
+      words: targetWords,
+      previousLesson: null,
+      nextLesson: null,
+      generateJson: async () => {
+        const doc = documentFor(outlineLesson, targetWords)
+        doc.paragraphs[0].segments[3].definitionCn = '错误释义'
+        return doc
+      },
+    }),
+    /gloss 错误释义 does not match assigned gloss 释义2/,
+  )
+})
+
+test('duplicate generated target segments are rejected', async () => {
+  const targetWords = words(2)
+  const outlineLesson = outline(1, 100).lessons[0]
+
+  await assert.rejects(
+    generateLesson({
+      outlineLesson,
+      words: targetWords,
+      previousLesson: null,
+      nextLesson: null,
+      generateJson: async () => documentFor(outlineLesson, [targetWords[0], targetWords[0]]),
+    }),
+    /duplicate target word segment: word1/,
+  )
+})
+
+test('generation resume skips only lessons before the first non-ready lesson', async () => {
+  const assignmentWords = words(3)
+  const outlineLessons = outline(3, 100).lessons
+  const assignments = outlineLessons.map((outlineLesson, index) => ({
+    lessonOrder: outlineLesson.order,
+    outlineLesson,
+    words: [assignmentWords[index]],
+  }))
+  const generatedOrders = []
+  const persistedOrders = []
+
+  const lessons = await generateLessonsFromAssignments({
+    assignments,
+    existingLessonsByOrder: new Map([
+      [1, { status: 'ready', contentJson: JSON.stringify(documentFor(outlineLessons[0], [assignmentWords[0]])) }],
+      [2, { status: 'failed' }],
+      [3, { status: 'ready', contentJson: JSON.stringify(documentFor(outlineLessons[2], [assignmentWords[2]])) }],
+    ]),
+    generateJson: async (prompt) => {
+      const order = prompt.includes('source chapter range: 2-2') ? 2 : 3
+      generatedOrders.push(order)
+      return documentFor(outlineLessons[order - 1], [assignmentWords[order - 1]])
+    },
+    persistLesson: async (lessonDocument) => {
+      persistedOrders.push(lessonDocument.order)
+    },
+  })
+
+  assert.deepEqual(generatedOrders, [2, 3])
+  assert.deepEqual(persistedOrders, [2, 3])
+  assert.deepEqual(lessons.map((lesson) => lesson.order), [1, 2, 3])
 })

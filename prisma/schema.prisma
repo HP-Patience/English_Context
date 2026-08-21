@@ -74,7 +74,7 @@ model Meaning {
 
 model StoryLesson {
   id                 String   @id @default(cuid())
-  order              Int
+  order              Int      @unique
   title              String
   wordGroupId        String?
   sourceChapterStart String

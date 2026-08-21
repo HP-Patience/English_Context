@@ -35,7 +35,7 @@ test('StoryLesson persists generated lesson metadata without raw novel text', ()
 
   for (const [field, pattern] of [
     ['id', 'String\\s+@id\\s+@default\\(cuid\\(\\)\\)'],
-    ['order', 'Int\\b'],
+    ['order', 'Int\\s+@unique'],
     ['title', 'String\\b'],
     ['wordGroupId', 'String\\?'],
     ['sourceChapterStart', 'String\\b'],

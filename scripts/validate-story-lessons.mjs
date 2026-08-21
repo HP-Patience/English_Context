@@ -3,7 +3,7 @@ import { relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { writeJsonAtomic } from './lib/story-outline.mjs'
 import { buildWordAndMeaningMaps } from './lib/story-lesson-repository.mjs'
-import { validateCorpus } from './lib/story-lesson-generator.mjs'
+import { collectTargetWordSegments, parseLessonContent, validateCorpus } from './lib/story-lesson-generator.mjs'
 import { loadEnvFiles } from './build-story-outline.mjs'
 import { loadOrderedWordGroups } from './generate-story-lessons.mjs'
 
@@ -69,24 +69,73 @@ export function validateReadyLessons({ lessons, allWordTexts, expectedWordCount 
   })
 
   const seenLessonWordLinks = new Set()
-  for (const lesson of lessons ?? []) {
-    for (const row of lesson?.words ?? []) {
+  for (const [lessonIndex, lesson] of (lessons ?? []).entries()) {
+    const lessonLabel = `lessons[${lessonIndex}] order ${lesson?.order ?? 'unknown'}`
+    const targetSegments = readTargetSegmentsForValidation(lesson, lessonLabel, report.errors)
+    const rows = Array.isArray(lesson?.words) ? lesson.words : []
+
+    if (targetSegments.length !== rows.length) {
+      report.errors.push(`${lessonLabel} has ${targetSegments.length} target segments but ${rows.length} StoryLessonWord rows`)
+    }
+
+    const segmentsByWordOrder = new Map(targetSegments.map((segment) => [segment.wordOrder, segment]))
+    const rowsBySortOrder = new Map()
+
+    for (const row of rows) {
       const key = `${row.lessonId}:${row.wordId}`
       if (seenLessonWordLinks.has(key)) {
         report.errors.push(`duplicate lesson-word link: ${key}`)
       }
       seenLessonWordLinks.add(key)
+
+      if (rowsBySortOrder.has(row.sortOrder)) {
+        report.errors.push(`${lessonLabel} has duplicate StoryLessonWord sortOrder ${row.sortOrder}`)
+      } else {
+        rowsBySortOrder.set(row.sortOrder, row)
+      }
+
+      const segment = segmentsByWordOrder.get(row.sortOrder)
+      if (!segment) {
+        report.errors.push(`${lessonLabel} has extra StoryLessonWord row ${row.id ?? row.wordId} at sortOrder ${row.sortOrder}`)
+      }
+
       if (row.meaning?.wordId && row.meaning.wordId !== row.wordId) {
         report.errors.push(`meaning ${row.meaningId} does not belong to linked word ${row.wordId}`)
+      }
+    }
+
+    for (const segment of targetSegments) {
+      const row = rowsBySortOrder.get(segment.wordOrder)
+      if (!row) {
+        report.errors.push(`${lessonLabel} is missing StoryLessonWord row for target word ${segment.word} at wordOrder ${segment.wordOrder}`)
+        continue
+      }
+
+      const rowText = row.word?.text
+      if (rowText !== segment.word) {
+        report.errors.push(`${lessonLabel} StoryLessonWord row word ${rowText ?? 'unknown'} does not match content target word ${segment.word} at wordOrder ${segment.wordOrder}`)
+      }
+      if (row.glossCn !== segment.definitionCn) {
+        report.errors.push(`${lessonLabel} StoryLessonWord row glossCn ${row.glossCn} does not match content gloss ${segment.definitionCn} at wordOrder ${segment.wordOrder}`)
       }
     }
   }
 
   report.ok = report.errors.length === 0
-  report.duplicateLessonWordLinkCount = seenLessonWordLinks.size
+  report.lessonWordLinkCount = seenLessonWordLinks.size
   report.generatedAt = new Date().toISOString()
   return report
 }
+
+function readTargetSegmentsForValidation(lesson, lessonLabel, errors) {
+  try {
+    return collectTargetWordSegments(parseLessonContent(lesson))
+  } catch (error) {
+    errors.push(`${lessonLabel} contentJson is not valid JSON: ${error instanceof Error ? error.message : String(error)}`)
+    return []
+  }
+}
+
 
 export function parseArgs(args) {
   const options = {}
