@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { writeNovelIndex } from './lib/novel-parser.mjs'
 
-const DEFAULT_OUTPUT_PATH = resolve(process.cwd(), 'scripts/.story-cache/novel-index.json')
-const DEFAULT_MAX_REPLACEMENT_DENSITY = 0.001
+export const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
+export const DEFAULT_SOURCE_PATH = 'F:\\english_context\\蛊真人.txt'
+export const DEFAULT_OUTPUT_PATH = resolve(PROJECT_ROOT, 'scripts/.story-cache/novel-index.json')
+export const DEFAULT_MAX_REPLACEMENT_DENSITY = 0.001
 
-try {
-  const options = parseArgs(process.argv.slice(2))
-  const sourcePath = options.sourcePath ?? process.env.NOVEL_SOURCE_PATH ?? defaultSourcePath()
+export async function main(args = process.argv.slice(2)) {
+  const options = parseArgs(args)
+  const sourcePath = options.sourcePath ?? DEFAULT_SOURCE_PATH
   const outputPath = options.outputPath ?? DEFAULT_OUTPUT_PATH
   const maxReplacementDensity = options.maxReplacementDensity ?? DEFAULT_MAX_REPLACEMENT_DENSITY
 
@@ -28,12 +31,9 @@ try {
   console.log(`Cleaned characters: ${result.cleanedCharacterCount}`)
   console.log(`Replacement characters: ${result.replacementCharacterCount} (${result.replacementDensity.toFixed(6)})`)
   console.log(`Index written: ${displayPath(result.outputPath)}`)
-} catch (error) {
-  console.error(`Failed to parse novel: ${error instanceof Error ? error.message : String(error)}`)
-  process.exitCode = 1
 }
 
-function parseArgs(args) {
+export function parseArgs(args) {
   const options = {}
 
   for (let index = 0; index < args.length; index += 1) {
@@ -72,15 +72,6 @@ function parseArgs(args) {
   return options
 }
 
-function defaultSourcePath() {
-  const candidates = [
-    resolve(process.cwd(), '蛊真人.txt'),
-    resolve(process.cwd(), '..', '..', '蛊真人.txt'),
-  ]
-
-  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
-}
-
 function requireValue(args, index, flag) {
   const value = args[index]
 
@@ -92,10 +83,23 @@ function requireValue(args, index, flag) {
 }
 
 function displayPath(path) {
-  const relativePath = relative(process.cwd(), path)
+  const relativePath = relative(PROJECT_ROOT, path)
   return relativePath && !relativePath.startsWith('..') ? relativePath : path
 }
 
 function printHelp() {
   console.log('Usage: node scripts/parse-novel.mjs [--source PATH] [--output PATH] [--max-replacement-density N]')
+}
+
+function isDirectRun() {
+  return process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+}
+
+if (isDirectRun()) {
+  try {
+    await main()
+  } catch (error) {
+    console.error(`Failed to parse novel: ${error instanceof Error ? error.message : String(error)}`)
+    process.exitCode = 1
+  }
 }
