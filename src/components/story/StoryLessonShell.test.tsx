@@ -5,10 +5,14 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { StoryLessonDetail, StoryLessonWordListItem } from '@/lib/story-service'
+import type { StoryWordDisplay } from './StoryWordDetail'
 import { StoryLessonShell } from './StoryLessonShell'
 import { StoryWordList } from './StoryWordList'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 const lesson: StoryLessonDetail = {
   id: 'lesson-1',
@@ -27,7 +31,7 @@ const lesson: StoryLessonDetail = {
       {
         sceneTitle: '雨夜重生',
         segments: [
-          { type: 'text', value: '雨声压住山寨的喧嚣，方源仍然 ' },
+          { type: 'text', value: '<img src=x onerror="alert(1)">雨声压住山寨的喧嚣，方源仍然 ' },
           { type: 'targetWord', word: 'resolve', definitionCn: '决意', wordOrder: 1 },
           { type: 'text', value: ' 地望向窗外。' },
         ],
@@ -47,7 +51,7 @@ const lesson: StoryLessonDetail = {
       id: 'lesson-word-1',
       sortOrder: 1,
       glossCn: '决意',
-      word: { id: 'word-1', text: 'resolve' },
+      word: { id: 'word-1', text: 'resolve', phonetic: '/rɪˈzɒlv/' },
       meaning: {
         id: 'meaning-1',
         partOfSpeech: 'v.',
@@ -60,7 +64,7 @@ const lesson: StoryLessonDetail = {
       id: 'lesson-word-2',
       sortOrder: 2,
       glossCn: '谋划',
-      word: { id: 'word-2', text: 'scheme' },
+      word: { id: 'word-2', text: 'scheme', phonetic: null },
       meaning: {
         id: 'meaning-2',
         partOfSpeech: 'n.',
@@ -119,7 +123,8 @@ describe('StoryLessonShell', () => {
     expect(screen.getByText('谋划')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /第二步/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /第三步/ })).toBeDisabled()
-    expect(container.querySelector('[dangerouslySetInnerHTML]')).not.toBeInTheDocument()
+    expect(screen.getByText(/<img src=x onerror="alert\(1\)">雨声压住/)).toBeInTheDocument()
+    expect(container.querySelector('img')).toBeNull()
   })
 
   it('persists Step1 before opening recall, keeps English visible, and hides glosses by default', async () => {
@@ -135,11 +140,37 @@ describe('StoryLessonShell', () => {
     expect(await screen.findByRole('heading', { level: 2, name: '第二步 · 遮义回想' })).toBeInTheDocument()
     expect(screen.getAllByText('resolve').length).toBeGreaterThan(0)
     expect(screen.queryByText('决意')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '记得' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '模糊' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '忘记' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: '显示 resolve 的释义' }))
     expect(screen.getByText('决意')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '记得' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '模糊' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '忘记' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: '模糊' }))
     expect(screen.getByRole('status')).toHaveTextContent('resolve：模糊')
+
+    fireEvent.click(screen.getByRole('button', { name: '下一个' }))
+    expect(screen.getByRole('button', { name: '记得' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '上一个' }))
+    expect(screen.getByRole('button', { name: '记得' })).toBeDisabled()
+    expect(screen.queryByText('决意')).not.toBeInTheDocument()
+  })
+
+  it('keeps the reader on the current step and announces a failed progress request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: 'failed' }) }))
+    render(<StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} nextLessonId="lesson-2" />)
+
+    fireEvent.click(screen.getByRole('button', { name: '完成第一步，进入回忆' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('当前步骤不会被跳过')
+    expect(screen.getByRole('heading', { level: 2, name: '第一步 · 入境识词' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /第二步/ })).toBeDisabled()
+    expect(fetch).toHaveBeenCalledWith('/api/story/lessons/lesson-1/progress', expect.objectContaining({
+      body: JSON.stringify({ step: 1 }),
+    }))
   })
 
   it('lets readers revisit a completed step and return to the next unlocked step without reposting progress', async () => {
@@ -176,7 +207,8 @@ describe('StoryLessonShell', () => {
     expect(screen.getByText('v.')).toBeInTheDocument()
     expect(screen.getByText('下定决心')).toBeInTheDocument()
     expect(screen.getByText('He resolved to change his fate.')).toBeInTheDocument()
-    expect(screen.getAllByText('音标暂无')).toHaveLength(2)
+    expect(screen.getByText('/rɪˈzɒlv/')).toBeInTheDocument()
+    expect(screen.getByText('音标暂无')).toBeInTheDocument()
   })
 
   it('completes Step3 without Step4, then immediately offers the next lesson and due reinforcement', async () => {
@@ -199,9 +231,9 @@ describe('StoryLessonShell', () => {
 })
 
 describe('StoryWordList', () => {
-  const words: StoryLessonWordListItem[] = [
-    { ...lesson.lessonWords[0], sceneTitle: '雨夜重生' },
-    { ...lesson.lessonWords[1], sceneTitle: '学堂试探' },
+  const words: StoryWordDisplay[] = [
+    { ...lesson.lessonWords[0], sceneTitle: '雨夜重生', storyUsage: '他把决意藏在窗外的雨幕里。' },
+    { ...lesson.lessonWords[1], sceneTitle: '学堂试探', storyUsage: '计谋只在学堂钟声之后浮现。' },
   ]
 
   it('keeps a 100-word lesson readable by grouping the complete ledger into scene regions', () => {
@@ -209,7 +241,7 @@ describe('StoryWordList', () => {
       ...lesson.lessonWords[index % lesson.lessonWords.length],
       id: `lesson-word-${index + 1}`,
       sortOrder: index + 1,
-      word: { id: `word-${index + 1}`, text: `target-${index + 1}` },
+      word: { id: `word-${index + 1}`, text: `target-${index + 1}`, phonetic: null },
       sceneTitle: `场景 ${Math.floor(index / 25) + 1}`,
     }))
 
@@ -219,6 +251,13 @@ describe('StoryWordList', () => {
     expect(screen.getAllByRole('region')).toHaveLength(4)
     expect(screen.getByText('No. 100')).toBeInTheDocument()
   })
+  it('matches a query found only in story usage', () => {
+    render(<StoryWordList lessonWords={words} query="窗外的雨幕" scene="" />)
+
+    expect(screen.getByRole('heading', { name: 'resolve' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'scheme' })).not.toBeInTheDocument()
+  })
+
   it('honors query and scene filters while preserving the ordered scene contract', () => {
     const { rerender } = render(<StoryWordList lessonWords={words} query="scheme" scene="" />)
 

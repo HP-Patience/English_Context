@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
 
 import { StoryLessonShell } from '@/components/story/StoryLessonShell'
-import { normalizeStoryIdentifier } from '@/lib/story-api-types'
+import { normalizeStoryIdentifier, toPublicStoryLessonDetail } from '@/lib/story-api-types'
 import { getLocalUserId, prisma } from '@/lib/prisma'
 import { getStoryLesson, listStoryLessons } from '@/lib/story-service'
 
@@ -31,15 +31,7 @@ export default async function StoryLessonPage({ params }: StoryLessonPageProps) 
     .sort((left, right) => left.order - right.order)
     .find((candidate) => candidate.order > lesson.order)?.id ?? null
 
-  const lessonView = {
-    id: lesson.id,
-    order: lesson.order,
-    title: lesson.title,
-    sourceChapterStart: lesson.sourceChapterStart,
-    sourceChapterEnd: lesson.sourceChapterEnd,
-    content: { paragraphs: lesson.content.paragraphs },
-    lessonWords: lesson.lessonWords,
-  }
+  const lessonView = toPublicStoryLessonDetail(lesson)
 
   return (
     <StoryLessonShell

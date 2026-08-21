@@ -4,184 +4,198 @@
 **Worktree:** `F:\english_context\.worktrees\story-learning`
 **Branch:** `feature/story-learning`
 **Base SHA:** `515c62ac5c2fe54b16fb71699ce7c7294611c5c8`
-**Implementation commit message:** `feat: add story Step1 through Step3 learning flow`
+**Original Task 6 commit:** `d7965e09ef217a93a3429ac270756fbc02c16ea8` (`feat: add story Step1 through Step3 learning flow`)
+**Review-fix commit message:** `fix: address story lesson review findings`
 
-## Scope completed
+## Delivered scope
 
-Implemented the complete first-pass lesson route and Step1–Step3 experience for `/story/[lessonId]`.
+Implemented `/story/[lessonId]` and the sequential Step1–Step3 first-pass learning flow in the current ancient-chronicle visual language.
 
-- Added a Next.js 16 dynamic Server Component that awaits Promise-based route params, calls `connection()`, normalizes the lesson identifier, and uses `notFound()` for malformed or unavailable lesson IDs.
-- Loaded lesson and continuation data only through `getStoryLesson` and `listStoryLessons`, preserving the existing unique-ready-course publication boundary.
-- Reduced the Server-to-Client lesson payload to public lesson metadata, structured paragraphs, and lesson words. Generator-only `sourceSummary` and `continuityNotes` are not passed to the Client Component.
-- Added a client lesson shell that owns the current first-pass view and persists Step 1, Step 2, and Step 3 sequentially through `POST /api/story/lessons/[id]/progress`.
-- Locked Step 2 until Step 1 is persisted and Step 3 until Step 2 is persisted. Completed steps remain revisitable without reposting progress.
-- Added immediate next-lesson/course navigation after Step 3 and a separate due Step 4 anchor. Step 4 is explicitly non-blocking.
-- Added structured story rendering without `dangerouslySetInnerHTML`.
-- Added Step 1 English targets with Chinese context glosses.
-- Added Step 2 recall with English retained, glosses hidden by default, explicit reveal controls, and local `记得 / 模糊 / 忘记` self-ratings instead of 60–100 forced text inputs.
-- Exported `RecallGlossControl` as a dedicated reveal boundary so Runtime Task 7 can replace or reuse the behavior without rewriting the recall flow.
-- Added Step 3's complete ordered lesson word ledger, grouped by story scene, with query and scene filtering.
-- Rendered each word's order, English text, phonetic slot, part of speech, meaning, context gloss, story usage, and example when available.
+- The Next.js 16 Server Component awaits Promise-based dynamic params, calls `connection()`, normalizes the lesson ID, loads only through ready-course services, and uses `notFound()` for malformed or unavailable lessons.
+- The client shell persists Step 1, Step 2, and Step 3 through the progress API. Step 2 cannot open before persisted Step 1, and Step 3 cannot open before persisted Step 2.
+- A failed progress request leaves the reader on the current step and announces the failure through an alert.
+- Step 3 completion immediately offers the next lesson and the due Step 4 reinforcement link. Step 4 never blocks course continuation.
+- Step 1 renders structured English target segments with Chinese context glosses.
+- Step 2 keeps English visible, hides glosses by default, and provides one-word-at-a-time recall ratings rather than forcing 60–100 text inputs.
+- Step 3 renders the complete ordered word ledger grouped by scene, with query and scene filtering, responsive one/two-column layouts, phonetic/POS/meaning/story usage/example details, and a 100-word readability fixture.
+- Story text is rendered as React text/target nodes without interpreting generated HTML.
 
-## Files
+## Review fixes
 
-Created:
+### 1. Persisted phonetics end to end
 
-- `src/app/story/[lessonId]/page.tsx`
-- `src/app/story/[lessonId]/page.test.tsx`
-- `src/components/story/StoryLessonShell.tsx`
-- `src/components/story/StoryLessonShell.test.tsx`
-- `src/components/story/StoryStepNav.tsx`
-- `src/components/story/StoryReader.tsx`
-- `src/components/story/StoryRecall.tsx`
-- `src/components/story/StoryWordList.tsx`
-- `src/components/story/StoryWordDetail.tsx`
+The existing source and importer were inspected before changing the data model.
 
-Documentation:
+- The only vocabulary source is `data/2026考研英语词汇闪过.txt`.
+- It contains section headings and bare word rows only; it has no phonetic column or other pronunciation source.
+- A non-destructive parser scan found 118 sections, 6,100 occurrences, 6,098 unique words, and 0 populated phonetics.
+- No phonetics were fabricated.
 
-- `.superpowers/sdd/2026-08-21-story-learning-runtime/task-6-report.md`
+Implemented the real nullable path:
 
-## Next.js 16 constraints applied
+- Added nullable `Word.phonetic` to `prisma/schema.prisma`.
+- Added `scripts/lib/word-import.js` as the reusable import parser/validator.
+- Preserved the current bare-word format as `{ phonetic: null }`.
+- Added optional, unambiguous `word<TAB>phonetic` input support. Explicit supplied values are trimmed and persisted exactly; blank optional values become `null`.
+- Duplicate rows retain a supplied phonetic when another occurrence is missing it, while conflicting non-null phonetics fail validation rather than being guessed.
+- Updated `scripts/import-new.js` to create `Word` rows with the parsed nullable phonetic and to continue building word groups from structured rows.
+- Added `phonetic: string | null` to the runtime story word DTO and service mapper.
+- Updated Step 3 to render the persisted value when present and `音标暂无` only for legacy/missing null rows.
 
-The local documentation under `node_modules/next/dist/docs/` was treated as authoritative for this repository's Next.js version.
+Coverage includes schema, import parser/validator, deduplication/conflict handling, service DTO mapping, and UI rendering of one real value plus one null fallback.
 
-- Dynamic page `params` are typed as `Promise<{ lessonId: string }>` and awaited before use.
-- `notFound()` is used as the safe route boundary for malformed, missing, draft, unpublished, or otherwise unavailable lessons.
-- `await connection()` declares request-time rendering before local-user and Prisma-backed service access.
-- The production build classifies both `/story` and `/story/[lessonId]` as dynamic routes.
+### 2. Public lesson detail DTO
 
-## Strict TDD evidence
+Added `PublicStoryLessonContent` and `PublicStoryLessonDetail` plus the explicit `toPublicStoryLessonDetail` mapper.
 
-RTL tests were written before the corresponding production components and route.
+- `GET /api/story/lessons/[id]` now serializes only public lesson content.
+- Public content includes title, order, source chapter range, and structured paragraphs.
+- Generator-only `sourceSummary` and `continuityNotes` are omitted.
+- The server page reuses the same mapper before crossing the Server-to-Client component boundary.
+- Route contract tests prove both fields are absent.
+- The page test captures `StoryLessonShell` props and proves generator metadata is absent there as well.
 
-### RED 1 — lesson route and components absent
+### 3. Step 3 story-usage search
 
-Command:
+`StoryWordList` now includes `storyUsage` in normalized search text. An RTL test uses a phrase present only in the usage sentence and verifies that the correct word remains visible while the other word is filtered out.
 
-```text
-npm run test:runtime -- src/components/story/StoryLessonShell.test.tsx src/app/story/[lessonId]/page.test.tsx
-```
+### 4. Reveal before self-rating
 
-Observed result before implementation:
+`RecallGlossControl` is now a controlled reveal boundary. Reveal state is owned by `StoryRecall`, allowing Task 7 to reuse or replace the control without coupling rating behavior to private child state.
 
-- 2 failed test suites.
-- Imports failed because `StoryLessonShell`, `StoryWordList`, and `src/app/story/[lessonId]/page.tsx` did not exist.
-- The tests already specified structured Step 1 rendering, hidden Step 2 glosses, sequential persistence, complete scene-grouped Step 3 content, safe server loading, and non-blocking Step 4 behavior.
+- All three self-rating buttons are disabled before the active word's gloss is revealed.
+- Revealing the gloss enables the ratings.
+- Moving to another word clears reveal state.
+- Returning to a previously viewed word also requires a fresh reveal.
 
-### GREEN 1 — initial first-pass flow
+### 5. Regression and safety coverage
 
-After the smallest implementation satisfying those contracts, the focused suite passed with 2 files and 9 tests.
+- Added a realistic rejected progress response test proving the current step remains active, the next step remains locked, and an alert is shown.
+- Replaced the meaningless DOM selector for a non-existent `dangerouslySetInnerHTML` attribute.
+- The replacement fixture supplies text resembling an injected `<img onerror>` element and proves it appears as literal text while no image element is created.
+- Added captured page-shell prop assertions for the public DTO boundary.
 
-### RED 2 — completed-step revisit regression
+## Strict TDD evidence for review fixes
 
-A focused regression was added requiring a reader who revisits completed Step 1 to return to the next unlocked step without reposting completion.
+Tests were changed before production code and run in focused suites.
 
-Observed result:
-
-- The new assertion failed because the completed-step action had no explicit return behavior.
-
-The shell was then changed to render `返回第二步` or `返回第三步` as appropriate and switch views locally without calling the progress endpoint.
-
-### Final focused GREEN
+### RED — schema/import
 
 ```text
-npm run test:runtime -- src/components/story/StoryLessonShell.test.tsx src/app/story/[lessonId]/page.test.tsx
-Test Files  2 passed (2)
-Tests       10 passed (10)
+npm run test:story -- scripts/test/schema-contract.test.mjs scripts/test/word-import.test.mjs
 ```
 
-## Behavior and data-boundary review
+Observed:
 
-### Server route
+- `Word.phonetic` schema contract failed because the field did not exist.
+- The import parser suite failed because `scripts/lib/word-import.js` did not exist.
 
-- Normalizes the requested lesson ID before data access.
-- Resolves the local user and requested lesson through the existing story service.
-- Relies on the service's unique ready-course lookup, so draft, failed, archived, and unpublished course material is not made addressable by this page.
-- Resolves the next ready lesson by ascending lesson order.
-- Does not load the source novel file or query generator drafts.
-- Does not expose raw novel bodies, `sourceSummary`, or `continuityNotes` to the browser.
+### RED — runtime/API/UI
 
-### Sequential progress
+```text
+npm run test:runtime -- src/lib/story-service.test.ts src/lib/story-api-types.test.ts src/components/story/StoryLessonShell.test.tsx src/app/story/[lessonId]/page.test.tsx
+```
 
-- The navigation's unlocked range is derived from persisted `completedStep`.
-- Completion requests send exactly `{ step: 1 | 2 | 3 }` to the lesson progress endpoint.
-- A failed response leaves the reader on the current step and exposes an accessible alert.
-- Step 3 completion immediately replaces the completion control with the next-lesson/course action and due Step 4 link.
-- Step 4 remains a later reinforcement section and is never required to continue the course.
+Observed five failing tests:
 
-### Structured rendering and safety
+- service DTO omitted the populated phonetic;
+- public detail API leaked generator metadata;
+- ratings were enabled before reveal;
+- Step 3 search ignored usage-only text;
+- page shell content did not use the complete public content DTO shape.
 
-- Generated lesson segments are mapped as React text nodes and reusable target-word nodes.
-- No generated HTML is interpreted and no `dangerouslySetInnerHTML` path was added.
-- Only validated structured lesson paragraphs supplied by the ready-course service are rendered.
+The failed-progress and literal-markup safety tests passed immediately as characterization coverage of behavior that was already implemented correctly.
 
-## Readability, responsive design, and accessibility
+A subsequent RED regression proved that merely keying reveal state by word was insufficient: returning to the first word restored its old reveal. Navigation was then changed to clear reveal state explicitly.
 
-The implementation continues the established ancient-chronicle visual language:
+### Focused GREEN
 
-- stone and ink surfaces;
-- cinnabar-red target accents and chapter seal;
-- amber reinforcement accents;
-- serif chronicle headings;
-- vertical scene timeline;
-- dark ledger-style step navigation;
-- restrained rounded scroll/card surfaces rather than a generic dashboard treatment.
+```text
+npm run test:story -- scripts/test/schema-contract.test.mjs scripts/test/word-import.test.mjs
+12 passed / 0 failed
 
-For 60–100-word lessons:
+npm run test:runtime -- src/lib/story-service.test.ts src/lib/story-api-types.test.ts src/components/story/StoryLessonShell.test.tsx src/app/story/[lessonId]/page.test.tsx
+Test Files  4 passed (4)
+Tests       40 passed (40)
+```
 
-- story text is separated into named scene sections with generous line height;
-- Step 2 focuses recall on one word at a time while retaining the full English story above it;
-- Step 3 groups the complete ledger by scene and uses two columns at desktop widths and one column on smaller screens;
-- a 100-word RTL fixture verifies all 100 word cards remain rendered in four scene regions.
+## Next.js 16 constraints
 
-Accessibility and mobile details include semantic headings and regions, a named navigation landmark, disabled locked steps, `aria-current="step"`, `aria-expanded` reveal state, live status/alert feedback, touch-sized controls, visible focus rings, responsive stacking, and dark-mode contrast classes.
+Local documentation under `node_modules/next/dist/docs/` was treated as authoritative.
 
-A temporary fixture-only preview was checked at desktop width and at 390px mobile width. Step 1 rendered correctly, and a mocked progress response advanced the mobile flow to Step 2. The preview route and exact development-server process were removed before final validation.
+- Dynamic page and route-handler params are Promises and are awaited before use.
+- The page declares request-time rendering with `await connection()`.
+- `notFound()` remains the safe page boundary.
+- The detail route uses the current Web/Next response contract and remains dynamic.
+- The production build reports `/story`, `/story/[lessonId]`, and story API routes as dynamic.
+
+## Accessibility, safety, and responsive behavior
+
+- Semantic headings, scene regions, navigation labels, live status, and alert feedback are retained.
+- Locked steps and pre-reveal ratings use native disabled controls.
+- Reveal controls expose `aria-expanded` and descriptive accessible names.
+- Controls remain touch-sized with visible focus states and dark-mode contrast.
+- Step 3 remains one column on small screens and two columns at desktop widths.
+- A 100-word fixture verifies all cards render in stable order across four scene groups.
+- Structured segments are rendered as React text nodes; no raw novel body, generator draft, or interpreted HTML is exposed.
 
 ## Final validation
 
 ```text
-npm run test:runtime -- src/components/story/StoryLessonShell.test.tsx src/app/story/[lessonId]/page.test.tsx
-Test Files  2 passed (2)
-Tests       10 passed (10)
+# Focused story contracts
+npm run test:story -- scripts/test/schema-contract.test.mjs scripts/test/word-import.test.mjs
+12 passed / 0 failed
 
+# Focused runtime/API/page/UI
+npm run test:runtime -- src/lib/story-service.test.ts src/lib/story-api-types.test.ts src/components/story/StoryLessonShell.test.tsx src/app/story/[lessonId]/page.test.tsx
+Test Files  4 passed (4)
+Tests       40 passed (40)
+
+# Full runtime
 npm run test:runtime -- src
 Test Files  9 passed (9)
-Tests       69 passed (69)
+Tests       71 passed (71)
 
+# Full story/data pipeline
 npm run test:story
-54 passed / 0 failed
+59 passed / 0 failed
 
+# Prisma, with placeholder DATABASE_URL
+npx prisma validate
+schema valid
+
+npx prisma generate
+Prisma Client v5.22.0 generated
+
+# Static checks
 npx tsc --noEmit
 exit 0
 
-npx eslint src/app/story/[lessonId]/page.tsx src/app/story/[lessonId]/page.test.tsx src/components/story/StoryLessonShell.tsx src/components/story/StoryLessonShell.test.tsx src/components/story/StoryStepNav.tsx src/components/story/StoryReader.tsx src/components/story/StoryRecall.tsx src/components/story/StoryWordList.tsx src/components/story/StoryWordDetail.tsx
+npx eslint <all changed JS/MJS/TS/TSX files>
 exit 0
 
+# Production build, with placeholder DATABASE_URL
 npm run build
-Next.js 16.2.9 production build passed
+Next.js 16.2.9 build passed
 /story              ƒ Dynamic
 /story/[lessonId]   ƒ Dynamic
+
+git diff --check
+exit 0
 ```
 
-The first TypeScript rerun after deleting the temporary preview source detected stale generated references under `.next/dev/types`. The stale generated directory was removed after verifying its absolute path was inside this worktree; TypeScript then passed. No source code was changed to hide that failure.
-
-The production build emitted only the known pre-existing multiple-lockfile workspace-root warning. It selected `F:\english_context\package-lock.json` and also detected the worktree lockfile.
-
-## Phonetic data limitation
-
-The current Prisma and story API contracts do not contain a phonetic field:
-
-- `Word` currently exposes `id`, `text`, and `language`.
-- `StoryLessonWordDto.word` currently exposes only `id` and `text`.
-
-`StoryWordDetail` supports optional top-level or word-level phonetic data so the UI can display it as soon as a later contract supplies it. For current production rows, it renders the explicit accessible fallback `音标暂无` rather than fabricating pronunciation data. Expanding and populating the vocabulary data model is outside Task 6's listed files and should be handled as a separate data-contract task.
+The build emitted only the known multiple-lockfile workspace-root warning. No generated Prisma client or `.next` output is staged.
 
 ## Final diff review
 
-- Only the nine Task 6 implementation/test files and this report are intended for commit.
-- No temporary preview route remains.
-- No dependency, schema, migration, environment, generated Next.js output, or unrelated application file is included.
-- No raw novel text or generator draft was added.
-- No `dangerouslySetInnerHTML` implementation was added.
-- `git diff --check` passes.
+The review fix is limited to:
+
+- nullable phonetic schema and existing vocabulary import pipeline;
+- story runtime DTO/service mapping;
+- public detail API/page serialization boundary;
+- Step 2 reveal/rating behavior;
+- Step 3 search and phonetic rendering;
+- focused contracts/regressions; and
+- this report.
+
+No raw novel text, generated lesson drafts, fabricated phonetics, dependency changes, or unrelated application work were added.

@@ -1,11 +1,13 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Clear ALL data and import from 2026考研英语词汇闪过.txt
- * Format: #CategoryName + word list
+ * Format: #CategoryName + word list, optionally word<TAB>phonetic
  * Run: node scripts/import-new.js
  */
 const { PrismaClient } = require('@prisma/client')
 const fs = require('fs')
 const path = require('path')
+const { collectUniqueWords, parseWordImport } = require('./lib/word-import')
 
 const prisma = new PrismaClient()
 const LOCAL_USER_ID = process.env.LOCAL_USER_ID || 'local-user'
@@ -36,36 +38,23 @@ async function main() {
 
   const txtPath = path.join(__dirname, '..', 'data', '2026考研英语词汇闪过.txt')
   const raw = fs.readFileSync(txtPath, 'utf-8')
-  const lines = raw.split('\n').filter(l => l.trim())
+  const sections = parseWordImport(raw)
 
-  // Parse sections
-  const sections = []
-  let currentSection = null
-  for (const line of lines) {
-    if (line.startsWith('#')) {
-      currentSection = { name: line.substring(1).trim(), words: [] }
-      sections.push(currentSection)
-    } else if (currentSection) {
-      currentSection.words.push(line.trim())
-    }
-  }
+  console.log(`Found ${sections.length} sections, ${sections.reduce((sum, section) => sum + section.words.length, 0)} total word occurrences`)
 
-  console.log(`Found ${sections.length} sections, ${sections.reduce((s, sec) => s + sec.words.length, 0)} total word occurrences`)
-
-  // Collect unique words
-  const allWordTexts = [...new Set(sections.flatMap(s => s.words))]
-  console.log(`Unique words: ${allWordTexts.length}`)
+  const importedWords = collectUniqueWords(sections)
+  console.log(`Unique words: ${importedWords.length}`)
 
   console.log('\n=== Step 3: Create Word records ===')
 
   // Batch create all words
-  for (let i = 0; i < allWordTexts.length; i++) {
+  for (let i = 0; i < importedWords.length; i++) {
     await prisma.word.create({
-      data: { text: allWordTexts[i], language: 'en' },
+      data: { text: importedWords[i].text, phonetic: importedWords[i].phonetic, language: 'en' },
     })
-    if ((i + 1) % 1000 === 0) console.log(`  ${i + 1}/${allWordTexts.length} words`)
+    if ((i + 1) % 1000 === 0) console.log(`  ${i + 1}/${importedWords.length} words`)
   }
-  console.log(`  ${allWordTexts.length} words created.`)
+  console.log(`  ${importedWords.length} words created.`)
 
   // Also create UserWord records for all words (no meanings yet)
   const allWords = await prisma.word.findMany()
@@ -88,9 +77,9 @@ async function main() {
     })
 
     for (let i = 0; i < section.words.length; i++) {
-      const word = wordMap.get(section.words[i])
+      const word = wordMap.get(section.words[i].text)
       if (!word) {
-        console.warn(`  Warning: word "${section.words[i]}" not found in DB`)
+        console.warn(`  Warning: word "${section.words[i].text}" not found in DB`)
         continue
       }
       await prisma.wordGroupItem.create({

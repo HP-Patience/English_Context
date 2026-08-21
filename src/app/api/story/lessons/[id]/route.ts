@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getLocalUserId, prisma } from '@/lib/prisma'
 import { getStoryLesson } from '@/lib/story-service'
-import { normalizeStoryIdentifier } from '../../../../../lib/story-api-types'
+import { normalizeStoryIdentifier, toPublicStoryLessonDetail } from '../../../../../lib/story-api-types'
 import type { StoryLessonApiResponse } from '../../../../../lib/story-api-types'
 
 export async function GET(
@@ -22,7 +22,7 @@ export async function GET(
       return NextResponse.json({ error: 'Story lesson not found' }, { status: 404 })
     }
 
-    const response: StoryLessonApiResponse = { lesson }
+    const response: StoryLessonApiResponse = { lesson: toPublicStoryLessonDetail(lesson) }
     return NextResponse.json(response)
   } catch (error) {
     console.error('Failed to load story lesson', error)

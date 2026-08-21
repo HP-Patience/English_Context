@@ -39,6 +39,7 @@ import {
   parseStoryReviewPayload,
   parseStoryWordsQuery,
 } from './story-api-types'
+import type { StoryLessonApiResponse } from './story-api-types'
 import { STORY_ERROR_CODES, StoryDomainError } from './story-errors'
 
 const lessonOne = {
@@ -101,7 +102,7 @@ const detail = {
     id: 'lesson-word-1',
     sortOrder: 1,
     glossCn: '阿尔法',
-    word: { id: 'word-alpha', text: 'alpha' },
+    word: { id: 'word-alpha', text: 'alpha', phonetic: '/ˈælfə/' },
     meaning: { id: 'meaning-alpha', partOfSpeech: 'n.', definition: 'alpha', definitionCn: '阿尔法', example: null },
   }],
   progress: { ...progress, lessonId: 'lesson-1', status: 'first_passed', currentStep: 4, completedStep: 3, step2CompletedAt: '2026-08-21T02:00:00.000Z', step3CompletedAt: '2026-08-21T03:00:00.000Z', completedAt: '2026-08-21T03:00:00.000Z' },
@@ -239,7 +240,22 @@ describe('GET /api/story/lessons/[id]', () => {
     const response = await getLesson(new NextRequest('http://localhost/api/story/lessons/lesson-1'), routeContext('lesson-1'))
 
     expect(response.status).toBe(200)
-    await expect(responseJson(response)).resolves.toEqual({ lesson: detail })
+    const body = await responseJson(response)
+    expect(body).toEqual({
+      lesson: {
+        ...detail,
+        content: {
+          title: detail.content.title,
+          order: detail.content.order,
+          sourceChapterStart: detail.content.sourceChapterStart,
+          sourceChapterEnd: detail.content.sourceChapterEnd,
+          paragraphs: detail.content.paragraphs,
+        },
+      },
+    })
+    const publicContent = (body as StoryLessonApiResponse).lesson.content
+    expect(publicContent).not.toHaveProperty('sourceSummary')
+    expect(publicContent).not.toHaveProperty('continuityNotes')
     expect(mocks.getStoryLesson).toHaveBeenCalledWith({ prisma: { mocked: true }, userId: 'user-1', lessonId: 'lesson-1' })
   })
 

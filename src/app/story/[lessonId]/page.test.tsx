@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getStoryLesson: vi.fn(),
   listStoryLessons: vi.fn(),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
+  shellProps: [] as unknown[],
 }))
 
 vi.mock('next/server', () => ({ connection: mocks.connection }))
@@ -19,6 +20,12 @@ vi.mock('@/lib/story-service', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/story-service')>()
   return { ...original, getStoryLesson: mocks.getStoryLesson, listStoryLessons: mocks.listStoryLessons }
 })
+vi.mock('@/components/story/StoryLessonShell', () => ({
+  StoryLessonShell: (props: { lesson: { title: string } }) => {
+    mocks.shellProps.push(props)
+    return <h1>{props.lesson.title}</h1>
+  },
+}))
 
 import StoryLessonPage from './page'
 
@@ -49,6 +56,7 @@ afterEach(cleanup)
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.shellProps.length = 0
   mocks.connection.mockResolvedValue(undefined)
   mocks.getLocalUserId.mockResolvedValue('local-user')
   mocks.getStoryLesson.mockResolvedValue(readyLesson)
@@ -69,6 +77,16 @@ describe('/story/[lessonId] server page', () => {
     })
     expect(mocks.listStoryLessons).toHaveBeenCalledWith({ prisma: expect.any(Object), userId: 'local-user' })
     expect(screen.getByRole('heading', { level: 1, name: '青茅山醒来' })).toBeInTheDocument()
+    const captured = mocks.shellProps[0] as { lesson: { content: Record<string, unknown> } }
+    expect(captured.lesson.content).toEqual({
+      title: readyLesson.content.title,
+      order: readyLesson.content.order,
+      sourceChapterStart: readyLesson.content.sourceChapterStart,
+      sourceChapterEnd: readyLesson.content.sourceChapterEnd,
+      paragraphs: readyLesson.content.paragraphs,
+    })
+    expect(captured.lesson.content).not.toHaveProperty('sourceSummary')
+    expect(captured.lesson.content).not.toHaveProperty('continuityNotes')
   })
 
   it('rejects malformed dynamic params before querying lesson data', async () => {

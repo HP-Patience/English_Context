@@ -18,6 +18,11 @@ function assertContains(block, expected) {
   assert.ok(block.includes(expected), `expected ${expected}`)
 }
 
+test('Word persists an optional phonetic supplied by the vocabulary source', () => {
+  const block = modelBlock('Word')
+  assertField(block, 'phonetic', 'String\\?')
+})
+
 test('declares the versioned story course, lesson, and progress models', () => {
   for (const name of [
     'StoryCourse',

@@ -3,10 +3,9 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 
-import type { StoryProgressApiResponse } from '@/lib/story-api-types'
-import type { StoryLessonDetail, StoryLessonWordDto, UserStoryProgressDto } from '@/lib/story-service'
+import type { PublicStoryLessonDetail, StoryProgressApiResponse } from '@/lib/story-api-types'
+import type { UserStoryProgressDto } from '@/lib/story-service'
 import type { StoryFirstPassStep } from '@/lib/story-progress'
-import type { StoryLessonParagraph } from '@/lib/story-types'
 import { StoryReader } from './StoryReader'
 import { StoryRecall, type StoryRecallRating } from './StoryRecall'
 import { StoryStepNav } from './StoryStepNav'
@@ -16,12 +15,9 @@ import type { StoryWordDisplay } from './StoryWordDetail'
 type FirstPassView = 1 | 2 | 3
 
 export type StoryLessonView = Pick<
-  StoryLessonDetail,
-  'id' | 'order' | 'title' | 'sourceChapterStart' | 'sourceChapterEnd'
-> & {
-  content: { paragraphs: StoryLessonParagraph[] }
-  lessonWords: StoryLessonWordDto[]
-}
+  PublicStoryLessonDetail,
+  'id' | 'order' | 'title' | 'sourceChapterStart' | 'sourceChapterEnd' | 'content' | 'lessonWords'
+>
 
 type StoryLessonShellProps = {
   lesson: StoryLessonView

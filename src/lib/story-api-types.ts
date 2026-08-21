@@ -11,6 +11,7 @@ import type {
   StoryReviewSubmissionResult,
 } from './story-review'
 import type { StoryFirstPassStep } from './story-progress'
+import type { StoryLessonDocument } from './story-types'
 
 export type StoryLessonsApiResponse = {
   lessons: StoryLessonListItem[]
@@ -18,8 +19,17 @@ export type StoryLessonsApiResponse = {
   dueCount: number
 }
 
+export type PublicStoryLessonContent = Omit<
+  StoryLessonDocument,
+  'sourceSummary' | 'continuityNotes'
+>
+
+export type PublicStoryLessonDetail = Omit<StoryLessonDetail, 'content'> & {
+  content: PublicStoryLessonContent
+}
+
 export type StoryLessonApiResponse = {
-  lesson: StoryLessonDetail
+  lesson: PublicStoryLessonDetail
 }
 
 export type StoryProgressApiResponse = {
@@ -109,6 +119,19 @@ export function parseStoryWordsQuery(searchParams: URLSearchParams): StoryWordsQ
   if ((query?.length ?? 0) > MAX_FILTER_LENGTH || (scene?.length ?? 0) > MAX_FILTER_LENGTH) return null
 
   return { ...(query ? { query } : {}), ...(scene ? { scene } : {}), page, pageSize }
+}
+
+export function toPublicStoryLessonDetail(lesson: StoryLessonDetail): PublicStoryLessonDetail {
+  return {
+    ...lesson,
+    content: {
+      title: lesson.content.title,
+      order: lesson.content.order,
+      sourceChapterStart: lesson.content.sourceChapterStart,
+      sourceChapterEnd: lesson.content.sourceChapterEnd,
+      paragraphs: lesson.content.paragraphs,
+    },
+  }
 }
 
 export function normalizeStoryIdentifier(value: string): string | null {

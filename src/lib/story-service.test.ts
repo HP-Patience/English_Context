@@ -64,7 +64,7 @@ type LessonWordRow = {
   meaningId: string
   sortOrder: number
   glossCn: string
-  word: { id: string; text: string }
+  word: { id: string; text: string; phonetic: string | null }
   meaning: { id: string; partOfSpeech: string; definition: string; definitionCn: string | null; example: string | null }
   userProgress?: WordProgressRow[]
 }
@@ -127,7 +127,7 @@ function makeLesson(overrides: Partial<LessonRow> = {}): LessonRow {
         meaningId: 'meaning-beta',
         sortOrder: 2,
         glossCn: '贝塔',
-        word: { id: 'word-beta', text: 'beta' },
+        word: { id: 'word-beta', text: 'beta', phonetic: null },
         meaning: { id: 'meaning-beta', partOfSpeech: 'n.', definition: 'beta', definitionCn: '贝塔', example: null },
       },
       {
@@ -137,7 +137,7 @@ function makeLesson(overrides: Partial<LessonRow> = {}): LessonRow {
         meaningId: 'meaning-alpha',
         sortOrder: 1,
         glossCn: '阿尔法',
-        word: { id: 'word-alpha', text: 'alpha' },
+        word: { id: 'word-alpha', text: 'alpha', phonetic: '/ˈælfə/' },
         meaning: { id: 'meaning-alpha', partOfSpeech: 'n.', definition: 'alpha', definitionCn: '阿尔法', example: 'alpha example' },
       },
     ],
@@ -336,6 +336,7 @@ describe('getStoryLesson', () => {
     expect(detail?.lessonWords[0]).toMatchObject({
       sortOrder: 1,
       glossCn: '阿尔法',
+      word: { id: 'word-alpha', text: 'alpha', phonetic: '/ˈælfə/' },
       meaning: { id: 'meaning-alpha', definitionCn: '阿尔法' },
     })
     expect(detail?.progress).toMatchObject({ status: 'not_started', completedStep: 0, currentStep: 1 })
@@ -363,7 +364,7 @@ describe('listStoryLessonWords', () => {
           id: 'lesson-ready-1-word-2',
           sortOrder: 2,
           sceneTitle: '学堂试炼',
-          word: { id: 'word-beta', text: 'beta' },
+          word: { id: 'word-beta', text: 'beta', phonetic: null },
         }),
       ],
       scenes: ['山寨晨雾', '学堂试炼'],

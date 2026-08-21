@@ -48,6 +48,7 @@ export type StoryLessonWordDto = {
   word: {
     id: string
     text: string
+    phonetic: string | null
   }
   meaning: {
     id: string
@@ -126,7 +127,7 @@ type LessonWordRow = {
   id: string
   sortOrder: number
   glossCn: string
-  word: { id: string; text: string }
+  word: { id: string; text: string; phonetic: string | null }
   meaning: {
     id: string
     partOfSpeech?: string | null
@@ -435,6 +436,7 @@ function toLessonWordDto(row: LessonWordRow): StoryLessonWordDto {
     word: {
       id: row.word.id,
       text: row.word.text,
+      phonetic: row.word.phonetic ?? null,
     },
     meaning: {
       id: row.meaning.id,

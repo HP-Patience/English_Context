@@ -1,8 +1,6 @@
 import type { StoryLessonWordListItem } from '@/lib/story-service'
 
 export type StoryWordDisplay = StoryLessonWordListItem & {
-  word: StoryLessonWordListItem['word'] & { phonetic?: string | null }
-  phonetic?: string | null
   storyUsage?: string | null
 }
 
@@ -33,7 +31,7 @@ export function StoryWordDetail({ lessonWord }: StoryWordDetailProps) {
         <div>
           <dt className="text-xs font-medium text-stone-400 dark:text-stone-500">音标</dt>
           <dd className="mt-0.5 font-mono text-stone-600 dark:text-stone-300">
-            {lessonWord.word.phonetic || lessonWord.phonetic || '音标暂无'}
+            {lessonWord.word.phonetic ?? '音标暂无'}
           </dd>
         </div>
         <div>

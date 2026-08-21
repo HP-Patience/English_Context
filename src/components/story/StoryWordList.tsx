@@ -1,13 +1,12 @@
-import type { StoryLessonWordListItem } from '@/lib/story-service'
 import { StoryWordDetail, type StoryWordDisplay } from './StoryWordDetail'
 
 type StoryWordListProps = {
-  lessonWords: Array<StoryLessonWordListItem | StoryWordDisplay>
+  lessonWords: StoryWordDisplay[]
   query: string
   scene: string
 }
 
-function searchableText(word: StoryLessonWordListItem | StoryWordDisplay) {
+function searchableText(word: StoryWordDisplay) {
   return [
     word.word.text,
     word.glossCn,
@@ -15,6 +14,7 @@ function searchableText(word: StoryLessonWordListItem | StoryWordDisplay) {
     word.meaning.definition,
     word.meaning.definitionCn,
     word.meaning.example,
+    word.storyUsage,
     word.sceneTitle,
   ].filter(Boolean).join(' ').toLocaleLowerCase()
 }

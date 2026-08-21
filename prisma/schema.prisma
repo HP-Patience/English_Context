@@ -27,6 +27,7 @@ model User {
 model Word {
   id       String @id @default(cuid())
   text     String
+  phonetic String?
   language String @default("en")
 
   meanings         Meaning[]
