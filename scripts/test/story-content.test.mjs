@@ -33,6 +33,21 @@ test('accepts a valid lesson document', () => {
   assert.equal(result.ok, true)
 })
 
+
+test('rejects English narrative lesson fields while allowing target English words and IPA', () => {
+  const invalid = structuredClone(valid)
+  invalid.title = 'Story 01: Rebirth on Qing Mao Mountain'
+  invalid.sourceSummary = 'Fang Yuan wakes up and confirms that rebirth has happened.'
+  invalid.continuityNotes = 'The next lesson continues with the aptitude test.'
+  invalid.paragraphs[0].sceneTitle = 'Waking up'
+  invalid.paragraphs[0].segments[0].value = 'He returned to the dormitory and began planning.'
+  invalid.paragraphs[0].segments[1].definitionCn = 'dormitory'
+
+  const result = validateLessonDocument(invalid, { maxTargetWords: 100 })
+  assert.equal(result.ok, false)
+  assert.match(result.errors.join('\n'), /Simplified Chinese|Chinese|中文|language/i)
+})
+
 test('rejects a lesson with more than 100 target words', () => {
   const tooLarge = structuredClone(valid)
   tooLarge.paragraphs[0].segments = Array.from({ length: 101 }, (_, index) => ({

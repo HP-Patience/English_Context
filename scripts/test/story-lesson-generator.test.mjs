@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { assignWordsToOutline, generateLesson, generateLessonsFromAssignments, validateCorpus } from '../lib/story-lesson-generator.mjs'
+import { assignWordsToOutline, createLessonPrompt, generateLesson, generateLessonsFromAssignments, validateCorpus } from '../lib/story-lesson-generator.mjs'
 
 function words(count, offset = 0) {
   return Array.from({ length: count }, (_, index) => ({
@@ -35,7 +35,7 @@ function outline(count, capacity = 100) {
 
 function documentFor(outlineLesson, targetWords) {
   return {
-    title: `Story ${outlineLesson.order}`,
+    title: `第${outlineLesson.order}课故事`,
     order: outlineLesson.order,
     sourceChapterStart: String(outlineLesson.sourceChapterStart),
     sourceChapterEnd: String(outlineLesson.sourceChapterEnd),
@@ -89,6 +89,12 @@ test('generated lesson missing a requested word is rejected before it can be per
     }),
     /missing target words: word2/,
   )
+})
+
+test('lesson prompt explicitly requires Simplified Chinese narrative text', () => {
+  const prompt = createLessonPrompt({ outlineLesson: outline(1, 100).lessons[0], words: words(1) })
+  assert.match(prompt, /Simplified Chinese|简体中文/)
+  assert.match(prompt, /Simplified Chinese.*narrative text|简体中文.*叙事文本/i)
 })
 
 test('generated lesson prompt includes continuity, chapter range, full word list, and glosses', async () => {

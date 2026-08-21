@@ -51,6 +51,28 @@ function addRequiredStringError(errors, value, path) {
   }
 }
 
+function addSimplifiedChineseTextError(errors, value, path) {
+  if (typeof value !== 'string') {
+    return
+  }
+
+  const text = value.trim()
+  if (!text) {
+    return
+  }
+
+  const cjkCount = (text.match(/[\u3400-\u9fff]/gu) ?? []).length
+  const latinCount = (text.match(/[A-Za-z]/g) ?? []).length
+  if (cjkCount === 0 && latinCount > 0) {
+    errors.push(`${path} must be written in Simplified Chinese (简体中文)`)
+    return
+  }
+
+  if (latinCount >= 20 && latinCount > cjkCount * 2) {
+    errors.push(`${path} must be predominantly Simplified Chinese (简体中文), not English`)
+  }
+}
+
 function getMaxTargetWords(context, errors) {
   const requested = context?.maxTargetWords ?? DEFAULT_MAX_TARGET_WORDS
 
@@ -80,6 +102,7 @@ export function validateLessonDocument(value, context = {}) {
   }
 
   addRequiredStringError(errors, value.title, 'title')
+  addSimplifiedChineseTextError(errors, value.title, 'title')
 
   if (!Number.isInteger(value.order) || value.order < 1) {
     errors.push('order must be a positive integer')
@@ -89,6 +112,8 @@ export function validateLessonDocument(value, context = {}) {
   addRequiredStringError(errors, value.sourceChapterEnd, 'sourceChapterEnd')
   addRequiredStringError(errors, value.sourceSummary, 'sourceSummary')
   addRequiredStringError(errors, value.continuityNotes, 'continuityNotes')
+  addSimplifiedChineseTextError(errors, value.sourceSummary, 'sourceSummary')
+  addSimplifiedChineseTextError(errors, value.continuityNotes, 'continuityNotes')
 
   if (!Array.isArray(value.paragraphs) || value.paragraphs.length === 0) {
     errors.push('paragraphs must be a non-empty array')
@@ -102,6 +127,7 @@ export function validateLessonDocument(value, context = {}) {
       }
 
       addRequiredStringError(errors, paragraph.sceneTitle, `${paragraphPath}.sceneTitle`)
+      addSimplifiedChineseTextError(errors, paragraph.sceneTitle, `${paragraphPath}.sceneTitle`)
 
       if (!Array.isArray(paragraph.segments) || paragraph.segments.length === 0) {
         errors.push(`${paragraphPath}.segments must be a non-empty array`)
@@ -118,6 +144,7 @@ export function validateLessonDocument(value, context = {}) {
 
         if (segment.type === 'text') {
           addRequiredStringError(errors, segment.value, `${segmentPath}.value`)
+          addSimplifiedChineseTextError(errors, segment.value, `${segmentPath}.value`)
           continue
         }
 
@@ -126,6 +153,7 @@ export function validateLessonDocument(value, context = {}) {
           addRequiredStringError(errors, segment.word, `${segmentPath}.word`)
           addRequiredStringError(errors, segment.definitionCn, `${segmentPath}.definitionCn`)
           addRequiredStringError(errors, segment.phonetic, `${segmentPath}.phonetic`)
+          addSimplifiedChineseTextError(errors, segment.definitionCn, `${segmentPath}.definitionCn`)
 
           if (!Number.isInteger(segment.wordOrder) || segment.wordOrder < 1) {
             errors.push(`${segmentPath}.wordOrder must be a positive integer`)

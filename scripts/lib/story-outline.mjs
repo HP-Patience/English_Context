@@ -181,6 +181,7 @@ export function createChapterSummaryPrompt({ batch, batchIndex, batchCount }) {
     `Summarize source chapters ${start}-${end} for a continuous main-line retelling outline.`,
     `This is batch ${batchIndex + 1} of ${batchCount}. Use the provided chapter body text for plot, causality, characters, and continuity.`,
     'Return JSON with exactly: summary (non-empty string), characters (string[]), events (string[]), optional continuityStart, optional continuityEnd.',
+    'Language requirement: write every narrative value in Simplified Chinese (简体中文), including summary, characters, events, continuityStart, and continuityEnd. Do not translate the story summary into English.',
     'Keep chronological order. Capture plot-significant main-line developments; omit filler and do not quote or reproduce raw source prose.',
     'Chapter bodies are transient prompt input only and must not be persisted in checkpoints or output.',
     'Chapter input JSON:',
@@ -201,6 +202,7 @@ export function createStoryOutlinePrompt({ chapterSummaries, vocabularyCount }) 
     `Set targetWordCapacity between ${MIN_TARGET_WORD_CAPACITY} and ${MAX_TARGET_WORD_CAPACITY}; suggested value ${capacityHint}.`,
     `Vocabulary count to distribute: ${vocabularyCount}.`,
     'Return JSON object: { "lessons": [{ "order", "sourceChapterStart", "sourceChapterEnd", "plotSummary", "characters", "events", "continuityStart", "continuityEnd", "targetWordCapacity" }] }.',
+    'Language requirement: write every narrative value in Simplified Chinese (简体中文), including plotSummary, characters, events, continuityStart, and continuityEnd. Do not translate the outline into English.',
     'Use only these checkpointed summaries; do not invent raw prose or quote source text.',
     JSON.stringify(chapterSummaries.map(({ order, sourceChapterStart, sourceChapterEnd, summary, characters, events, continuityStart, continuityEnd }) => ({
       order,
@@ -403,6 +405,12 @@ function parseGeneratedChapterSummaryStrict(response, { batch, batchIndex }) {
   const continuityStart = optionalNonEmptyString(candidate.continuityStart, 'continuityStart', errors)
   const continuityEnd = optionalNonEmptyString(candidate.continuityEnd, 'continuityEnd', errors)
 
+  requireSimplifiedChineseText(summary, 'summary', errors)
+  requireSimplifiedChineseStringArray(characters, 'characters', errors)
+  requireSimplifiedChineseStringArray(events, 'events', errors)
+  requireSimplifiedChineseText(continuityStart, 'continuityStart', errors)
+  requireSimplifiedChineseText(continuityEnd, 'continuityEnd', errors)
+
   if (errors.length > 0) {
     throw new Error(`invalid chapter-summary response for ${start}-${end}: ${errors.join('; ')}`)
   }
@@ -448,6 +456,12 @@ function parseStoredChapterSummaryStrict(summary, path) {
     continuityStart: optionalNonEmptyString(summary.continuityStart, 'continuityStart', errors),
     continuityEnd: optionalNonEmptyString(summary.continuityEnd, 'continuityEnd', errors),
   }
+
+  requireSimplifiedChineseText(parsed.summary, 'summary', errors)
+  requireSimplifiedChineseStringArray(parsed.characters, 'characters', errors)
+  requireSimplifiedChineseStringArray(parsed.events, 'events', errors)
+  requireSimplifiedChineseText(parsed.continuityStart, 'continuityStart', errors)
+  requireSimplifiedChineseText(parsed.continuityEnd, 'continuityEnd', errors)
 
   if (errors.length > 0) {
     throw new Error(`invalid chapter summary at ${path}: ${errors.join('; ')}`)
@@ -510,11 +524,50 @@ function parseStoryLessonStrict(lesson, index) {
     targetWordCapacity,
   }
 
+  requireSimplifiedChineseText(parsed.plotSummary, 'plotSummary', errors)
+  requireSimplifiedChineseStringArray(parsed.characters, 'characters', errors)
+  requireSimplifiedChineseStringArray(parsed.events, 'events', errors)
+  requireSimplifiedChineseText(parsed.continuityStart, 'continuityStart', errors)
+  requireSimplifiedChineseText(parsed.continuityEnd, 'continuityEnd', errors)
+
   if (errors.length > 0) {
     throw new Error(`invalid story outline lesson at ${path}: ${errors.join('; ')}`)
   }
 
   return parsed
+}
+
+
+function requireSimplifiedChineseStringArray(values, field, errors) {
+  if (!Array.isArray(values)) {
+    return
+  }
+  values.forEach((value, index) => requireSimplifiedChineseText(value, `${field}[${index}]`, errors))
+}
+
+function requireSimplifiedChineseText(value, field, errors) {
+  if (value === undefined || value === null) {
+    return
+  }
+  if (typeof value !== 'string') {
+    return
+  }
+
+  const text = value.trim()
+  if (!text) {
+    return
+  }
+
+  const cjkCount = (text.match(/[㐀-鿿]/gu) ?? []).length
+  const latinCount = (text.match(/[A-Za-z]/g) ?? []).length
+  if (cjkCount === 0) {
+    errors.push(`${field} must be written in Simplified Chinese (简体中文)`)
+    return
+  }
+
+  if (latinCount >= 20 && latinCount > cjkCount * 2) {
+    errors.push(`${field} must be predominantly Simplified Chinese (简体中文), not English`)
+  }
 }
 
 function requireNonEmptyString(value, field, errors) {

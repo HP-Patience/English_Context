@@ -25,11 +25,11 @@ function makeOutlineLessons(count, capacity = 100) {
     order: index + 1,
     sourceChapterStart: index + 1,
     sourceChapterEnd: index + 1,
-    plotSummary: `plot ${index + 1}`,
-    characters: ['Fang Yuan'],
-    events: [`event ${index + 1}`],
-    continuityStart: `start ${index + 1}`,
-    continuityEnd: `end ${index + 1}`,
+    plotSummary: `第${index + 1}课主线推进`,
+    characters: ['方源'],
+    events: [`事件${index + 1}`],
+    continuityStart: `承接第${index + 1}课开始状态`,
+    continuityEnd: `交给第${index + 1}课结束状态`,
     targetWordCapacity: capacity,
   }))
 }
@@ -39,24 +39,24 @@ function makeSummaries(count) {
     order: index + 1,
     sourceChapterStart: index + 1,
     sourceChapterEnd: index + 1,
-    summary: `summary ${index + 1}`,
-    characters: ['Fang Yuan'],
-    events: [`event ${index + 1}`],
+    summary: `摘要${index + 1}`,
+    characters: ['方源'],
+    events: [`事件${index + 1}`],
   }))
 }
 
-function makeLesson({ order, start, end, word, gloss = `释义-${word}`, phonetic = '/ˈælfə/', continuityNotes = `handoff-${order}` }) {
+function makeLesson({ order, start, end, word, gloss = `释义-${word}`, phonetic = '/ˈælfə/', continuityNotes = `交接-${order}` }) {
   return {
-    title: `Lesson ${order}`,
+    title: `第${order}课故事`,
     order,
     sourceChapterStart: String(start),
     sourceChapterEnd: String(end),
-    sourceSummary: `summary-${order}`,
+    sourceSummary: `摘要-${order}`,
     continuityNotes,
     paragraphs: [{
-      sceneTitle: `scene-${order}`,
+      sceneTitle: `场景-${order}`,
       segments: [
-        { type: 'text', value: 'context' },
+        { type: 'text', value: '上下文' },
         { type: 'targetWord', word, definitionCn: gloss, phonetic, wordOrder: 1 },
       ],
     }],
@@ -93,7 +93,7 @@ test('summary and outline checkpoints reject changed input fingerprints', async 
   const tempDir = await mkdtemp(join(tmpdir(), 'story-fingerprints-'))
   const summariesPath = join(tempDir, 'summaries.json')
   const outlinePath = join(tempDir, 'outline.json')
-  const chapters = [{ order: 1, title: 'Chapter 1', text: 'body one' }]
+  const chapters = [{ order: 1, title: '第一章', text: '正文一' }]
 
   try {
     await buildChapterSummaries({
@@ -101,7 +101,7 @@ test('summary and outline checkpoints reject changed input fingerprints', async 
       sourceFingerprint: 'source-a',
       chapterBatchSize: 1,
       checkpointPath: summariesPath,
-      generateJson: async () => ({ summary: 'summary', characters: ['A'], events: ['E'] }),
+      generateJson: async () => ({ summary: '有效摘要', characters: ['方源'], events: ['事件'] }),
     })
     const summaryCheckpoint = JSON.parse(await readFile(summariesPath, 'utf8'))
     assert.equal(summaryCheckpoint.version, 2)
@@ -110,11 +110,11 @@ test('summary and outline checkpoints reject changed input fingerprints', async 
 
     await assert.rejects(
       buildChapterSummaries({
-        chapters: [{ ...chapters[0], text: 'changed body' }],
+        chapters: [{ ...chapters[0], text: '改变后的正文' }],
         sourceFingerprint: 'source-b',
         chapterBatchSize: 1,
         checkpointPath: summariesPath,
-        generateJson: async () => ({ summary: 'unused', characters: ['A'], events: ['E'] }),
+        generateJson: async () => ({ summary: '不会使用', characters: ['方源'], events: ['事件'] }),
       }),
       /fingerprint|source/i,
     )
@@ -134,7 +134,7 @@ test('summary and outline checkpoints reject changed input fingerprints', async 
 
     await assert.rejects(
       buildStoryOutline({
-        chapterSummaries: summaries.map((summary, index) => index === 0 ? { ...summary, summary: 'changed' } : summary),
+        chapterSummaries: summaries.map((summary, index) => index === 0 ? { ...summary, summary: '已改变' } : summary),
         sourceFingerprint: 'source-a',
         vocabularyCount: 6098,
         checkpointPath: outlinePath,

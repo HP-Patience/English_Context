@@ -14,7 +14,7 @@ const fingerprints = {
 
 function makeLessonDocument() {
   return {
-    title: 'Story 1',
+    title: '第1课故事',
     order: 1,
     sourceChapterStart: '1',
     sourceChapterEnd: '1',

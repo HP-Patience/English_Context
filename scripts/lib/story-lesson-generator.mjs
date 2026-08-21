@@ -113,6 +113,7 @@ export function createLessonPrompt({ outlineLesson, words, previousLesson = null
     `- current plot summary: ${outlineLesson.plotSummary}`,
     `- next lesson continuity start: ${nextLesson?.continuityStart ?? nextLesson?.sourceSummary ?? '无；这是最后一课。'}`,
     '- the complete target-word list is provided below and every item is mandatory.',
+    '- write title, sourceSummary, continuityNotes, sceneTitle, and all text segments as Simplified Chinese (简体中文) narrative text; only targetWord.word and phonetic stay as the required English/IPA values.',
     '- include one contextual Chinese gloss for every target word using the provided glossary.',
     '- enrich every targetWord segment with one required non-empty phonetic value in canonical IPA; never use a placeholder or omit it.',
     '- no target word omitted; every target word must appear in at least one targetWord segment exactly as listed.',

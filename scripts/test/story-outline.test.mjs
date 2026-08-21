@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import {
   buildChapterSummaries,
   buildStoryOutline,
+  createChapterSummaryPrompt,
+  createStoryOutlinePrompt,
 } from '../lib/story-outline.mjs'
 import { loadEnvFiles, loadSourceChapters, parseArgs } from '../build-story-outline.mjs'
 
@@ -44,6 +46,71 @@ function makeLessons(count) {
     targetWordCapacity: 100,
   }))
 }
+
+
+test('outline prompts explicitly require Simplified Chinese narrative fields', () => {
+  const chapterPrompt = createChapterSummaryPrompt({ batch: makeChapters(1, { includeText: true }), batchIndex: 0, batchCount: 1 })
+  assert.match(chapterPrompt, /Simplified Chinese|简体中文/)
+  assert.match(chapterPrompt, /summary.*characters.*events.*continuityStart.*continuityEnd/s)
+
+  const outlinePrompt = createStoryOutlinePrompt({ chapterSummaries: makeSummaries(61), vocabularyCount: 6100 })
+  assert.match(outlinePrompt, /Simplified Chinese|简体中文/)
+  assert.match(outlinePrompt, /plotSummary.*characters.*events.*continuityStart.*continuityEnd/s)
+})
+
+test('English chapter summary responses are rejected before checkpointing', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-language-summary-'))
+  const checkpointPath = join(tempDir, 'chapter-summaries.json')
+
+  try {
+    await assert.rejects(
+      buildChapterSummaries({
+        chapters: makeChapters(1, { includeText: true }),
+        generateJson: async () => ({
+          summary: 'Fang Yuan returns to Qing Mao Mountain and begins a ruthless plan for cultivation.',
+          characters: ['Fang Yuan', 'Village elder'],
+          events: ['The protagonist tests the situation and hides his intentions.'],
+          continuityStart: 'He enters the opening conflict.',
+          continuityEnd: 'The next conflict continues from his hidden plan.',
+        }),
+        checkpointPath,
+        chapterBatchSize: 1,
+      }),
+      /Simplified Chinese|Chinese|中文|language/i,
+    )
+    assert.equal(existsSync(checkpointPath), false)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test('English story outline lessons are rejected before checkpointing', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-language-final-'))
+  const checkpointPath = join(tempDir, 'story-outline.json')
+  const englishLessons = makeLessons(61).map((lesson, index) => ({
+    ...lesson,
+    plotSummary: `Lesson ${index + 1} follows Fang Yuan as he advances his plan through conflict.`,
+    characters: ['Fang Yuan', 'Clan elder'],
+    events: ['He manipulates the situation and prepares the next move.'],
+    continuityStart: 'The lesson starts from the previous conflict.',
+    continuityEnd: 'The next lesson continues the main line.',
+  }))
+
+  try {
+    await assert.rejects(
+      buildStoryOutline({
+        chapterSummaries: makeSummaries(61),
+        vocabularyCount: 6100,
+        generateJson: async () => ({ lessons: englishLessons }),
+        checkpointPath,
+      }),
+      /Simplified Chinese|Chinese|中文|language/i,
+    )
+    assert.equal(existsSync(checkpointPath), false)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
 
 test('chapter summaries request chapter batches in chronological order', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-order-'))
