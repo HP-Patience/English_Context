@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { cachedFetch } from '@/lib/api-cache'
@@ -13,14 +13,38 @@ interface BeforeInstallPromptEvent {
   userChoice: Promise<{ outcome: string }>
 }
 
+interface DailyGoalStats {
+  target: number
+  learned: number
+  reviewed: number
+  completed: boolean
+  streak?: { current?: number }
+}
+
+interface GroupStats {
+  id: string
+  name: string
+  total: number
+  learned: number
+  currentRound: number
+}
+
+interface KaoyanStats {
+  totalWords?: number
+  dueCount?: number
+  dailyGoal?: DailyGoalStats
+  groups?: GroupStats[]
+}
+
 export default function HomePage() {
   const router = useRouter()
-  const [stats, setStats] = useState<any>(null)
-  const [dailyGoal, setDailyGoal] = useState<any>(null)
+  const [stats, setStats] = useState<KaoyanStats | null>(null)
+  const [dailyGoal, setDailyGoal] = useState<DailyGoalStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set())
   const [showInstallBanner, setShowInstallBanner] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     const dismissedAt = localStorage.getItem('pwa-install-dismissed')
@@ -47,8 +71,8 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    cachedFetch('/api/kaoyan/stats')
-      .then((data: any) => {
+    cachedFetch<KaoyanStats>('/api/kaoyan/stats')
+      .then((data: KaoyanStats) => {
         setStats(data)
         if (data.dailyGoal) setDailyGoal(data.dailyGoal)
       })
@@ -59,7 +83,7 @@ export default function HomePage() {
   // Group groups by stage, aggregate stats
   const stages = stats?.groups
     ? (() => {
-        const map = new Map<string, { name: string; groups: any[]; total: number; learned: number }>()
+        const map = new Map<string, { name: string; groups: GroupStats[]; total: number; learned: number }>()
         for (const g of stats.groups) {
           const stage = getStage(g.name)
           if (!map.has(stage)) {
@@ -83,17 +107,14 @@ export default function HomePage() {
     })
   }
 
-  const prefetchLearn = useCallback((() => {
-    let timer: ReturnType<typeof setTimeout>
-    return (groupId: string, r?: number) => {
-      clearTimeout(timer)
-      timer = setTimeout(() => {
-        const url = `/learn?groupId=${groupId}${r ? `&round=${r}` : ''}`
-        router.prefetch(url)
-        cachedFetch(`/api/kaoyan/learn${r ? `?groupId=${groupId}&round=${r}` : `?groupId=${groupId}`}`).catch(() => {})
-      }, 100)
-    }
-  })(), [router])
+  const prefetchLearn = useCallback((groupId: string, r?: number) => {
+    if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current)
+    prefetchTimerRef.current = setTimeout(() => {
+      const url = `/learn?groupId=${groupId}${r ? `&round=${r}` : ''}`
+      router.prefetch(url)
+      cachedFetch(`/api/kaoyan/learn${r ? `?groupId=${groupId}&round=${r}` : `?groupId=${groupId}`}`).catch(() => {})
+    }, 100)
+  }, [router])
 
   if (loading) {
     return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
@@ -103,6 +124,25 @@ export default function HomePage() {
     <div className="mx-auto max-w-lg pt-4">
       <h1 className="mb-1 text-3xl font-bold tracking-tight">考研英语</h1>
       <p className="mb-6 text-sm text-stone-500 dark:text-stone-400">2026考研英语词汇闪过 · {stats?.totalWords || 6098} 词</p>
+
+      <section className="mb-6 overflow-hidden rounded-2xl border border-stone-300 bg-stone-950 text-stone-100 shadow-sm dark:border-stone-700" aria-labelledby="story-mode-title">
+        <div className="flex items-stretch">
+          <div className="flex w-16 shrink-0 items-center justify-center border-r border-stone-800 bg-red-950 px-3 text-center font-serif text-sm font-semibold leading-5 text-red-100">
+            故事<br />主线
+          </div>
+          <div className="min-w-0 flex-1 p-4">
+            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-stone-500">Chronicle mode</p>
+            <h2 id="story-mode-title" className="mt-1 font-serif text-xl font-semibold">连续故事背词</h2>
+            <p className="mt-1.5 text-xs leading-5 text-stone-400">沿篇章推进前三步学习，强化复习随后到期，不阻塞新剧情。</p>
+            <Link
+              href="/story"
+              className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-stone-100 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"
+            >
+              进入故事课程
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* Daily goal progress */}
       {dailyGoal && (
@@ -185,7 +225,7 @@ export default function HomePage() {
               {/* Expanded sub-groups */}
               {isExpanded && (
                 <div className="border-t border-stone-100 dark:border-stone-700">
-                  {stage.groups.map((g: any) => (
+                  {stage.groups.map((g) => (
                     <div key={g.id} className="flex items-stretch">
                       <button
                         onClick={() => router.push(`/learn?groupId=${g.id}${g.currentRound > 0 ? `&round=${g.currentRound}` : ''}`)}
@@ -238,7 +278,7 @@ export default function HomePage() {
           onClick={() => router.push('/review')}
           className="text-sm text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100"
         >
-          复习 {stats?.dueCount > 0 ? `(${stats.dueCount})` : ''}
+          复习 {(stats?.dueCount ?? 0) > 0 ? `(${stats?.dueCount})` : ''}
         </button>
       </div>
 
