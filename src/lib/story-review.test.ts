@@ -94,6 +94,24 @@ type ReviewState = {
   nextUserWordMeaning: number
 }
 
+
+type AttemptCreateConflictHook = (
+  args: { data: Omit<StoryReviewAttemptRow, 'id'> },
+  state: ReviewState,
+  calls: string[],
+) => Error | null | undefined
+
+type CreateReviewPrismaOptions = {
+  courses?: CourseRow[]
+  lessons?: LessonRow[]
+  lessonProgress?: UserStoryProgressRow[]
+  wordProgress?: UserStoryWordProgressRow[]
+  attempts?: StoryReviewAttemptRow[]
+  userWords?: UserWordRow[]
+  userWordMeanings?: UserWordMeaningRow[]
+  onAttemptCreate?: AttemptCreateConflictHook
+}
+
 type ReviewFakePrisma = {
   calls: string[]
   state: ReviewState
@@ -187,7 +205,8 @@ function createReviewPrisma({
   attempts = [] as StoryReviewAttemptRow[],
   userWords = [] as UserWordRow[],
   userWordMeanings = [] as UserWordMeaningRow[],
-} = {}) {
+  onAttemptCreate,
+}: CreateReviewPrismaOptions = {}) {
   const state: ReviewState = {
     courses: clone(courses),
     lessons: clone(lessons),
@@ -290,6 +309,8 @@ function createReviewPrisma({
       },
       async create(args: { data: Omit<StoryReviewAttemptRow, 'id'> }) {
         calls.push(`storyReviewAttempt.create:${JSON.stringify({ userId: args.data.userId, lessonWordId: args.data.lessonWordId, round: args.data.round, result: args.data.result })}`)
+        const conflict = onAttemptCreate?.(args, state, calls)
+        if (conflict) throw conflict
         if (state.attempts.some((attempt) => attempt.userId === args.data.userId && attempt.lessonWordId === args.data.lessonWordId && attempt.round === args.data.round)) {
           throw new Error('Unique constraint failed on StoryReviewAttempt')
         }
@@ -345,7 +366,7 @@ function createReviewPrisma({
 describe('mapStoryResultToGrade', () => {
   it('maps story recall outcomes onto the exact SM-2 grades', () => {
     expect(mapStoryResultToGrade('forgotten')).toBe(0)
-    expect(mapStoryResultToGrade('fuzzy')).toBe(2)
+    expect(mapStoryResultToGrade('vague')).toBe(2)
     expect(mapStoryResultToGrade('remembered')).toBe(4)
   })
 })
@@ -371,6 +392,39 @@ describe('getDueStoryWords', () => {
     expect(due.map((word) => word.lessonWordId)).toEqual(['lesson-ready-1-word-1', 'lesson-ready-2-word-2'])
     expect(due[0]).toMatchObject({ lessonId: 'lesson-ready-1', lessonOrder: 1, word: 'alpha', glossCn: '阿尔法', dueRound: 1, roundCompleted: 0 })
     expect(due[1]).toMatchObject({ lessonId: 'lesson-ready-2', lessonOrder: 2, dueRound: 1, roundCompleted: 0 })
+  })
+
+  it('sorts due words by lesson order, due time, and word order with first-pass words placed earliest within a lesson', async () => {
+    const lessonOne = makeLesson({
+      id: 'lesson-ready-1',
+      order: 1,
+      words: [
+        makeLessonWord({ id: 'lesson-ready-1-word-1', lessonId: 'lesson-ready-1', wordId: 'word-alpha', meaningId: 'meaning-alpha', sortOrder: 1, glossCn: '阿尔法' }),
+        makeLessonWord({ id: 'lesson-ready-1-word-2', lessonId: 'lesson-ready-1', wordId: 'word-beta', meaningId: 'meaning-beta', sortOrder: 2, glossCn: '贝塔' }),
+        makeLessonWord({ id: 'lesson-ready-1-word-3', lessonId: 'lesson-ready-1', wordId: 'word-gamma', meaningId: 'meaning-gamma', sortOrder: 3, glossCn: '伽马' }),
+      ],
+    })
+    const lessonTwo = makeLesson({ id: 'lesson-ready-2', order: 2 })
+    const prisma = createReviewPrisma({
+      lessons: [lessonTwo, lessonOne],
+      lessonProgress: [step3Progress('lesson-ready-1'), step3Progress('lesson-ready-2')],
+      wordProgress: [
+        { id: 'progress-lesson-one-later', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', reviewRoundCompleted: 1, nextReviewAt: now, lastResult: 'remembered', lastReviewedAt: yesterday },
+        { id: 'progress-lesson-one-earlier', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-3', reviewRoundCompleted: 1, nextReviewAt: yesterday, lastResult: 'remembered', lastReviewedAt: yesterday },
+        { id: 'progress-lesson-two-earliest', userId: 'user-1', lessonWordId: 'lesson-ready-2-word-1', reviewRoundCompleted: 1, nextReviewAt: new Date('2026-08-19T10:00:00.000Z'), lastResult: 'remembered', lastReviewedAt: yesterday },
+      ],
+    })
+
+    const due = await getDueStoryWords({ prisma, userId: 'user-1', now })
+
+    expect(due.map((word) => word.lessonWordId)).toEqual([
+      'lesson-ready-1-word-2',
+      'lesson-ready-1-word-3',
+      'lesson-ready-1-word-1',
+      'lesson-ready-2-word-2',
+      'lesson-ready-2-word-1',
+    ])
+    expect(due[0]).toMatchObject({ dueRound: 1, roundCompleted: 0, nextReviewAt: null })
   })
 
   it('keeps an optional lesson filter inside the ready-slot course', async () => {
@@ -424,12 +478,62 @@ describe('submitStoryReview', () => {
   it('treats duplicate same-round retries as idempotent instead of mutating progress twice', async () => {
     const prisma = createReviewPrisma()
 
-    const first = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'fuzzy', now })
-    const retry = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'fuzzy', now })
+    const first = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'vague', now })
+    const retry = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'vague', now })
 
     expect(retry).toMatchObject({ round: first.round, roundCompleted: first.roundCompleted, grade: 2 })
     expect(prisma.state.attempts).toHaveLength(1)
     expect(prisma.state.wordProgress.find((row) => row.lessonWordId === 'lesson-ready-1-word-1')?.reviewRoundCompleted).toBe(1)
+  })
+
+  it('returns the committed attempt when a concurrent duplicate wins the same round without double-applying SM-2', async () => {
+    let injectedConflict = false
+    const prisma = createReviewPrisma({
+      userWords: [
+        { id: 'uw-alpha', userId: 'user-1', wordId: 'word-alpha', status: 'reviewing', mastery: 0, bookmarked: false, learnRound: 0, lastRatedAt: null, createdAt: yesterday },
+      ],
+      userWordMeanings: [
+        { id: 'uwm-alpha', userWordId: 'uw-alpha', meaningId: 'meaning-alpha', easeFactor: 2.5, interval: 0, nextReviewAt: yesterday, currentTestLevel: 0, mastery: 0, lastRatedAt: null },
+      ],
+      onAttemptCreate(args, state) {
+        if (injectedConflict) return null
+        injectedConflict = true
+        state.attempts.push({ id: 'attempt-winner', ...clone(args.data) })
+        state.wordProgress.push({
+          id: 'progress-winner',
+          userId: args.data.userId,
+          lessonWordId: args.data.lessonWordId,
+          reviewRoundCompleted: args.data.round,
+          nextReviewAt: tomorrow,
+          lastResult: args.data.result,
+          lastReviewedAt: args.data.createdAt,
+        })
+        state.userWordMeanings[0] = {
+          ...state.userWordMeanings[0],
+          easeFactor: 2.3,
+          interval: 1,
+          nextReviewAt: tomorrow,
+          mastery: 57,
+          lastRatedAt: args.data.createdAt,
+        }
+        state.userWords[0] = {
+          ...state.userWords[0],
+          mastery: 57,
+          lastRatedAt: args.data.createdAt,
+        }
+        const error = new Error('Unique constraint failed on StoryReviewAttempt') as Error & { code: string }
+        error.code = 'P2002'
+        return error
+      },
+    })
+
+    const result = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'vague', now })
+
+    expect(result).toMatchObject({ round: 1, roundCompleted: 1, grade: 2, userWordMeaningMastery: 57, userWordMastery: 57 })
+    expect(result.nextReviewAt?.toISOString()).toBe(tomorrow.toISOString())
+    expect(prisma.state.attempts).toHaveLength(1)
+    expect(prisma.state.userWordMeanings.find((row) => row.id === 'uwm-alpha')).toMatchObject({ interval: 1, mastery: 57 })
+    expect(prisma.calls.filter((call) => call.startsWith('userWordMeaning.update'))).toHaveLength(0)
   })
 
   it('rejects lesson words outside the current ready course or before Step3', async () => {
@@ -449,10 +553,10 @@ describe('submitStoryReview', () => {
   it('rejects an early next-round submission and leaves the existing round intact', async () => {
     const prisma = createReviewPrisma({
       wordProgress: [
-        { id: 'progress-round1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', reviewRoundCompleted: 1, nextReviewAt: tomorrow, lastResult: 'fuzzy', lastReviewedAt: yesterday },
+        { id: 'progress-round1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', reviewRoundCompleted: 1, nextReviewAt: tomorrow, lastResult: 'vague', lastReviewedAt: yesterday },
       ],
       attempts: [
-        { id: 'attempt-1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'fuzzy', createdAt: yesterday },
+        { id: 'attempt-1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', createdAt: yesterday },
       ],
     })
 

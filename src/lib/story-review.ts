@@ -4,7 +4,7 @@ const READY_COURSE_SLOT = 'ready'
 const READY_STATUS = 'ready'
 const MAX_STORY_REVIEW_ROUND = 5
 
-export type StoryReviewSubmissionResult = 'remembered' | 'fuzzy' | 'forgotten'
+export type StoryReviewSubmissionResult = 'remembered' | 'vague' | 'forgotten'
 
 export type DueStoryWord = {
   lessonWordId: string
@@ -158,7 +158,7 @@ type InternalPrismaClient = {
 
 export function mapStoryResultToGrade(result: StoryReviewSubmissionResult): 0 | 2 | 4 {
   if (result === 'forgotten') return 0
-  if (result === 'fuzzy') return 2
+  if (result === 'vague') return 2
   if (result === 'remembered') return 4
   throw new Error(`Invalid story review result: ${String(result)}`)
 }
@@ -204,7 +204,7 @@ export async function getDueStoryWords({
       due.push(toDueStoryWord(lesson, lessonWord, progress))
     }
   }
-  return due
+  return due.sort(compareDueStoryWords)
 }
 
 export async function submitStoryReview({
@@ -216,31 +216,42 @@ export async function submitStoryReview({
 }: StoryReviewParams & { lessonWordId: string; result: StoryReviewSubmissionResult }): Promise<StoryReviewResult> {
   const client = asPrisma(prisma)
   const grade = mapStoryResultToGrade(result)
+  let lastConflict: unknown
 
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await submitStoryReviewOnce({ client, userId, lessonWordId, result, grade, now })
+    } catch (error) {
+      if (!isRetryableStoryReviewConflict(error)) throw error
+      lastConflict = error
+      const committed = await reloadCommittedStoryReviewResult({ client, userId, lessonWordId, result, grade })
+      if (committed) return committed
+    }
+  }
+
+  throw lastConflict instanceof Error ? lastConflict : new Error('Story review submission conflicted and could not be reloaded')
+}
+
+async function submitStoryReviewOnce({
+  client,
+  userId,
+  lessonWordId,
+  result,
+  grade,
+  now,
+}: {
+  client: InternalPrismaClient
+  userId: string
+  lessonWordId: string
+  result: StoryReviewSubmissionResult
+  grade: 0 | 2 | 4
+  now: Date
+}): Promise<StoryReviewResult> {
   return client.$transaction(async (tx) => {
     const course = await findReadyCourse(tx)
     if (!course) throw new Error('No ready story course is published')
 
-    const lessonWord = asLessonWordRowOrNull(await tx.storyLessonWord.findFirst({
-      where: {
-        id: lessonWordId,
-        lesson: { courseId: course.id, status: READY_STATUS },
-      },
-      include: {
-        word: true,
-        meaning: true,
-        userProgress: { where: { userId }, take: 1 },
-        lesson: {
-          include: { userProgress: { where: { userId }, take: 1 } },
-        },
-      },
-    }))
-    if (!lessonWord) {
-      throw new Error(`Story lesson word is not in the current ready story course: ${lessonWordId}`)
-    }
-    if (!firstLessonProgress(lessonWord.lesson)?.step3CompletedAt) {
-      throw new Error(`Cannot review story lesson word before Step3 is completed: ${lessonWordId}`)
-    }
+    const lessonWord = await findReadyLessonWordForReview(tx, userId, lessonWordId, course.id)
 
     const currentProgress = asWordProgressRowOrNull(await tx.userStoryWordProgress.findUnique({
       where: { userId_lessonWordId: { userId, lessonWordId } },
@@ -345,6 +356,92 @@ export async function submitStoryReview({
       userWordMastery,
     }
   }, { isolationLevel: 'Serializable' })
+}
+
+async function reloadCommittedStoryReviewResult({
+  client,
+  userId,
+  lessonWordId,
+  result,
+  grade,
+}: {
+  client: InternalPrismaClient
+  userId: string
+  lessonWordId: string
+  result: StoryReviewSubmissionResult
+  grade: 0 | 2 | 4
+}): Promise<StoryReviewResult | null> {
+  const course = await findReadyCourse(client)
+  if (!course) throw new Error('No ready story course is published')
+
+  const lessonWord = await findReadyLessonWordForReview(client, userId, lessonWordId, course.id)
+  const progress = asWordProgressRowOrNull(await client.userStoryWordProgress.findUnique({
+    where: { userId_lessonWordId: { userId, lessonWordId } },
+  })) ?? firstWordProgress(lessonWord, userId)
+  if (!progress || progress.reviewRoundCompleted < 1) return null
+
+  const attempt = asStoryReviewAttemptRowOrNull(await client.storyReviewAttempt.findUnique({
+    where: { userId_lessonWordId_round: { userId, lessonWordId, round: progress.reviewRoundCompleted } },
+  }))
+  if (!attempt) return null
+  if (attempt.result !== result) {
+    throw new Error(`Story review round ${attempt.round} was already committed with a different result`)
+  }
+
+  return duplicateReviewResult({ tx: client, userId, lessonWord, progress, grade })
+}
+
+async function findReadyLessonWordForReview(
+  client: InternalPrismaClient,
+  userId: string,
+  lessonWordId: string,
+  readyCourseId: string,
+): Promise<LessonWordRow> {
+  const lessonWord = asLessonWordRowOrNull(await client.storyLessonWord.findFirst({
+    where: {
+      id: lessonWordId,
+      lesson: { courseId: readyCourseId, status: READY_STATUS },
+    },
+    include: {
+      word: true,
+      meaning: true,
+      userProgress: { where: { userId }, take: 1 },
+      lesson: {
+        include: { userProgress: { where: { userId }, take: 1 } },
+      },
+    },
+  }))
+  if (!lessonWord) {
+    throw new Error(`Story lesson word is not in the current ready story course: ${lessonWordId}`)
+  }
+  if (!firstLessonProgress(lessonWord.lesson)?.step3CompletedAt) {
+    throw new Error(`Cannot review story lesson word before Step3 is completed: ${lessonWordId}`)
+  }
+  return lessonWord
+}
+
+function isRetryableStoryReviewConflict(error: unknown): boolean {
+  const maybeCode = typeof error === 'object' && error !== null && 'code' in error
+    ? (error as { code?: unknown }).code
+    : undefined
+  if (maybeCode === 'P2002' || maybeCode === 'P2034' || maybeCode === '40001') return true
+
+  const message = error instanceof Error ? error.message : String(error)
+  return /unique constraint|serializable|serialization|write conflict|transaction conflict|deadlock/i.test(message)
+}
+
+
+function compareDueStoryWords(left: DueStoryWord, right: DueStoryWord): number {
+  return (left.lessonOrder - right.lessonOrder)
+    || (dueSortTime(left) - dueSortTime(right))
+    || (left.sortOrder - right.sortOrder)
+    || left.lessonWordId.localeCompare(right.lessonWordId)
+}
+
+function dueSortTime(word: DueStoryWord): number {
+  // First-pass words without UserStoryWordProgress have no due timestamp; place them
+  // at a deterministic earliest point within their lesson before dated review rounds.
+  return word.nextReviewAt ? new Date(word.nextReviewAt).getTime() : Number.NEGATIVE_INFINITY
 }
 
 async function findReadyCourse(prisma: InternalPrismaClient): Promise<ReadyCourseRow | null> {

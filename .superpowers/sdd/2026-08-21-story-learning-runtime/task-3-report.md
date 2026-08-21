@@ -1,18 +1,18 @@
 # Runtime Task 3 Report: Step4 Scheduling and SM-2 Sync
 
-- **SHA:** `f34a3cec8824bbed3c1c69e7328ce541b584b35c`
+- **SHA:** `782215287c396595e4b66bf93b87a8761108f420`
 - **Base SHA:** `198a103299e8c41a356fa87aeef2b53a3bc9569d`
 - **Date:** 2026-08-21
 
 ## Files changed
 
-- `src/lib/story-review.ts` — added due-word selection, story result mapping, transactional review submission, story round scheduling, and linked `UserWord`/`UserWordMeaning` SM-2 synchronization.
-- `src/lib/story-review.test.ts` — added focused TDD contract tests with a faithful fake Prisma repository.
-- `src/lib/sm2.ts` — made `calculateSM2` accept an optional `now` date while preserving the existing default behavior.
+- `src/lib/story-review.ts` — implements due-word selection, `vague`/remembered/forgotten result mapping, deterministic due ordering, transactional review submission, bounded conflict reload for idempotent concurrent duplicates, story round scheduling, and linked `UserWord`/`UserWordMeaning` SM-2 synchronization.
+- `src/lib/story-review.test.ts` — adds focused TDD contract tests with a faithful fake Prisma repository, including regression coverage for `vague`, due ordering, and concurrent unique-conflict idempotency.
+- `src/lib/sm2.ts` — previously made `calculateSM2` accept an optional `now` date while preserving the existing default behavior.
 
 ## RED / GREEN
 
-### RED
+### Original Task 3 RED
 
 Command:
 
@@ -20,7 +20,7 @@ Command:
 npm run test:runtime -- src/lib/story-review.test.ts
 ```
 
-Observed expected failure before implementation:
+Observed expected failure before Task 3 implementation:
 
 ```text
 FAIL src/lib/story-review.test.ts
@@ -28,6 +28,23 @@ Error: Cannot find module './story-review'
 ```
 
 This failed because Task 3 review helpers did not exist yet.
+
+### Review-fix RED
+
+Command:
+
+```bash
+npm run test:runtime -- src/lib/story-review.test.ts
+```
+
+Observed expected failures after writing the review-fix tests and before production changes:
+
+```text
+Test Files  1 failed (1)
+Tests  4 failed | 7 passed (11)
+```
+
+The failures covered the old `fuzzy` result identifier, missing due-time ordering, and lack of concurrent duplicate conflict reload.
 
 ### GREEN
 
@@ -41,22 +58,24 @@ Result after implementation:
 
 ```text
 Test Files  1 passed (1)
-Tests  9 passed (9)
+Tests  11 passed (11)
 ```
 
 ## Validation
 
-- Focused runtime test: `npm run test:runtime -- src/lib/story-review.test.ts` — PASS, 9 tests.
-- Full runtime tests: `npm run test:runtime` — PASS, 3 files / 20 tests.
+- Focused runtime test: `npm run test:runtime -- src/lib/story-review.test.ts` — PASS, 11 tests.
+- Full runtime tests: `npm run test:runtime` — PASS, 3 files / 22 tests.
 - Full story tests: `npm run test:story` — PASS, 54 tests.
 - Typecheck: `npx tsc --noEmit` — PASS.
 - Focused lint: `npx eslint src/lib/story-review.ts src/lib/story-review.test.ts src/lib/sm2.ts` — PASS.
 - Diff check: `git diff --check` — PASS.
-- Self-review: checked Task 3 files for forbidden env/raw novel/API/UI/gloss coupling references; none found.
+- Self-review: inspected the diff for Task 3 scope, conflict/idempotency behavior, `vague` contract usage, sorting semantics, and forbidden env/raw novel/API/UI/auth additions; no unrelated work found.
 
 ## Notes / concerns
 
-- Story Step4 scheduling uses the existing SM-2 interval output for `UserStoryWordProgress.nextReviewAt`, so rounds are due across days and round 5 completes with `nextReviewAt = null`.
-- `submitStoryReview` keeps story attempts, story word progress, and linked `UserWordMeaning`/`UserWord` mastery updates inside one Serializable Prisma transaction.
-- Idempotent same-result retries for an already-recorded current round return the recorded round state instead of creating another attempt or round 6.
+- Runtime/API result identifiers are now exactly `remembered`, `vague`, and `forgotten`; `fuzzy` was removed from the story review runtime contract/tests.
+- Story Step4 scheduling uses the existing SM-2 interval output for `UserStoryWordProgress.nextReviewAt`, so the five rounds remain cross-day reinforcement and round 5 completes with `nextReviewAt = null` without creating round 6.
+- Due words are sorted by lesson order, then due time, then word order. First-pass words without `UserStoryWordProgress` intentionally sort as the deterministic earliest due items within their lesson.
+- `submitStoryReview` keeps attempt creation, story word progress, and linked `UserWordMeaning`/`UserWord` mastery updates inside one Serializable Prisma transaction.
+- Retryable Prisma unique/Serializable conflicts are handled with bounded retry/reload; a loser of a concurrent same-round submission returns the already committed attempt/result and does not double-apply SM-2.
 - No API, UI, auth, environment, or raw novel reads were added.
