@@ -97,4 +97,3 @@ describe('story first-pass progress', () => {
     })).toBe(true)
   })
 })
-

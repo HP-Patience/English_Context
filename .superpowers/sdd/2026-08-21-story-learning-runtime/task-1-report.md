@@ -93,6 +93,19 @@ Results:
 - Confirmed runtime modules are pure and do not import Prisma, Node filesystem APIs, browser state, or the script-side validator.
 - Confirmed `StoryLessonDocument` field names and validation constraints mirror the offline validated persisted JSON (`title`, `order`, source fields, `paragraphs[].sceneTitle`, `segments` with `text`/`targetWord`, unique positive `wordOrder`, max 100 target words).
 
+## Post-review fix validation
+
+A review found that the stricter base-range whitespace check failed because `src/lib/story-progress.test.ts` had an extra blank line at EOF. Removed that blank line.
+
+Commands re-run for this fix:
+
+```powershell
+npm run test:runtime -- src/lib/story-progress.test.ts
+git diff --check 83d0e3d406ed51392ab5d3464395a2112cab6774..HEAD
+```
+
+Results after the fix: both commands exit 0; focused Vitest remains 1 file passed / 7 tests passed, and the base-range diff check has no output.
+
 ## Concerns
 
 - `npm install` reported existing audit findings (1 moderate, 5 high). I did not run `npm audit fix` because that would change unrelated dependencies.
