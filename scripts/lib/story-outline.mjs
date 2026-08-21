@@ -45,7 +45,10 @@ export const MAX_TARGET_WORD_CAPACITY = 100
 /**
  * Build chronological chapter-range summaries with a checkpoint after every batch.
  *
- * @param {{ chapters: Array<{ order: number, title: string, characterCount?: number }>, generateJson: (prompt: string, schemaName?: string) => Promise<unknown>, checkpointPath: string, chapterBatchSize?: number }} options
+ * Chapter objects may include transient `text` bodies. Text is included in prompts
+ * for summarization quality, but never written to checkpoints.
+ *
+ * @param {{ chapters: Array<{ order: number, title: string, characterCount?: number, text?: string }>, generateJson: (prompt: string, schemaName?: string) => Promise<unknown>, checkpointPath: string, chapterBatchSize?: number }} options
  * @returns {Promise<ChapterSummary[]>}
  */
 export async function buildChapterSummaries({
@@ -67,17 +70,24 @@ export async function buildChapterSummaries({
     throw new TypeError('chapterBatchSize must be a positive integer')
   }
 
-  const orderedChapters = normalizeChapters(chapters)
+  const orderedChapters = normalizeChaptersStrict(chapters)
   const batches = chunk(orderedChapters, chapterBatchSize)
+  const expectedRanges = new Set(batches.map((batch) => rangeKey(batch[0].order, batch[batch.length - 1].order)))
   const checkpoint = await readJsonIfExists(checkpointPath)
   const summariesByRange = new Map()
 
-  if (Array.isArray(checkpoint?.summaries)) {
-    for (const summary of checkpoint.summaries) {
-      const normalized = normalizeChapterSummary(summary)
-      if (normalized) {
-        summariesByRange.set(rangeKey(normalized.sourceChapterStart, normalized.sourceChapterEnd), normalized)
+  if (checkpoint !== null) {
+    if (!isPlainObject(checkpoint) || !Array.isArray(checkpoint.summaries)) {
+      throw new Error('malformed chapter summary checkpoint: expected an object with summaries array')
+    }
+
+    for (const [summaryIndex, summary] of checkpoint.summaries.entries()) {
+      const normalized = parseStoredChapterSummaryStrict(summary, `checkpoint.summaries[${summaryIndex}]`)
+      const key = rangeKey(normalized.sourceChapterStart, normalized.sourceChapterEnd)
+      if (!expectedRanges.has(key)) {
+        throw new Error(`malformed chapter summary checkpoint: range ${key} is not an expected chapter batch`)
       }
+      summariesByRange.set(key, normalized)
     }
   }
 
@@ -92,7 +102,7 @@ export async function buildChapterSummaries({
     if (!summary) {
       const prompt = createChapterSummaryPrompt({ batch, batchIndex, batchCount: batches.length })
       const response = await generateJson(prompt, 'chapter-summary')
-      summary = normalizeChapterSummaryResponse(response, { batch, batchIndex })
+      summary = parseGeneratedChapterSummaryStrict(response, { batch, batchIndex })
       summariesByRange.set(key, summary)
       await writeJsonAtomic(checkpointPath, {
         version: 1,
@@ -113,10 +123,16 @@ export async function buildChapterSummaries({
 /**
  * Build and validate a continuity-aware lesson outline, resuming a valid final checkpoint.
  *
- * @param {{ chapterSummaries: ChapterSummary[], vocabularyCount: number, generateJson: (prompt: string, schemaName?: string) => Promise<unknown>, checkpointPath: string }} options
+ * @param {{ chapterSummaries: ChapterSummary[], vocabularyCount: number, generateJson: (prompt: string, schemaName?: string) => Promise<unknown>, checkpointPath: string, allowDeterministicFallback?: boolean }} options
  * @returns {Promise<StoryOutline>}
  */
-export async function buildStoryOutline({ chapterSummaries, vocabularyCount, generateJson, checkpointPath }) {
+export async function buildStoryOutline({
+  chapterSummaries,
+  vocabularyCount,
+  generateJson,
+  checkpointPath,
+  allowDeterministicFallback = false,
+}) {
   if (!Array.isArray(chapterSummaries) || chapterSummaries.length === 0) {
     throw new Error('buildStoryOutline requires a non-empty chapterSummaries array')
   }
@@ -130,26 +146,27 @@ export async function buildStoryOutline({ chapterSummaries, vocabularyCount, gen
     throw new TypeError('buildStoryOutline requires checkpointPath')
   }
 
+  const normalizedSummaries = chapterSummaries.map((summary, index) => parseStoredChapterSummaryStrict(summary, `chapterSummaries[${index}]`))
+
   const existing = await readJsonIfExists(checkpointPath)
-  if (existing?.lessons) {
-    const normalizedExisting = normalizeStoryOutline(existing, { vocabularyCount, generatedAt: existing.generatedAt })
-    validateStoryOutline(normalizedExisting, chapterSummaries)
-    return normalizedExisting
+  if (existing !== null) {
+    if (!isPlainObject(existing) || !Array.isArray(existing.lessons)) {
+      throw new Error('malformed story outline checkpoint: expected an object with lessons array')
+    }
+    const parsedExisting = parseStoryOutlineStrict(existing, { vocabularyCount, generatedAt: existing.generatedAt })
+    validateStoryOutline(parsedExisting, normalizedSummaries)
+    return parsedExisting
   }
 
-  const normalizedSummaries = chapterSummaries.map((summary) => {
-    const normalized = normalizeChapterSummary(summary)
-    if (!normalized) {
-      throw new Error('chapterSummaries contains an invalid summary')
-    }
-    return normalized
-  })
   const prompt = createStoryOutlinePrompt({ chapterSummaries: normalizedSummaries, vocabularyCount })
   const response = await generateJson(prompt, 'story-outline')
-  const responseLessons = findLessonsArray(response)
-  const outline = responseLessons
-    ? normalizeStoryOutline({ ...(isPlainObject(response) ? response : {}), lessons: responseLessons }, { vocabularyCount })
-    : createDeterministicOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
+  let outline
+
+  if (allowDeterministicFallback && !findLessonsArray(response)) {
+    outline = createDeterministicStoryOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
+  } else {
+    outline = parseStoryOutlineStrict(response, { vocabularyCount })
+  }
 
   validateStoryOutline(outline, normalizedSummaries)
   await writeJsonAtomic(checkpointPath, outline)
@@ -159,13 +176,21 @@ export async function buildStoryOutline({ chapterSummaries, vocabularyCount, gen
 export function createChapterSummaryPrompt({ batch, batchIndex, batchCount }) {
   const start = batch[0].order
   const end = batch[batch.length - 1].order
+  const chaptersForPrompt = batch.map(({ order, title, characterCount, text }) => ({
+    order,
+    title,
+    characterCount,
+    text: typeof text === 'string' ? text : '',
+  }))
+
   return [
     `Summarize source chapters ${start}-${end} for a continuous main-line retelling outline.`,
-    `This is batch ${batchIndex + 1} of ${batchCount}. Use only the provided metadata; no raw novel text is available.`,
-    'Return JSON with: summary (string), characters (string[]), events (string[]), optional continuityStart, optional continuityEnd.',
-    'Keep chronological order and focus on plot-significant main-line developments inferred from chapter titles.',
-    'Chapter metadata:',
-    JSON.stringify(batch.map(({ order, title, characterCount }) => ({ order, title, characterCount }))),
+    `This is batch ${batchIndex + 1} of ${batchCount}. Use the provided chapter body text for plot, causality, characters, and continuity.`,
+    'Return JSON with exactly: summary (non-empty string), characters (string[]), events (string[]), optional continuityStart, optional continuityEnd.',
+    'Keep chronological order. Capture plot-significant main-line developments; omit filler and do not quote or reproduce raw source prose.',
+    'Chapter bodies are transient prompt input only and must not be persisted in checkpoints or output.',
+    'Chapter input JSON:',
+    JSON.stringify(chaptersForPrompt),
   ].join('\n')
 }
 
@@ -177,11 +202,12 @@ export function createStoryOutlinePrompt({ chapterSummaries, vocabularyCount }) 
     'Create a continuity-aware 61-150 lesson outline for a full continuous main-line retelling.',
     `Target ${TARGET_MIN_LESSON_COUNT}-${TARGET_MAX_LESSON_COUNT} lessons when possible; never exceed ${MAX_LESSON_COUNT}. Suggested lesson count: ${targetLessonCount}.`,
     'Every lesson must be in chronological ordering with explicit source chapter ranges and no overlap or gaps.',
+    'The first lesson must start at the first available source chapter and the final lesson must end at the last available source chapter exactly; do not invent before/after ranges.',
     'Each lesson needs a continuity handoff: continuityStart says what state it receives, continuityEnd says what state it passes to the next lesson.',
     `Set targetWordCapacity between ${MIN_TARGET_WORD_CAPACITY} and ${MAX_TARGET_WORD_CAPACITY}; suggested value ${capacityHint}.`,
     `Vocabulary count to distribute: ${vocabularyCount}.`,
     'Return JSON object: { "lessons": [{ "order", "sourceChapterStart", "sourceChapterEnd", "plotSummary", "characters", "events", "continuityStart", "continuityEnd", "targetWordCapacity" }] }.',
-    'Use only these checkpointed metadata summaries; do not invent raw prose or quote source text.',
+    'Use only these checkpointed summaries; do not invent raw prose or quote source text.',
     JSON.stringify(chapterSummaries.map(({ order, sourceChapterStart, sourceChapterEnd, summary, characters, events, continuityStart, continuityEnd }) => ({
       order,
       sourceChapterStart,
@@ -209,6 +235,7 @@ export function validateStoryOutline(outline, chapterSummaries = []) {
       errors.push(`outline lesson count must be 61-150; received ${outline.lessons.length}`)
     }
 
+    const expectedSpan = getChapterSpan(chapterSummaries)
     let previousEnd = null
     for (const [index, lesson] of outline.lessons.entries()) {
       const path = `lessons[${index}]`
@@ -228,8 +255,8 @@ export function validateStoryOutline(outline, chapterSummaries = []) {
       }
 
       for (const field of ['characters', 'events']) {
-        if (!Array.isArray(lesson[field]) || lesson[field].some((value) => !isNonEmptyString(value))) {
-          errors.push(`${path}.${field} must be an array of non-empty strings`)
+        if (!Array.isArray(lesson[field]) || lesson[field].length === 0 || lesson[field].some((value) => !isNonEmptyString(value))) {
+          errors.push(`${path}.${field} must be a non-empty array of non-empty strings`)
         }
       }
 
@@ -258,20 +285,23 @@ export function validateStoryOutline(outline, chapterSummaries = []) {
         errors.push(`${path} leaves a gap after chapter ${previousEnd}`)
       }
 
+      if (expectedSpan && (start < expectedSpan.start || end > expectedSpan.end)) {
+        errors.push(`${path} range ${start}-${end} is outside available source span ${expectedSpan.start}-${expectedSpan.end}`)
+      }
+
       previousEnd = end
     }
 
-    const expectedSpan = getChapterSpan(chapterSummaries)
-    if (expectedSpan) {
+    if (expectedSpan && outline.lessons.length > 0) {
       const first = outline.lessons[0]
       const last = outline.lessons[outline.lessons.length - 1]
       const firstStart = parseChapterReference(first?.sourceChapterStart)
       const lastEnd = parseChapterReference(last?.sourceChapterEnd)
-      if (Number.isInteger(firstStart) && firstStart > expectedSpan.start) {
-        errors.push(`outline starts at chapter ${firstStart}; expected to cover from ${expectedSpan.start}`)
+      if (firstStart !== expectedSpan.start) {
+        errors.push(`outline starts at chapter ${firstStart}; expected exact first source chapter ${expectedSpan.start}`)
       }
-      if (Number.isInteger(lastEnd) && lastEnd < expectedSpan.end) {
-        errors.push(`outline ends at chapter ${lastEnd}; expected to cover through ${expectedSpan.end}`)
+      if (lastEnd !== expectedSpan.end) {
+        errors.push(`outline ends at chapter ${lastEnd}; expected exact last source chapter ${expectedSpan.end}`)
       }
     }
   }
@@ -283,83 +313,9 @@ export function validateStoryOutline(outline, chapterSummaries = []) {
   return outline
 }
 
-function normalizeChapters(chapters) {
-  return chapters
-    .map((chapter) => ({
-      order: Number(chapter?.order),
-      title: String(chapter?.title ?? '').trim(),
-      characterCount: Number.isFinite(Number(chapter?.characterCount)) ? Number(chapter.characterCount) : undefined,
-    }))
-    .filter((chapter) => Number.isInteger(chapter.order) && chapter.order > 0 && chapter.title)
-    .sort((a, b) => a.order - b.order)
-}
-
-function normalizeChapterSummaryResponse(response, { batch, batchIndex }) {
-  const start = batch[0].order
-  const end = batch[batch.length - 1].order
-  const candidate = Array.isArray(response?.summaries) ? response.summaries[0]
-    : Array.isArray(response?.chapterSummaries) ? response.chapterSummaries[0]
-      : response
-
-  return {
-    order: batchIndex + 1,
-    sourceChapterStart: start,
-    sourceChapterEnd: end,
-    summary: normalizeText(candidate?.summary ?? candidate?.plotSummary ?? candidate?.sourceSummary, `Chapters ${start}-${end}`),
-    characters: normalizeStringArray(candidate?.characters, ['方源']),
-    events: normalizeStringArray(candidate?.events, [`Chapters ${start}-${end}`]),
-    continuityStart: normalizeOptionalText(candidate?.continuityStart),
-    continuityEnd: normalizeOptionalText(candidate?.continuityEnd),
-  }
-}
-
-function normalizeChapterSummary(summary) {
-  if (!isPlainObject(summary)) {
-    return null
-  }
-  const sourceChapterStart = parseChapterReference(summary.sourceChapterStart)
-  const sourceChapterEnd = parseChapterReference(summary.sourceChapterEnd)
-  const order = Number(summary.order)
-
-  if (!Number.isInteger(sourceChapterStart) || !Number.isInteger(sourceChapterEnd) || sourceChapterStart > sourceChapterEnd) {
-    return null
-  }
-
-  return {
-    order: Number.isInteger(order) && order > 0 ? order : sourceChapterStart,
-    sourceChapterStart,
-    sourceChapterEnd,
-    summary: normalizeText(summary.summary ?? summary.plotSummary ?? summary.sourceSummary, `Chapters ${sourceChapterStart}-${sourceChapterEnd}`),
-    characters: normalizeStringArray(summary.characters, ['方源']),
-    events: normalizeStringArray(summary.events, [`Chapters ${sourceChapterStart}-${sourceChapterEnd}`]),
-    continuityStart: normalizeOptionalText(summary.continuityStart),
-    continuityEnd: normalizeOptionalText(summary.continuityEnd),
-  }
-}
-
-function normalizeStoryOutline(value, { vocabularyCount, generatedAt = new Date().toISOString() }) {
-  const lessons = findLessonsArray(value)?.map((lesson, index) => ({
-    order: toPositiveInteger(lesson.order, index + 1),
-    sourceChapterStart: normalizeChapterReferenceForOutput(lesson.sourceChapterStart),
-    sourceChapterEnd: normalizeChapterReferenceForOutput(lesson.sourceChapterEnd),
-    plotSummary: normalizeText(lesson.plotSummary ?? lesson.summary ?? lesson.sourceSummary, `Lesson ${index + 1}`),
-    characters: normalizeStringArray(lesson.characters, ['方源']),
-    events: normalizeStringArray(lesson.events, [`Lesson ${index + 1}`]),
-    continuityStart: normalizeText(lesson.continuityStart, index === 0 ? 'Story begins.' : `Continue from lesson ${index}.`),
-    continuityEnd: normalizeText(lesson.continuityEnd ?? lesson.continuityNotes, `Continue to lesson ${index + 2}.`),
-    targetWordCapacity: Number(lesson.targetWordCapacity),
-  })) ?? []
-
-  return {
-    generatedAt,
-    lessonCount: lessons.length,
-    vocabularyCount,
-    lessons,
-  }
-}
-
-function createDeterministicOutline({ chapterSummaries, vocabularyCount }) {
-  const span = getChapterSpan(chapterSummaries)
+export function createDeterministicStoryOutline({ chapterSummaries, vocabularyCount }) {
+  const parsedSummaries = chapterSummaries.map((summary, index) => parseStoredChapterSummaryStrict(summary, `chapterSummaries[${index}]`))
+  const span = getChapterSpan(parsedSummaries)
   const chapterCount = span.end - span.start + 1
   const lessonCount = chooseTargetLessonCount({ chapterSpan: span, vocabularyCount })
   const targetWordCapacity = chooseTargetWordCapacity({ vocabularyCount, lessonCount })
@@ -369,30 +325,227 @@ function createDeterministicOutline({ chapterSummaries, vocabularyCount }) {
     const start = span.start + Math.floor((index * chapterCount) / lessonCount)
     const end = span.start + Math.floor(((index + 1) * chapterCount) / lessonCount) - 1
     const clampedEnd = Math.max(start, end)
-    const coveredSummaries = chapterSummaries.filter((summary) => summary.sourceChapterStart <= clampedEnd && summary.sourceChapterEnd >= start)
+    const coveredSummaries = parsedSummaries.filter((summary) => summary.sourceChapterStart <= clampedEnd && summary.sourceChapterEnd >= start)
     const characters = uniqueNonEmpty(coveredSummaries.flatMap((summary) => summary.characters)).slice(0, 8)
     const events = uniqueNonEmpty(coveredSummaries.flatMap((summary) => summary.events)).slice(0, 10)
-    const plotSummary = coveredSummaries.map((summary) => summary.summary).filter(Boolean).join('；') || `Chapters ${start}-${clampedEnd}`
+    const plotSummary = coveredSummaries.map((summary) => summary.summary).filter(Boolean).join('；')
 
     lessons.push({
       order: index + 1,
       sourceChapterStart: start,
       sourceChapterEnd: clampedEnd,
       plotSummary,
-      characters: characters.length ? characters : ['方源'],
-      events: events.length ? events : [`Chapters ${start}-${clampedEnd}`],
+      characters,
+      events,
       continuityStart: index === 0 ? '主线从开篇状态开始。' : `承接第${index}课结束时的人物关系与冲突。`,
       continuityEnd: index === lessonCount - 1 ? '本阶段主线完整收束。' : `主要冲突推进到第${index + 2}课继续。`,
       targetWordCapacity,
     })
   }
 
-  return {
+  const outline = {
     generatedAt: new Date().toISOString(),
     lessonCount: lessons.length,
     vocabularyCount,
     lessons,
   }
+  validateStoryOutline(outline, parsedSummaries)
+  return outline
+}
+
+function normalizeChaptersStrict(chapters) {
+  const normalized = chapters.map((chapter, index) => {
+    if (!isPlainObject(chapter)) {
+      throw new Error(`chapters[${index}] must be an object`)
+    }
+    const order = Number(chapter.order)
+    if (!Number.isInteger(order) || order < 1) {
+      throw new Error(`chapters[${index}].order must be a positive integer`)
+    }
+    if (!isNonEmptyString(chapter.title)) {
+      throw new Error(`chapters[${index}].title must be a non-empty string`)
+    }
+
+    return {
+      order,
+      title: chapter.title.trim(),
+      characterCount: Number.isFinite(Number(chapter.characterCount)) ? Number(chapter.characterCount) : undefined,
+      text: typeof chapter.text === 'string' ? chapter.text : undefined,
+    }
+  }).sort((a, b) => a.order - b.order)
+
+  for (let index = 1; index < normalized.length; index += 1) {
+    if (normalized[index].order <= normalized[index - 1].order) {
+      throw new Error(`chapters must have unique ascending order; duplicate/backward order ${normalized[index].order}`)
+    }
+  }
+
+  return normalized
+}
+
+function parseGeneratedChapterSummaryStrict(response, { batch, batchIndex }) {
+  const start = batch[0].order
+  const end = batch[batch.length - 1].order
+  const candidate = Array.isArray(response?.summaries) ? response.summaries[0]
+    : Array.isArray(response?.chapterSummaries) ? response.chapterSummaries[0]
+      : response
+  const errors = []
+
+  if (!isPlainObject(candidate)) {
+    throw new Error(`invalid chapter-summary response for ${start}-${end}: expected object`)
+  }
+
+  const summary = requireNonEmptyString(candidate.summary, 'summary', errors)
+  const characters = requireStringArray(candidate.characters, 'characters', errors)
+  const events = requireStringArray(candidate.events, 'events', errors)
+  const continuityStart = optionalNonEmptyString(candidate.continuityStart, 'continuityStart', errors)
+  const continuityEnd = optionalNonEmptyString(candidate.continuityEnd, 'continuityEnd', errors)
+
+  if (errors.length > 0) {
+    throw new Error(`invalid chapter-summary response for ${start}-${end}: ${errors.join('; ')}`)
+  }
+
+  return withoutUndefined({
+    order: batchIndex + 1,
+    sourceChapterStart: start,
+    sourceChapterEnd: end,
+    summary,
+    characters,
+    events,
+    continuityStart,
+    continuityEnd,
+  })
+}
+
+function parseStoredChapterSummaryStrict(summary, path) {
+  const errors = []
+  if (!isPlainObject(summary)) {
+    throw new Error(`${path} must be an object`)
+  }
+
+  const order = Number(summary.order)
+  if (!Number.isInteger(order) || order < 1) {
+    errors.push('order must be a positive integer')
+  }
+
+  const sourceChapterStart = parseChapterReference(summary.sourceChapterStart)
+  const sourceChapterEnd = parseChapterReference(summary.sourceChapterEnd)
+  if (!Number.isInteger(sourceChapterStart) || !Number.isInteger(sourceChapterEnd)) {
+    errors.push('sourceChapterStart/sourceChapterEnd must identify numeric chapters')
+  } else if (sourceChapterStart > sourceChapterEnd) {
+    errors.push('source chapter range must not be backward')
+  }
+
+  const parsed = {
+    order,
+    sourceChapterStart,
+    sourceChapterEnd,
+    summary: requireNonEmptyString(summary.summary, 'summary', errors),
+    characters: requireStringArray(summary.characters, 'characters', errors),
+    events: requireStringArray(summary.events, 'events', errors),
+    continuityStart: optionalNonEmptyString(summary.continuityStart, 'continuityStart', errors),
+    continuityEnd: optionalNonEmptyString(summary.continuityEnd, 'continuityEnd', errors),
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`invalid chapter summary at ${path}: ${errors.join('; ')}`)
+  }
+
+  return withoutUndefined(parsed)
+}
+
+function parseStoryOutlineStrict(value, { vocabularyCount, generatedAt = new Date().toISOString() }) {
+  const lessonsInput = findLessonsArray(value)
+  if (!Array.isArray(lessonsInput)) {
+    throw new Error('invalid story-outline response: lessons must be an array')
+  }
+
+  const lessons = lessonsInput.map((lesson, index) => parseStoryLessonStrict(lesson, index))
+  return {
+    generatedAt,
+    lessonCount: lessons.length,
+    vocabularyCount,
+    lessons,
+  }
+}
+
+function parseStoryLessonStrict(lesson, index) {
+  const errors = []
+  const path = `lessons[${index}]`
+  if (!isPlainObject(lesson)) {
+    throw new Error(`${path} must be an object`)
+  }
+
+  const order = Number(lesson.order)
+  if (!Number.isInteger(order) || order < 1) {
+    errors.push('order must be a positive integer')
+  }
+
+  const sourceChapterStart = parseChapterReference(lesson.sourceChapterStart)
+  const sourceChapterEnd = parseChapterReference(lesson.sourceChapterEnd)
+  if (!Number.isInteger(sourceChapterStart) || !Number.isInteger(sourceChapterEnd)) {
+    errors.push('sourceChapterStart/sourceChapterEnd must identify numeric chapters')
+  }
+
+  const targetWordCapacity = Number(lesson.targetWordCapacity)
+  if (!Number.isInteger(targetWordCapacity)) {
+    errors.push('targetWordCapacity must be an integer')
+  }
+
+  const parsed = {
+    order,
+    sourceChapterStart,
+    sourceChapterEnd,
+    plotSummary: requireNonEmptyString(lesson.plotSummary, 'plotSummary', errors),
+    characters: requireStringArray(lesson.characters, 'characters', errors),
+    events: requireStringArray(lesson.events, 'events', errors),
+    continuityStart: requireNonEmptyString(lesson.continuityStart, 'continuityStart', errors),
+    continuityEnd: requireNonEmptyString(lesson.continuityEnd, 'continuityEnd', errors),
+    targetWordCapacity,
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`invalid story outline lesson at ${path}: ${errors.join('; ')}`)
+  }
+
+  return parsed
+}
+
+function requireNonEmptyString(value, field, errors) {
+  if (!isNonEmptyString(value)) {
+    errors.push(`${field} must be a non-empty string`)
+    return undefined
+  }
+  return value.trim()
+}
+
+function optionalNonEmptyString(value, field, errors) {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  if (!isNonEmptyString(value)) {
+    errors.push(`${field} must be omitted or a non-empty string`)
+    return undefined
+  }
+  return value.trim()
+}
+
+function requireStringArray(value, field, errors) {
+  if (!Array.isArray(value) || value.length === 0) {
+    errors.push(`${field} must be a non-empty array of non-empty strings`)
+    return undefined
+  }
+
+  const normalized = uniqueNonEmpty(value)
+  if (normalized.length !== value.length) {
+    errors.push(`${field} must contain only non-empty strings`)
+    return undefined
+  }
+  return normalized
+}
+
+function withoutUndefined(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined))
 }
 
 function chooseTargetLessonCount({ chapterSpan, vocabularyCount }) {
@@ -440,11 +593,6 @@ function findLessonsArray(value) {
     return value.storyOutline.lessons
   }
   return null
-}
-
-function normalizeChapterReferenceForOutput(value) {
-  const parsed = parseChapterReference(value)
-  return Number.isInteger(parsed) ? parsed : value
 }
 
 function parseChapterReference(value) {
@@ -504,27 +652,8 @@ function parseChineseInteger(text) {
   return total + section + number
 }
 
-function normalizeText(value, fallback) {
-  return isNonEmptyString(value) ? value.trim() : fallback
-}
-
-function normalizeOptionalText(value) {
-  return isNonEmptyString(value) ? value.trim() : undefined
-}
-
-function normalizeStringArray(value, fallback = []) {
-  const values = Array.isArray(value) ? value : []
-  const normalized = uniqueNonEmpty(values)
-  return normalized.length ? normalized : fallback
-}
-
 function uniqueNonEmpty(values) {
   return [...new Set(values.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean))]
-}
-
-function toPositiveInteger(value, fallback) {
-  const number = Number(value)
-  return Number.isInteger(number) && number > 0 ? number : fallback
 }
 
 function chunk(values, size) {
