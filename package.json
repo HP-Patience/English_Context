@@ -11,7 +11,8 @@
     "db:push": "prisma db push",
     "postinstall": "prisma generate",
     "test:story": "node -e \"const { spawnSync } = require('node:child_process'); const files = process.argv.slice(1); const targets = files.length ? files : ['scripts/test/**/*.test.mjs']; const result = spawnSync(process.execPath, ['--test', ...targets], { stdio: 'inherit' }); process.exit(result.status ?? 1)\"",
-    "story:parse": "node scripts/parse-novel.mjs"
+    "story:parse": "node scripts/parse-novel.mjs",
+    "story:outline": "node scripts/build-story-outline.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
