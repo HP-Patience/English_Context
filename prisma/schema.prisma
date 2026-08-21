@@ -17,8 +17,11 @@ model User {
   ttsConfig   String?  @default("{}") // JSON: { provider, baseURL, apiKey, voice }
   createdAt   DateTime  @default(now())
 
-  words          UserWord[]
-  reviewSessions ReviewSession[]
+  words               UserWord[]
+  reviewSessions      ReviewSession[]
+  storyProgress       UserStoryProgress[]
+  storyWordProgress   UserStoryWordProgress[]
+  storyReviewAttempts StoryReviewAttempt[]
 }
 
 model Word {
@@ -26,16 +29,18 @@ model Word {
   text     String
   language String @default("en")
 
-  meanings  Meaning[]
-  userWords UserWord[]
-  groups    WordGroupItem[]
+  meanings         Meaning[]
+  userWords        UserWord[]
+  groups           WordGroupItem[]
+  storyLessonWords StoryLessonWord[]
 }
 
 model WordGroup {
   id        String @id @default(cuid())
   name      String // e.g. "高频词 Word List 1"
   sortOrder Int
-  words     WordGroupItem[]
+  words        WordGroupItem[]
+  storyLessons StoryLesson[]
 
   @@index([sortOrder])
 }
@@ -64,6 +69,106 @@ model Meaning {
   word              Word               @relation(fields: [wordId], references: [id])
   generatedSentences GeneratedSentence[]
   userWordMeanings   UserWordMeaning[]
+  storyLessonWords   StoryLessonWord[]
+}
+
+model StoryLesson {
+  id                 String   @id @default(cuid())
+  order              Int
+  title              String
+  wordGroupId        String?
+  sourceChapterStart String
+  sourceChapterEnd   String
+  sourceSummary      String
+  continuityNotes    String
+  contentJson        String   @default("{}")
+  status             String   @default("draft") // draft | ready | failed
+  generationError    String?
+  generatedAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  wordGroup    WordGroup?          @relation(fields: [wordGroupId], references: [id])
+  words        StoryLessonWord[]
+  userProgress UserStoryProgress[]
+
+  @@index([order])
+  @@index([status])
+  @@index([wordGroupId])
+}
+
+model StoryLessonWord {
+  id        String   @id @default(cuid())
+  lessonId  String
+  wordId    String
+  meaningId String
+  sortOrder Int
+  glossCn   String
+  createdAt DateTime @default(now())
+
+  lesson StoryLesson @relation(fields: [lessonId], references: [id])
+  word    Word        @relation(fields: [wordId], references: [id])
+  meaning Meaning     @relation(fields: [meaningId], references: [id])
+
+  userProgress   UserStoryWordProgress[]
+  reviewAttempts StoryReviewAttempt[]
+
+  @@unique([lessonId, wordId])
+  @@index([lessonId, sortOrder])
+  @@index([wordId])
+  @@index([meaningId])
+}
+
+model UserStoryProgress {
+  id               String    @id @default(cuid())
+  userId           String
+  lessonId         String
+  currentStep      Int       @default(1) // 1 | 2 | 3 | 4
+  status           String    @default("not_started") // not_started | learning | first_passed | reviewing | reinforced
+  step1CompletedAt DateTime?
+  step2CompletedAt DateTime?
+  step3CompletedAt DateTime?
+  completedAt      DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  user   User        @relation(fields: [userId], references: [id])
+  lesson StoryLesson @relation(fields: [lessonId], references: [id])
+
+  @@unique([userId, lessonId])
+  @@index([lessonId])
+}
+
+model UserStoryWordProgress {
+  id                   String    @id @default(cuid())
+  userId               String
+  lessonWordId         String
+  reviewRoundCompleted Int       @default(0) // 0-5
+  nextReviewAt         DateTime?
+  lastResult           String?   // remembered | vague | forgotten
+  lastReviewedAt       DateTime?
+
+  user       User            @relation(fields: [userId], references: [id])
+  lessonWord StoryLessonWord @relation(fields: [lessonWordId], references: [id])
+
+  @@unique([userId, lessonWordId])
+  @@index([nextReviewAt])
+  @@index([lessonWordId])
+}
+
+model StoryReviewAttempt {
+  id           String   @id @default(cuid())
+  userId       String
+  lessonWordId String
+  round        Int      // 1-5
+  result       String   // remembered | vague | forgotten
+  createdAt    DateTime @default(now())
+
+  user       User            @relation(fields: [userId], references: [id])
+  lessonWord StoryLessonWord @relation(fields: [lessonWordId], references: [id])
+
+  @@unique([userId, lessonWordId, round])
+  @@index([lessonWordId])
+  @@index([createdAt])
 }
 
 model UserWord {
