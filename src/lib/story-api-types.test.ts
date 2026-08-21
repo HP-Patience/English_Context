@@ -207,7 +207,12 @@ describe('story API payload parsers', () => {
         userWordMastery: 60,
       },
     }
-    const expected = { lessonWordId: 'lesson-word-1', round: 2, result: 'vague' } as const
+    const expected = {
+      lessonWordId: 'lesson-word-1',
+      round: 2,
+      result: 'vague',
+      submittedAt: new Date('2026-08-24T07:00:00.000Z'),
+    } as const
 
     expect(parseStoryReviewApiResponse(response, expected)).toEqual(response.review)
     expect(parseStoryReviewApiResponse({}, expected)).toBeNull()
@@ -218,6 +223,59 @@ describe('story API payload parsers', () => {
     expect(parseStoryReviewApiResponse({ review: { ...response.review, nextReviewAt: 'not-a-date' } }, expected)).toBeNull()
     expect(parseStoryReviewApiResponse({ review: { ...response.review, nextReviewAt: null } }, expected)).toBeNull()
     expect(parseStoryReviewApiResponse({ review: { ...response.review, round: 5, roundCompleted: 5, nextReviewAt: null } }, { ...expected, round: 5 })).toEqual({ ...response.review, round: 5, roundCompleted: 5, nextReviewAt: null })
+  })
+
+  it.each([
+    ['a past canonical timestamp', { nextReviewAt: '2026-08-24T06:59:59.999Z' }],
+    ['a parseable noncanonical timestamp', { nextReviewAt: '2026-08-24T08:00:00Z' }],
+    ['a grade that does not match the submitted result', { grade: 0 }],
+  ])('rejects review responses with %s', (_case, invalidFields) => {
+    const response = {
+      review: {
+        lessonWordId: 'lesson-word-1',
+        round: 2,
+        roundCompleted: 2,
+        result: 'vague',
+        nextReviewAt: '2026-08-24T08:00:00.000Z',
+        grade: 2,
+        userWordMeaningMastery: 65,
+        userWordMastery: 60,
+        ...invalidFields,
+      },
+    }
+
+    expect(parseStoryReviewApiResponse(response, {
+      lessonWordId: 'lesson-word-1',
+      round: 2,
+      result: 'vague',
+      submittedAt: new Date('2026-08-24T07:00:00.000Z'),
+    })).toBeNull()
+  })
+
+  it.each([
+    ['remembered', 4],
+    ['vague', 2],
+    ['forgotten', 0],
+  ] as const)('accepts %s only with its deterministic grade %i', (result, grade) => {
+    const response = {
+      review: {
+        lessonWordId: 'lesson-word-1',
+        round: 1,
+        roundCompleted: 1,
+        result,
+        nextReviewAt: '2026-08-24T08:00:00.000Z',
+        grade,
+        userWordMeaningMastery: 65,
+        userWordMastery: 60,
+      },
+    }
+
+    expect(parseStoryReviewApiResponse(response, {
+      lessonWordId: 'lesson-word-1',
+      round: 1,
+      result,
+      submittedAt: new Date('2026-08-24T07:00:00.000Z'),
+    })).toEqual(response.review)
   })
 
   it('normalizes supported word filters and rejects unsafe pagination', () => {

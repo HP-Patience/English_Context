@@ -164,6 +164,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
     if (!currentWord?.isDue || currentWord.dueRound === null) throw new Error('review row is not actionable')
 
     const expectedRound = currentWord.dueRound
+    const submittedAt = new Date()
     const response = await fetch('/api/story/review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -176,6 +177,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
       lessonWordId: submission.lessonWordId,
       round: expectedRound,
       result: submission.result,
+      submittedAt,
     })
     if (!review) throw new Error('invalid review response')
 

@@ -151,6 +151,22 @@ const lessonReviewQueue = {
   dueCount: 1,
 }
 
+function reviewResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    review: {
+      lessonWordId: 'lesson-word-1',
+      round: 1,
+      roundCompleted: 1,
+      result: 'remembered',
+      nextReviewAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      grade: 4,
+      userWordMeaningMastery: 60,
+      userWordMastery: 60,
+      ...overrides,
+    },
+  }
+}
+
 describe('StoryLessonShell', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn()
@@ -293,10 +309,14 @@ describe('StoryLessonShell', () => {
   })
 
   it.each([
-    ['a missing review', {}],
-    ['a mismatched lesson word', { review: { lessonWordId: 'lesson-word-other', round: 1, roundCompleted: 1, result: 'remembered', nextReviewAt: '2026-08-22T08:00:00.000Z', grade: 4, userWordMeaningMastery: 60, userWordMastery: 60 } }],
-    ['an out-of-range round', { review: { lessonWordId: 'lesson-word-1', round: 6, roundCompleted: 6, result: 'remembered', nextReviewAt: '2026-08-22T08:00:00.000Z', grade: 4, userWordMeaningMastery: 60, userWordMastery: 60 } }],
-  ])('rejects %s response without changing due count or row actionability', async (_case, malformedResponse) => {
+    ['a missing review', () => ({})],
+    ['a mismatched lesson word', () => reviewResponse({ lessonWordId: 'lesson-word-other' })],
+    ['an out-of-range round', () => reviewResponse({ round: 6, roundCompleted: 6 })],
+    ['a past next review date', () => reviewResponse({ nextReviewAt: new Date(Date.now() - 1000).toISOString() })],
+    ['a parseable noncanonical next review date', () => reviewResponse({ nextReviewAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString() })],
+    ['a result and grade mismatch', () => reviewResponse({ grade: 0 })],
+  ])('rejects %s response without changing due count or row actionability', async (_case, responseFactory) => {
+    const malformedResponse = responseFactory()
     const dueFirstRound = {
       ...lessonReviewQueue,
       lessons: [{
@@ -335,6 +355,47 @@ describe('StoryLessonShell', () => {
     expect(screen.getByRole('button', { name: 'resolve 第1轮：记得' })).toBeEnabled()
     const resolveRow = screen.getByRole('row', { name: /resolve/ })
     expect(within(resolveRow).getAllByRole('cell')[1].querySelector('span')).toBeNull()
+  })
+
+  it('accepts a canonical future schedule and matching grade before updating the row and due count', async () => {
+    const dueFirstRound = {
+      ...lessonReviewQueue,
+      lessons: [{
+        ...lessonReviewQueue.lessons[0],
+        words: [{
+          ...lessonReviewQueue.lessons[0].words[0],
+          lessonWordId: 'lesson-word-1',
+          sortOrder: 1,
+          wordId: 'word-1',
+          meaningId: 'meaning-1',
+          word: 'resolve',
+          glossCn: '决意',
+          definitionCn: '下定决心',
+        }],
+      }],
+    }
+    const unstartedLesson = {
+      ...firstPassedLesson,
+      reviewState: {
+        words: firstPassedLesson.reviewState.words.map((word) => ({ ...word, roundCompleted: 0, nextReviewAt: null })),
+        attempts: [],
+      },
+    }
+    const response = reviewResponse()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => dueFirstRound })
+      .mockResolvedValueOnce({ ok: true, json: async () => response })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<StoryLessonShell lesson={unstartedLesson} progress={unstartedLesson.progress} dueWords={1} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '载入到期强化词' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'resolve 第1轮：记得' }))
+
+    await waitFor(() => expect(screen.getByText(/本篇当前没有到期词/)).toBeInTheDocument())
+    const resolveRow = screen.getByRole('row', { name: /resolve/ })
+    expect(within(resolveRow).getAllByRole('cell')[1]).toHaveTextContent('记得')
+    expect(within(resolveRow).getByRole('button', { name: 'resolve 第2轮未到期' })).toBeDisabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('completes Step3 without Step4, then immediately offers the next lesson and due reinforcement', async () => {

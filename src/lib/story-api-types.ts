@@ -115,18 +115,21 @@ export function parseStoryReviewApiResponse(
     lessonWordId: string
     round: number
     result: StoryReviewSubmissionResult
+    submittedAt: Date
   },
 ): StoryReviewState | null {
   if (!isPlainObject(value) || !isPlainObject(value.review)) return null
+  if (!Number.isFinite(expected.submittedAt.getTime())) return null
 
   const review = value.review
   if (review.lessonWordId !== expected.lessonWordId) return null
   if (!isReviewRound(review.round) || !isReviewRound(review.roundCompleted)) return null
   if (review.round !== expected.round || review.roundCompleted !== expected.round) return null
   if (!isStoryReviewResult(review.result) || review.result !== expected.result) return null
-  if (review.grade !== 0 && review.grade !== 2 && review.grade !== 4) return null
+  const grade = reviewGradeForResult(expected.result)
+  if (review.grade !== grade) return null
   if (!isMastery(review.userWordMeaningMastery) || !isMastery(review.userWordMastery)) return null
-  if (!isValidReviewDate(review.nextReviewAt, review.round)) return null
+  if (!isValidReviewDate(review.nextReviewAt, review.round, expected.submittedAt)) return null
 
   return {
     lessonWordId: review.lessonWordId,
@@ -134,7 +137,7 @@ export function parseStoryReviewApiResponse(
     roundCompleted: review.roundCompleted,
     result: review.result,
     nextReviewAt: review.nextReviewAt,
-    grade: review.grade,
+    grade,
     userWordMeaningMastery: review.userWordMeaningMastery,
     userWordMastery: review.userWordMastery,
   }
@@ -152,9 +155,21 @@ function isMastery(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
 }
 
-function isValidReviewDate(value: unknown, round: number): value is string | null {
+function reviewGradeForResult(result: StoryReviewSubmissionResult): 0 | 2 | 4 {
+  if (result === 'remembered') return 4
+  if (result === 'vague') return 2
+  return 0
+}
+
+function isValidReviewDate(value: unknown, round: number, submittedAt: Date): value is string | null {
   if (round === 5) return value === null
-  return typeof value === 'string' && value.length > 0 && Number.isFinite(Date.parse(value))
+  if (typeof value !== 'string') return false
+
+  const parsed = new Date(value)
+  const parsedTime = parsed.getTime()
+  return Number.isFinite(parsedTime)
+    && parsed.toISOString() === value
+    && parsedTime > submittedAt.getTime()
 }
 
 export function parseStoryWordsQuery(searchParams: URLSearchParams): StoryWordsQuery | null {
