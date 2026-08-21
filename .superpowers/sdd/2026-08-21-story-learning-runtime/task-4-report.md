@@ -5,6 +5,7 @@
 **Branch:** `feature/story-learning`
 **Base SHA:** `ccb73b90e6a9df90bddfa326c5c4b6e8be970f8b`
 **Implementation commit:** `c75e6ec` (`feat: add story lesson and review APIs`)
+**Review-fix commit:** `7075689b42c65181049da7e65c4872ff56bff5b4` (`fix: classify story API errors by stable codes`)
 
 ## Scope completed
 
@@ -32,6 +33,18 @@ Implemented the Task 4 story-learning Route Handler contract with service-layer 
 
 All five handlers call `getLocalUserId()`. Dynamic route `params` are typed as promises and awaited as required by Next.js 16. Route Handlers remain uncached by default; no unnecessary cache directive was added.
 
+## Review follow-up: stable domain error classification
+
+The Task 4 review identified message-regex HTTP classification as a Medium quality issue. The follow-up replaces it with `StoryDomainError` and exported `STORY_ERROR_CODES` shared by first-pass progress, story services, review services, and the API classifier.
+
+- API status selection now depends only on a recognized `StoryDomainError` code, never on mutable message text.
+- Ready-course/lesson/lesson-word visibility and pre-Step3 reviewability codes map to `404`.
+- Progress sequencing, not-due/completed review state, immutable-round result conflicts, and exhausted retryable transaction conflicts map to `409`.
+- Plain infrastructure errors, objects that merely expose a lookalike `code`, and infrastructure messages containing old domain phrases map to generic `500` responses.
+- Identical duplicate review submissions still return the existing idempotent `200` result.
+- A duplicate immutable-round submission with a different result now emits the stable review-result conflict code and remains `409`.
+- Three exhausted retryable Prisma/transaction conflicts now emit `STORY_REVIEW_RETRY_EXHAUSTED`, which maps to `409` without exposing the underlying database error.
+
 ## Files
 
 Created:
@@ -43,11 +56,15 @@ Created:
 - `src/app/api/story/review/route.ts`
 - `src/lib/story-api-types.ts`
 - `src/lib/story-api-types.test.ts`
+- `src/lib/story-errors.ts`
 
 Modified:
 
+- `src/lib/story-progress.ts`
 - `src/lib/story-service.ts`
 - `src/lib/story-service.test.ts`
+- `src/lib/story-review.ts`
+- `src/lib/story-review.test.ts`
 
 ## Strict TDD evidence
 
@@ -108,14 +125,60 @@ Test Files 1 passed
 Tests 16 passed
 ```
 
-## Final validation
+### Review follow-up RED 1 — shared typed errors absent
 
-All checks passed on the committed implementation:
+Command:
 
 ```text
+npm run test:runtime -- src/lib/story-api-types.test.ts src/lib/story-service.test.ts src/lib/story-review.test.ts
+```
+
+Observed failure:
+
+```text
+Test Files 3 failed
+Cannot find module './story-errors'
+```
+
+### Review follow-up RED 2 — immutable-round conflict used the not-due code
+
+Command:
+
+```text
+npm run test:runtime -- src/lib/story-review.test.ts
+```
+
+Observed failure:
+
+```text
+Expected: STORY_REVIEW_RESULT_CONFLICT
+Received: STORY_REVIEW_NOT_DUE
+```
+
+### Review follow-up GREEN
+
+```text
+npm run test:runtime -- src/lib/story-api-types.test.ts src/lib/story-service.test.ts src/lib/story-review.test.ts
+Test Files 3 passed
+Tests 40 passed
+```
+
+## Final validation
+
+All checks passed after the review fix:
+
+```text
+npm run test:runtime -- src/lib/story-api-types.test.ts
+Test Files 1 passed
+Tests 20 passed
+
+npm run test:runtime -- src/lib/story-service.test.ts src/lib/story-review.test.ts
+Test Files 2 passed
+Tests 20 passed
+
 npm run test:runtime
 Test Files 4 passed
-Tests 40 passed
+Tests 47 passed
 
 npm run test:story
 54 passed / 0 failed
@@ -123,24 +186,32 @@ npm run test:story
 npx tsc --noEmit
 exit 0
 
-npx eslint src/app/api/story src/lib/story-api-types.ts src/lib/story-api-types.test.ts src/lib/story-service.ts src/lib/story-service.test.ts
+npx eslint src/app/api/story src/lib/story-errors.ts src/lib/story-api-types.ts src/lib/story-api-types.test.ts src/lib/story-progress.ts src/lib/story-progress.test.ts src/lib/story-service.ts src/lib/story-service.test.ts src/lib/story-review.ts src/lib/story-review.test.ts
 exit 0
+
+npm run build
+Next.js 16.2.9 production build passed; 38 static pages generated and all story API routes were included.
 
 git diff --check
 exit 0
 ```
+
+The build emitted only the pre-existing workspace-root inference warning caused by multiple lockfiles; it did not fail the build.
 
 ## Self-review
 
 - Confirmed every read remains bound to the unique ready-course publication rules through `listStoryLessons`, `getStoryLesson`, `listStoryLessonWords`, or `getDueStoryWords`.
 - Confirmed hidden/non-ready lesson content is not parsed by the word-list helper; the service returns `null` before touching `contentJson`.
 - Confirmed routes do not expose raw database errors or connection details in HTTP responses.
+- Confirmed HTTP classification is based only on shared typed domain codes; message lookalikes and untrusted code-shaped objects return `500`.
+- Confirmed retry exhaustion and conflicting immutable-round submissions return `409`, while identical retries remain idempotent `200`.
 - Confirmed Step 4 remains due-item based and does not block lesson progression.
 - Confirmed no authentication layer, environment-file read, LLM call, raw-novel access, or direct unsafe route-level story-table query was added.
 - Confirmed existing `/learn`, `/review`, and SM-2 behavior were not changed.
 
 ## Decisions and concerns
 
-- Expected service failures are currently classified from the established service error-message semantics. Tests cover every required `404`/`409` distinction, including identical duplicate success versus conflicting immutable-round submission. A future refactor could replace message classification with typed domain errors, but this is not a blocker for Task 4.
-- Deep relative imports are used for `story-api-types` in dynamic Route Handler files because the current Vitest route-contract setup does not resolve an otherwise-unmocked `@/lib/story-api-types` alias. Type checking and focused lint both pass.
-- No known functional blockers remain.
+- Domain messages remain descriptive for logs and tests, but they are no longer part of the HTTP contract; exported error codes are the stable boundary.
+- `StoryDomainError` uses an `instanceof` guard so arbitrary infrastructure errors or code-shaped objects cannot opt themselves into a `404`/`409` response.
+- Deep relative imports are used for `story-api-types` in dynamic Route Handler files because the current Vitest route-contract setup does not resolve an otherwise-unmocked `@/lib/story-api-types` alias. Type checking, lint, and production build pass.
+- The production build reports the repository's existing multiple-lockfile workspace-root warning. No Task 4 build failure or functional blocker remains.
