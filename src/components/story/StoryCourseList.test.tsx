@@ -103,5 +103,26 @@ describe('StoryCourseProgress', () => {
     expect(screen.getByText('12 词')).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '首次学习进度' })).toHaveAttribute('aria-valuenow', '18')
     expect(screen.getByText(/Step4 会在之后按到期时间强化/)).toHaveTextContent('不会阻塞下一篇')
+
+    for (const label of ['Course ledger', '强化中', '已强化', '今日待复习']) {
+      expect(screen.getByText(label)).toHaveClass('text-stone-400')
+      expect(screen.getByText(label)).not.toHaveClass('text-stone-500')
+    }
+  })
+
+  it('uses plain status semantics instead of a degenerate progressbar when no lessons exist', () => {
+    render(
+      <StoryCourseProgress
+        total={0}
+        firstPassed={0}
+        reinforcing={0}
+        reinforced={0}
+        dueCount={0}
+      />,
+    )
+
+    expect(screen.getByText('0 / 0')).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: '首次学习进度' })).toHaveTextContent('尚无已就绪篇章')
   })
 })

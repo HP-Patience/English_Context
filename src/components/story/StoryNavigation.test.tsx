@@ -44,5 +44,7 @@ describe('story navigation entry points', () => {
     expect(await screen.findByRole('link', { name: '进入故事课程' })).toHaveAttribute('href', '/story')
     expect(screen.getByRole('button', { name: /复习/ })).toBeInTheDocument()
     expect(screen.getByText(/连续故事/)).toBeInTheDocument()
+    expect(screen.getByText('Chronicle mode')).toHaveClass('text-stone-400')
+    expect(screen.getByText('Chronicle mode')).not.toHaveClass('text-stone-500')
   })
 })

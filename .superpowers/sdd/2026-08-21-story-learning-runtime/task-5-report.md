@@ -20,7 +20,7 @@ Implemented the `/story` course list and additive entry navigation for Runtime T
 - Added lesson actions targeting `/story/[lessonId]`, with the current lesson receiving a distinct continuation treatment and `aria-current="step"`.
 - Added separate `/story` entry points to the home page and desktop/mobile navigation while preserving ordinary `/learn` and `/review` flows.
 - Used the existing stone palette and dark-mode language with serif chronicle typography and restrained red seal accents; no generic gradient treatment was added.
-- Added responsive card layouts, semantic lists/articles/headings, an accessible progressbar and empty state, visible focus rings, and minimum-height primary actions suitable for touch.
+- Added responsive card layouts, semantic lists/articles/headings, accessible progress semantics and empty states, visible focus rings, and minimum-height primary actions suitable for touch.
 
 ## Files
 
@@ -151,3 +151,71 @@ The proposed complete audit fix upgrades Next.js to 16.3.2, outside this task's 
 - Live visual/data smoke testing requires a configured `DATABASE_URL` and a published ready course; neither was available in this worktree session.
 - The multiple-lockfile Next.js workspace-root warning remains pre-existing and non-blocking.
 - Dependency advisories remain open as documented above; they are not introduced by story data exposure and were not force-fixed in this scoped change.
+
+## Accessibility review follow-up
+
+Task 5 review identified two scoped accessibility regressions, both fixed with RTL regressions written first.
+
+### Contrast fix
+
+The newly introduced microcopy using `text-stone-500` directly on `bg-stone-950` did not provide the intended WCAG-AA contrast. The following story-mode labels now use `text-stone-400`:
+
+- Home story card: `Chronicle mode`
+- Story progress ledger: `Course ledger`
+- Story progress definitions: `强化中`, `已强化`, and `今日待复习`
+
+The tests assert both the presence of `text-stone-400` and the absence of `text-stone-500` on those labels. Existing `text-stone-500` uses on light surfaces or as dark-mode variants outside the new stone-950 story surfaces were not changed.
+
+### Zero-course progress semantics
+
+When `total === 0`, `StoryCourseProgress` no longer renders `role="progressbar"` with `aria-valuemin="0"` and `aria-valuemax="0"`. It preserves the visible `0 / 0` summary and renders a named plain `role="status"` explaining that progress will appear after a ready lesson is published. Positive totals retain the valid labeled progressbar.
+
+### Follow-up strict TDD evidence
+
+RED command:
+
+```text
+npm run test:runtime -- src/components/story/StoryCourseList.test.tsx src/components/story/StoryNavigation.test.tsx
+```
+
+Observed before implementation:
+
+```text
+Test Files  2 failed (2)
+Tests       3 failed | 4 passed (7)
+```
+
+The failures showed the four progress-ledger labels and home `Chronicle mode` label still using `text-stone-500`, and the zero-total component still exposing a progressbar with minimum and maximum both set to zero.
+
+Focused GREEN:
+
+```text
+npm run test:runtime -- src/components/story/StoryCourseList.test.tsx src/components/story/StoryNavigation.test.tsx src/app/story/page.test.tsx
+Test Files  3 passed (3)
+Tests       8 passed (8)
+```
+
+### Follow-up validation
+
+```text
+npm run test:runtime
+Test Files  4 passed (4)
+Tests       51 passed (51)
+
+npm run test:story
+54 passed / 0 failed
+
+npx tsc --noEmit
+exit 0
+
+npx eslint src/components/story/StoryCourseProgress.tsx src/components/story/StoryCourseList.test.tsx src/components/story/StoryNavigation.test.tsx src/app/page.tsx
+exit 0
+
+npm run build
+Next.js 16.2.9 production build passed; /story remains ƒ Dynamic.
+
+ git diff --check
+exit 0
+```
+
+The pre-existing multiple-lockfile workspace-root warning remains non-blocking. No unrelated application files, dependency versions, story data, or raw novel content were changed in this follow-up.

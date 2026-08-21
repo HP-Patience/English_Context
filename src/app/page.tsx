@@ -131,7 +131,7 @@ export default function HomePage() {
             故事<br />主线
           </div>
           <div className="min-w-0 flex-1 p-4">
-            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-stone-500">Chronicle mode</p>
+            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-stone-400">Chronicle mode</p>
             <h2 id="story-mode-title" className="mt-1 font-serif text-xl font-semibold">连续故事背词</h2>
             <p className="mt-1.5 text-xs leading-5 text-stone-400">沿篇章推进前三步学习，强化复习随后到期，不阻塞新剧情。</p>
             <Link
