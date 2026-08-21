@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   getStoryLesson,
+  listStoryLessonWords,
   listStoryLessons,
   saveFirstPassStep,
 } from './story-service'
@@ -21,7 +22,15 @@ function makeContent({ title = 'Ready Lesson', order = 1 } = {}) {
         sceneTitle: '山寨晨雾',
         segments: [
           { type: 'text', value: '方源看着 ' },
-          { type: 'targetWord', word: 'dawn', definitionCn: '黎明', wordOrder: 1 },
+          { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', wordOrder: 1 },
+          { type: 'text', value: '。' },
+        ],
+      },
+      {
+        sceneTitle: '学堂试炼',
+        segments: [
+          { type: 'text', value: '随后面对 ' },
+          { type: 'targetWord', word: 'beta', definitionCn: '贝塔', wordOrder: 2 },
           { type: 'text', value: '。' },
         ],
       },
@@ -330,6 +339,64 @@ describe('getStoryLesson', () => {
     })
     expect(detail?.progress).toMatchObject({ status: 'not_started', completedStep: 0, currentStep: 1 })
     await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-hidden', now: prisma.now })).resolves.toBeNull()
+  })
+})
+
+
+describe('listStoryLessonWords', () => {
+  it('filters a ready lesson word list by scene and query before deterministic pagination', async () => {
+    const prisma = createServicePrisma()
+
+    await expect(listStoryLessonWords({
+      prisma,
+      userId: 'user-1',
+      lessonId: 'lesson-ready-1',
+      query: 'BETA',
+      scene: '学堂试炼',
+      page: 1,
+      pageSize: 1,
+    })).resolves.toEqual({
+      lessonId: 'lesson-ready-1',
+      words: [
+        expect.objectContaining({
+          id: 'lesson-ready-1-word-2',
+          sortOrder: 2,
+          sceneTitle: '学堂试炼',
+          word: { id: 'word-beta', text: 'beta' },
+        }),
+      ],
+      scenes: ['山寨晨雾', '学堂试炼'],
+      pagination: { page: 1, pageSize: 1, total: 1, totalPages: 1 },
+    })
+  })
+
+  it('keeps pagination ordered and returns null without reading hidden lesson content', async () => {
+    const prisma = createServicePrisma({
+      lessons: [
+        makeLesson(),
+        makeLesson({ id: 'lesson-hidden', courseId: 'course-archived', status: 'ready', contentJson: 'not json' }),
+      ],
+    })
+
+    const pageTwo = await listStoryLessonWords({
+      prisma,
+      userId: 'user-1',
+      lessonId: 'lesson-ready-1',
+      page: 2,
+      pageSize: 1,
+    })
+
+    expect(pageTwo).toMatchObject({
+      words: [expect.objectContaining({ id: 'lesson-ready-1-word-2', sortOrder: 2 })],
+      pagination: { page: 2, pageSize: 1, total: 2, totalPages: 2 },
+    })
+    await expect(listStoryLessonWords({
+      prisma,
+      userId: 'user-1',
+      lessonId: 'lesson-hidden',
+      page: 1,
+      pageSize: 25,
+    })).resolves.toBeNull()
   })
 })
 

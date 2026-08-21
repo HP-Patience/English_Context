@@ -57,6 +57,22 @@ export type StoryLessonWordDto = {
   }
 }
 
+export type StoryLessonWordListItem = StoryLessonWordDto & {
+  sceneTitle: string
+}
+
+export type StoryLessonWordPage = {
+  lessonId: string
+  words: StoryLessonWordListItem[]
+  scenes: string[]
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
+}
+
 export type UserStoryProgressDto = {
   userId: string
   lessonId: string
@@ -188,6 +204,57 @@ export async function getStoryLesson({
     lessonWords: orderedLessonWords(lesson).map(toLessonWordDto),
     progress,
     dueReviewCount: countDueReviews(lesson, progress, userId, now),
+  }
+}
+
+export async function listStoryLessonWords({
+  prisma,
+  userId,
+  lessonId,
+  query,
+  scene,
+  page = 1,
+  pageSize = 25,
+}: StoryServiceParams & {
+  lessonId: string
+  query?: string
+  scene?: string
+  page?: number
+  pageSize?: number
+}): Promise<StoryLessonWordPage | null> {
+  const lesson = await getStoryLesson({ prisma, userId, lessonId })
+  if (!lesson) return null
+
+  const sceneByWordOrder = new Map<number, string>()
+  const scenes: string[] = []
+  for (const paragraph of lesson.content.paragraphs) {
+    if (!scenes.includes(paragraph.sceneTitle)) scenes.push(paragraph.sceneTitle)
+    for (const segment of paragraph.segments) {
+      if (segment.type === 'targetWord') {
+        sceneByWordOrder.set(segment.wordOrder, paragraph.sceneTitle)
+      }
+    }
+  }
+
+  const normalizedQuery = query?.trim().toLocaleLowerCase() ?? ''
+  const normalizedScene = scene?.trim() ?? ''
+  const words = lesson.lessonWords
+    .map((word): StoryLessonWordListItem => ({
+      ...word,
+      sceneTitle: sceneByWordOrder.get(word.sortOrder) ?? '',
+    }))
+    .filter((word) => !normalizedScene || word.sceneTitle === normalizedScene)
+    .filter((word) => !normalizedQuery || storyWordSearchText(word).includes(normalizedQuery))
+
+  const total = words.length
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize)
+  const offset = (page - 1) * pageSize
+
+  return {
+    lessonId,
+    words: words.slice(offset, offset + pageSize),
+    scenes,
+    pagination: { page, pageSize, total, totalPages },
   }
 }
 
@@ -366,6 +433,18 @@ function toLessonWordDto(row: LessonWordRow): StoryLessonWordDto {
       example: row.meaning.example ?? null,
     },
   }
+}
+
+function storyWordSearchText(word: StoryLessonWordListItem): string {
+  return [
+    word.word.text,
+    word.glossCn,
+    word.sceneTitle,
+    word.meaning.partOfSpeech,
+    word.meaning.definition,
+    word.meaning.definitionCn ?? '',
+    word.meaning.example ?? '',
+  ].join('\n').toLocaleLowerCase()
 }
 
 function firstProgress(lesson: LessonRow): ProgressRow | null {
