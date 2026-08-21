@@ -22,12 +22,13 @@ export interface SM2Grade {
 export function calculateSM2(
   currentEF: number,
   currentInterval: number,
-  quality: number
+  quality: number,
+  now = new Date()
 ): SM2Result {
   const q = clampQuality(quality)
   const ef = updateEF(currentEF, q)
   const interval = calculateInterval(currentInterval, q)
-  const nextReviewAt = new Date()
+  const nextReviewAt = new Date(now)
   nextReviewAt.setDate(nextReviewAt.getDate() + interval)
 
   return { easeFactor: ef, interval, nextReviewAt }
