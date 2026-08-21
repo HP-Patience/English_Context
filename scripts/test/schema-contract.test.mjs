@@ -147,6 +147,10 @@ test('story review attempts are unique per user lesson word and round', () => {
     ['lessonWordId', 'String\\b'],
     ['round', 'Int\\b'],
     ['result', 'String\\b'],
+    ['nextReviewAt', 'DateTime\\?'],
+    ['grade', 'Int\\?'],
+    ['userWordMeaningMastery', 'Float\\?'],
+    ['userWordMastery', 'Float\\?'],
     ['createdAt', 'DateTime\\s+@default\\(now\\(\\)\\)'],
   ]) {
     assertField(block, field, pattern)

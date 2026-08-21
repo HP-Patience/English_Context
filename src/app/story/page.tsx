@@ -17,7 +17,7 @@ export default async function StoryPage() {
   const userId = await getLocalUserId()
   const lessons = await listStoryLessons({ prisma, userId })
   const orderedLessons = [...lessons].sort((left, right) => left.order - right.order)
-  const currentLessonId = orderedLessons.find((lesson) => lesson.completedStep < 3)?.id ?? null
+  const currentLessonId = orderedLessons.find((lesson) => lesson.isUnlocked && lesson.completedStep < 3)?.id ?? null
   const firstPassed = orderedLessons.filter((lesson) => lesson.completedStep === 3).length
   const reinforcing = orderedLessons.filter((lesson) => lesson.status === 'first_passed' || lesson.status === 'reviewing').length
   const reinforced = orderedLessons.filter((lesson) => lesson.status === 'reinforced').length

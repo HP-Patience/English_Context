@@ -1,106 +1,32 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * Clear ALL data and import from 2026考研英语词汇闪过.txt
+ * Destructively reset vocabulary/story data and import from 2026考研英语词汇闪过.txt.
  * Format: #CategoryName + word list, optionally word<TAB>phonetic
  * Run: node scripts/import-new.js
  */
 const { PrismaClient } = require('@prisma/client')
 const fs = require('fs')
 const path = require('path')
-const { collectUniqueWords, parseWordImport } = require('./lib/word-import')
+const { importVocabularyData } = require('./lib/import-new-runner')
 
-const prisma = new PrismaClient()
 const LOCAL_USER_ID = process.env.LOCAL_USER_ID || 'local-user'
 
 async function main() {
-  console.log('=== Step 1: Clear all existing data ===')
-
-  // Delete in FK-safe order
-  await prisma.reviewLog.deleteMany()
-  await prisma.reviewSession.deleteMany()
-  await prisma.generatedSentence.deleteMany()
-  await prisma.userWordMeaning.deleteMany()
-  await prisma.userWord.deleteMany()
-  await prisma.meaning.deleteMany()
-  await prisma.wordGroupItem.deleteMany()
-  await prisma.wordGroup.deleteMany()
-  await prisma.word.deleteMany()
-  console.log('All data cleared.')
-
-  // Ensure local user exists
-  await prisma.user.upsert({
-    where: { id: LOCAL_USER_ID },
-    update: {},
-    create: { id: LOCAL_USER_ID, email: 'local@contextvocab.app', name: 'Local User' },
-  })
-
-  console.log('\n=== Step 2: Parse txt file ===')
-
-  const txtPath = path.join(__dirname, '..', 'data', '2026考研英语词汇闪过.txt')
-  const raw = fs.readFileSync(txtPath, 'utf-8')
-  const sections = parseWordImport(raw)
-
-  console.log(`Found ${sections.length} sections, ${sections.reduce((sum, section) => sum + section.words.length, 0)} total word occurrences`)
-
-  const importedWords = collectUniqueWords(sections)
-  console.log(`Unique words: ${importedWords.length}`)
-
-  console.log('\n=== Step 3: Create Word records ===')
-
-  // Batch create all words
-  for (let i = 0; i < importedWords.length; i++) {
-    await prisma.word.create({
-      data: { text: importedWords[i].text, phonetic: importedWords[i].phonetic, language: 'en' },
-    })
-    if ((i + 1) % 1000 === 0) console.log(`  ${i + 1}/${importedWords.length} words`)
+  const prisma = new PrismaClient()
+  try {
+    const txtPath = path.join(__dirname, '..', 'data', '2026考研英语词汇闪过.txt')
+    const raw = fs.readFileSync(txtPath, 'utf-8')
+    await importVocabularyData({ prisma, userId: LOCAL_USER_ID, raw })
+  } finally {
+    await prisma.$disconnect()
   }
-  console.log(`  ${importedWords.length} words created.`)
-
-  // Also create UserWord records for all words (no meanings yet)
-  const allWords = await prisma.word.findMany()
-  const wordMap = new Map(allWords.map(w => [w.text, w]))
-
-  for (let i = 0; i < allWords.length; i++) {
-    await prisma.userWord.create({
-      data: { userId: LOCAL_USER_ID, wordId: allWords[i].id, status: 'learning', mastery: 0 },
-    })
-    if ((i + 1) % 1000 === 0) console.log(`  userWords: ${i + 1}/${allWords.length}`)
-  }
-  console.log(`  ${allWords.length} userWords created.`)
-
-  console.log('\n=== Step 4: Create WordGroup + WordGroupItem records ===')
-
-  let sortOrder = 0
-  for (const section of sections) {
-    const group = await prisma.wordGroup.create({
-      data: { name: section.name, sortOrder },
-    })
-
-    for (let i = 0; i < section.words.length; i++) {
-      const word = wordMap.get(section.words[i].text)
-      if (!word) {
-        console.warn(`  Warning: word "${section.words[i].text}" not found in DB`)
-        continue
-      }
-      await prisma.wordGroupItem.create({
-        data: { wordGroupId: group.id, wordId: word.id, sortOrder: i },
-      })
-    }
-    sortOrder++
-  }
-
-  console.log(`  ${sections.length} groups created.`)
-
-  // Stats
-  const wordCount = await prisma.word.count()
-  const uwCount = await prisma.userWord.count()
-  const giCount = await prisma.wordGroupItem.count()
-  console.log(`\n=== Done ===`)
-  console.log(`Words: ${wordCount}`)
-  console.log(`UserWords: ${uwCount}`)
-  console.log(`GroupItems: ${giCount}`)
 }
 
-main()
-  .catch(e => { console.error(e); process.exit(1) })
-  .finally(() => prisma.$disconnect())
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+}
+
+module.exports = { main }

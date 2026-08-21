@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
       completedStep: 1,
       currentStep: 2,
       dueReviewCount: 2,
+      isUnlocked: true,
     },
     {
       id: 'lesson-1',
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => ({
       completedStep: 3,
       currentStep: 4,
       dueReviewCount: 0,
+      isUnlocked: true,
     },
   ]),
 }))
@@ -56,6 +58,7 @@ describe('/story server page', () => {
     })
     expect(screen.getByRole('heading', { level: 1, name: '蛊界词途' })).toBeInTheDocument()
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    expect(screen.getByText('1 篇')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '继续第 2 步' })).toHaveAttribute('href', '/story/lesson-2')
   })
 })

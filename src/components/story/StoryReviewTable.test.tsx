@@ -109,6 +109,7 @@ describe('StoryReviewTable', () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
       lessonWordId: 'lesson-word-1',
+      round: 2,
       result,
     }))
     const row = screen.getByRole('row', { name: /resolve/ })

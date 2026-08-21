@@ -28,6 +28,7 @@ export type StoryReviewAttemptView = {
 
 export type StoryReviewSubmission = {
   lessonWordId: string
+  round: StoryReviewRound
   result: StoryReviewSubmissionResult
 }
 
@@ -82,7 +83,7 @@ export function StoryReviewTable({ words, attempts, onSubmit }: StoryReviewTable
     setStatus(null)
 
     try {
-      const review = await onSubmit({ lessonWordId: word.lessonWordId, result })
+      const review = await onSubmit({ lessonWordId: word.lessonWordId, round, result })
       setRowOverrides((current) => ({
         ...current,
         [word.lessonWordId]: {

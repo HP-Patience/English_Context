@@ -312,7 +312,6 @@ describe('StoryLessonShell', () => {
     ['a missing review', () => ({})],
     ['a mismatched lesson word', () => reviewResponse({ lessonWordId: 'lesson-word-other' })],
     ['an out-of-range round', () => reviewResponse({ round: 6, roundCompleted: 6 })],
-    ['a past next review date', () => reviewResponse({ nextReviewAt: new Date(Date.now() - 1000).toISOString() })],
     ['a parseable noncanonical next review date', () => reviewResponse({ nextReviewAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString() })],
     ['a result and grade mismatch', () => reviewResponse({ grade: 0 })],
   ])('rejects %s response without changing due count or row actionability', async (_case, responseFactory) => {
@@ -357,7 +356,7 @@ describe('StoryLessonShell', () => {
     expect(within(resolveRow).getAllByRole('cell')[1].querySelector('span')).toBeNull()
   })
 
-  it('accepts a canonical future schedule and matching grade before updating the row and due count', async () => {
+  it('accepts an immutable canonical historical schedule and matching grade before updating the row and due count', async () => {
     const dueFirstRound = {
       ...lessonReviewQueue,
       lessons: [{
@@ -381,7 +380,7 @@ describe('StoryLessonShell', () => {
         attempts: [],
       },
     }
-    const response = reviewResponse()
+    const response = reviewResponse({ nextReviewAt: '2026-08-20T12:00:00.000Z' })
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => dueFirstRound })
       .mockResolvedValueOnce({ ok: true, json: async () => response })
@@ -392,6 +391,10 @@ describe('StoryLessonShell', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'resolve 第1轮：记得' }))
 
     await waitFor(() => expect(screen.getByText(/本篇当前没有到期词/)).toBeInTheDocument())
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/story/review', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ lessonWordId: 'lesson-word-1', round: 1, result: 'remembered' }),
+    }))
     const resolveRow = screen.getByRole('row', { name: /resolve/ })
     expect(within(resolveRow).getAllByRole('cell')[1]).toHaveTextContent('记得')
     expect(within(resolveRow).getByRole('button', { name: 'resolve 第2轮未到期' })).toBeDisabled()

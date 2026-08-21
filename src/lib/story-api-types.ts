@@ -66,7 +66,7 @@ export type StoryWordsQuery = {
   pageSize: number
 }
 
-export type StoryApiErrorStatus = 404 | 409 | 500
+export type StoryApiErrorStatus = 403 | 404 | 409 | 500
 
 const DEFAULT_PAGE_SIZE = 25
 const MAX_PAGE_SIZE = 100
@@ -102,11 +102,12 @@ export function parseStoryProgressPayload(value: unknown): { step: StoryFirstPas
 
 export function parseStoryReviewPayload(value: unknown): {
   lessonWordId: string
+  round: number
   result: StoryReviewSubmissionResult
 } | null {
-  if (!isPlainObject(value) || !isValidIdentifier(value.lessonWordId)) return null
+  if (!isPlainObject(value) || !isValidIdentifier(value.lessonWordId) || !isReviewRound(value.round)) return null
   if (value.result !== 'remembered' && value.result !== 'vague' && value.result !== 'forgotten') return null
-  return { lessonWordId: value.lessonWordId.trim(), result: value.result }
+  return { lessonWordId: value.lessonWordId.trim(), round: value.round, result: value.result }
 }
 
 export function parseStoryReviewApiResponse(
@@ -129,7 +130,7 @@ export function parseStoryReviewApiResponse(
   const grade = reviewGradeForResult(expected.result)
   if (review.grade !== grade) return null
   if (!isMastery(review.userWordMeaningMastery) || !isMastery(review.userWordMastery)) return null
-  if (!isValidReviewDate(review.nextReviewAt, review.round, expected.submittedAt)) return null
+  if (!isValidReviewDate(review.nextReviewAt, review.round)) return null
 
   return {
     lessonWordId: review.lessonWordId,
@@ -161,15 +162,12 @@ function reviewGradeForResult(result: StoryReviewSubmissionResult): 0 | 2 | 4 {
   return 0
 }
 
-function isValidReviewDate(value: unknown, round: number, submittedAt: Date): value is string | null {
+function isValidReviewDate(value: unknown, round: number): value is string | null {
   if (round === 5) return value === null
   if (typeof value !== 'string') return false
 
   const parsed = new Date(value)
-  const parsedTime = parsed.getTime()
-  return Number.isFinite(parsedTime)
-    && parsed.toISOString() === value
-    && parsedTime > submittedAt.getTime()
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value
 }
 
 export function parseStoryWordsQuery(searchParams: URLSearchParams): StoryWordsQuery | null {
@@ -240,10 +238,13 @@ export function classifyStoryApiError(error: unknown): StoryApiErrorStatus {
     case STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND:
     case STORY_ERROR_CODES.LESSON_WORD_NOT_REVIEWABLE:
       return 404
+    case STORY_ERROR_CODES.LESSON_LOCKED:
+      return 403
     case STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT:
     case STORY_ERROR_CODES.REVIEW_NOT_DUE:
     case STORY_ERROR_CODES.REVIEW_ROUNDS_COMPLETE:
     case STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT:
+    case STORY_ERROR_CODES.REVIEW_ROUND_MISMATCH:
     case STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED:
       return 409
     default:

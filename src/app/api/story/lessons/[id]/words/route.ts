@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLocalUserId, prisma } from '@/lib/prisma'
 import { listStoryLessonWords } from '@/lib/story-service'
 import {
+  classifyStoryApiError,
   normalizeStoryIdentifier,
   parseStoryWordsQuery,
 } from '../../../../../../lib/story-api-types'
@@ -33,7 +34,14 @@ export async function GET(
     const response: StoryLessonWordsApiResponse = result
     return NextResponse.json(response)
   } catch (error) {
-    console.error('Failed to list story lesson words', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const status = classifyStoryApiError(error)
+    if (status === 500) console.error('Failed to list story lesson words', error)
+    if (status === 403) {
+      return NextResponse.json(
+        { error: 'Story lesson is locked', code: 'STORY_LESSON_LOCKED' },
+        { status },
+      )
+    }
+    return NextResponse.json({ error: status === 404 ? 'Story lesson not found' : 'Internal server error' }, { status })
   }
 }

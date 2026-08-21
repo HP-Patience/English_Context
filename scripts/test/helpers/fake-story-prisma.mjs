@@ -527,6 +527,18 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
         state.userStoryProgress.set(stateKey, row)
         return structuredClone(row)
       },
+      async updateMany({ where, data }) {
+        let count = 0
+        for (const [stateKey, current] of state.userStoryProgress) {
+          const statusMatches = typeof where.status === 'object'
+            ? current.status !== where.status.not
+            : where.status === undefined || current.status === where.status
+          if (current.userId !== where.userId || current.lessonId !== where.lessonId || !statusMatches) continue
+          state.userStoryProgress.set(stateKey, { ...current, ...structuredClone(data) })
+          count += 1
+        }
+        return { count }
+      },
     },
     userStoryWordProgress: {
       async findUnique({ where }) {

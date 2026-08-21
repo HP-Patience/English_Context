@@ -163,7 +163,8 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
     const currentWord = reviewWords.find((word) => word.lessonWordId === submission.lessonWordId)
     if (!currentWord?.isDue || currentWord.dueRound === null) throw new Error('review row is not actionable')
 
-    const expectedRound = currentWord.dueRound
+    if (submission.round !== currentWord.dueRound) throw new Error('review round is no longer actionable')
+
     const submittedAt = new Date()
     const response = await fetch('/api/story/review', {
       method: 'POST',
@@ -175,7 +176,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
     const payload: unknown = await response.json()
     const review = parseStoryReviewApiResponse(payload, {
       lessonWordId: submission.lessonWordId,
-      round: expectedRound,
+      round: submission.round,
       result: submission.result,
       submittedAt,
     })

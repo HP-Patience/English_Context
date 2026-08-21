@@ -38,6 +38,12 @@ export async function POST(
   } catch (error) {
     const status = classifyStoryApiError(error)
     if (status === 500) console.error('Failed to save story progress', error)
+    if (status === 403) {
+      return NextResponse.json(
+        { error: 'Story lesson is locked', code: 'STORY_LESSON_LOCKED' },
+        { status },
+      )
+    }
     return NextResponse.json(
       { error: status === 404 ? 'Story lesson not found' : status === 409 ? 'Story progress conflict' : 'Internal server error' },
       { status },

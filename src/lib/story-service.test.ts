@@ -183,6 +183,22 @@ function matchesWhere(row: Record<string, unknown>, where: Record<string, unknow
   })
 }
 
+
+
+function completedProgress(lessonId: string, status = 'first_passed', userId = 'user-1'): ProgressRow {
+  return {
+    id: `progress-${lessonId}-${userId}`,
+    userId,
+    lessonId,
+    currentStep: 4,
+    status,
+    step1CompletedAt: new Date('2026-08-19T00:00:00.000Z'),
+    step2CompletedAt: new Date('2026-08-19T01:00:00.000Z'),
+    step3CompletedAt: new Date('2026-08-19T02:00:00.000Z'),
+    completedAt: new Date('2026-08-19T02:00:00.000Z'),
+  }
+}
+
 function createServicePrisma({
   courses = [{ id: 'course-ready', status: 'ready', readySlot }] as CourseRow[],
   lessons = [makeLesson()],
@@ -599,5 +615,65 @@ describe('saveFirstPassStep', () => {
       code: STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT,
       message: expect.stringMatching(/Cannot complete Step3 before Step2/),
     })
+  })
+})
+
+describe('sequential story lesson unlocking', () => {
+  const lessons = [
+    makeLesson({ id: 'lesson-1', order: 1 }),
+    makeLesson({ id: 'lesson-2', order: 2 }),
+    makeLesson({ id: 'lesson-3', order: 3 }),
+  ]
+
+  it('opens lesson 1 and exposes truthful unlock state without allowing later lessons to skip their predecessor', async () => {
+    const prisma = createServicePrisma({ lessons, progress: [completedProgress('lesson-1', 'reviewing')] })
+
+    const listed = await listStoryLessons({ prisma, userId: 'user-1' })
+
+    expect(listed.map((lesson) => ({ id: lesson.id, isUnlocked: lesson.isUnlocked }))).toEqual([
+      { id: 'lesson-1', isUnlocked: true },
+      { id: 'lesson-2', isUnlocked: true },
+      { id: 'lesson-3', isUnlocked: false },
+    ])
+    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.LESSON_LOCKED,
+    })
+    await expect(listStoryLessonWords({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.LESSON_LOCKED,
+    })
+    await expect(saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-3', step: 1 })).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.LESSON_LOCKED,
+    })
+  })
+
+  it('unlocks the next lesson immediately after Step3 regardless of Step4 status', async () => {
+    const prisma = createServicePrisma({ lessons })
+
+    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-1' })).resolves.toMatchObject({ id: 'lesson-1' })
+    await saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-1', step: 1 })
+    await saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-1', step: 2 })
+    await saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-1', step: 3 })
+
+    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-2' })).resolves.toMatchObject({ id: 'lesson-2' })
+    await expect(saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-2', step: 1 })).resolves.toMatchObject({ completedStep: 1 })
+    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).rejects.toMatchObject({ code: STORY_ERROR_CODES.LESSON_LOCKED })
+  })
+
+  it('keeps an already Step3-completed legacy lesson accessible and ignores progress from another course or user', async () => {
+    const prisma = createServicePrisma({
+      lessons: [
+        ...lessons,
+        makeLesson({ id: 'archived-course-lesson', order: 1, courseId: 'course-archived' }),
+      ],
+      progress: [
+        completedProgress('lesson-3', 'reinforced'),
+        completedProgress('lesson-1', 'first_passed', 'other-user'),
+        completedProgress('archived-course-lesson'),
+      ],
+    })
+
+    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).resolves.toMatchObject({ id: 'lesson-3' })
+    const listed = await listStoryLessons({ prisma, userId: 'user-1' })
+    expect(listed.find((lesson) => lesson.id === 'lesson-2')?.isUnlocked).toBe(false)
   })
 })

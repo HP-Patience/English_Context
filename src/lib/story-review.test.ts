@@ -57,6 +57,10 @@ type StoryReviewAttemptRow = {
   lessonWordId: string
   round: number
   result: string
+  nextReviewAt?: Date | null
+  grade?: number
+  userWordMeaningMastery?: number
+  userWordMastery?: number
   createdAt: Date
 }
 type UserWordRow = {
@@ -126,6 +130,9 @@ type ReviewFakePrisma = {
   }
   storyLessonWord: {
     findFirst(args: { where: { id: string; lesson?: { courseId?: string; status?: string } }; include?: Record<string, unknown> }): Promise<LessonWordRow | null>
+  }
+  userStoryProgress: {
+    updateMany(args: { where: { userId: string; lessonId: string; status?: string | { not?: string } }; data: { status: string } }): Promise<{ count: number }>
   }
   userStoryWordProgress: {
     findUnique(args: { where: { userId_lessonWordId: { userId: string; lessonWordId: string } } }): Promise<UserStoryWordProgressRow | null>
@@ -284,6 +291,22 @@ function createReviewPrisma({
         }
         row.userProgress = state.wordProgress.filter((progress) => progress.lessonWordId === row.id && progress.userId === 'user-1')
         return row
+      },
+    },
+    userStoryProgress: {
+      async updateMany(args: { where: { userId: string; lessonId: string; status?: string | { not?: string } }; data: { status: string } }) {
+        calls.push(`userStoryProgress.updateMany:${JSON.stringify(args.where)}:${args.data.status}`)
+        let count = 0
+        for (const progress of state.lessonProgress) {
+          const statusMatches = typeof args.where.status === 'string'
+            ? progress.status === args.where.status
+            : !args.where.status?.not || progress.status !== args.where.status.not
+          if (progress.userId === args.where.userId && progress.lessonId === args.where.lessonId && statusMatches) {
+            progress.status = args.data.status
+            count += 1
+          }
+        }
+        return { count }
       },
     },
     userStoryWordProgress: {
@@ -450,10 +473,99 @@ describe('getDueStoryWords', () => {
 })
 
 describe('submitStoryReview', () => {
+
+  it('moves the lesson into reviewing on the first successful review and keeps incomplete lessons reviewing', async () => {
+    const prisma = createReviewPrisma()
+
+    await submitStoryReview({
+      prisma,
+      userId: 'user-1',
+      lessonWordId: 'lesson-ready-1-word-1',
+      round: 1,
+      result: 'remembered',
+      now,
+    })
+
+    expect(prisma.state.lessonProgress.find((row) => row.lessonId === 'lesson-ready-1')?.status).toBe('reviewing')
+    expect(prisma.state.wordProgress.find((row) => row.lessonWordId === 'lesson-ready-1-word-2')).toBeUndefined()
+  })
+
+  it('marks a lesson reinforced only when its final target word reaches round 5 and never regresses on retry', async () => {
+    const lessonProgress = { ...step3Progress(), status: 'reviewing' }
+    const prisma = createReviewPrisma({
+      lessonProgress: [lessonProgress],
+      wordProgress: [
+        { id: 'progress-alpha', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', reviewRoundCompleted: 4, nextReviewAt: yesterday, lastResult: 'remembered', lastReviewedAt: yesterday },
+        { id: 'progress-beta', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-2', reviewRoundCompleted: 5, nextReviewAt: null, lastResult: 'remembered', lastReviewedAt: yesterday },
+      ],
+    })
+
+    const first = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 5, result: 'remembered', now })
+    const snapshot = clone(prisma.state)
+    const retry = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 5, result: 'remembered', now })
+
+    expect(first).toEqual(retry)
+    expect(prisma.state.lessonProgress[0]?.status).toBe('reinforced')
+    expect(prisma.state.attempts).toHaveLength(1)
+    expect(prisma.state.wordProgress).toEqual(snapshot.wordProgress)
+    expect(prisma.state.userWordMeanings).toEqual(snapshot.userWordMeanings)
+    expect(prisma.state.userWords).toEqual(snapshot.userWords)
+  })
+
+  it('replays the immutable submitted round after a later round becomes due without applying that later round', async () => {
+    const roundOneResponse = {
+      nextReviewAt: new Date('2026-08-20T12:00:00.000Z'),
+      grade: 2,
+      userWordMeaningMastery: 57,
+      userWordMastery: 57,
+    }
+    const prisma = createReviewPrisma({
+      wordProgress: [
+        { id: 'progress-round1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', reviewRoundCompleted: 1, nextReviewAt: yesterday, lastResult: 'vague', lastReviewedAt: yesterday },
+      ],
+      attempts: [
+        { id: 'attempt-1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', createdAt: yesterday, ...roundOneResponse },
+      ],
+    })
+
+    const replay = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', now })
+
+    expect(replay).toEqual({
+      lessonWordId: 'lesson-ready-1-word-1',
+      round: 1,
+      roundCompleted: 1,
+      result: 'vague',
+      ...roundOneResponse,
+    })
+    expect(prisma.state.attempts.map((attempt) => attempt.round)).toEqual([1])
+    expect(prisma.state.wordProgress[0]?.reviewRoundCompleted).toBe(1)
+  })
+
+  it('rejects conflicting delayed replays and future or skipped submitted rounds without mutation', async () => {
+    const prisma = createReviewPrisma({
+      wordProgress: [
+        { id: 'progress-round1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', reviewRoundCompleted: 1, nextReviewAt: yesterday, lastResult: 'vague', lastReviewedAt: yesterday },
+      ],
+      attempts: [
+        { id: 'attempt-1', userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', createdAt: yesterday, nextReviewAt: tomorrow, grade: 2, userWordMeaningMastery: 57, userWordMastery: 57 },
+      ],
+    })
+    const before = clone(prisma.state)
+
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'forgotten', now })).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT,
+    })
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 3, result: 'remembered', now })).rejects.toMatchObject({
+      code: STORY_ERROR_CODES.REVIEW_ROUND_MISMATCH,
+    })
+
+    expect(prisma.state).toEqual(before)
+  })
+
   it('creates round 1 for a first-passed lesson word without requiring all five rounds today', async () => {
     const prisma = createReviewPrisma()
 
-    const result = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now })
+    const result = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'remembered', now })
 
     expect(result).toMatchObject({ round: 1, roundCompleted: 1, grade: 4, userWordMeaningMastery: 63, userWordMastery: 63 })
     expect(result.nextReviewAt?.toISOString()).toBe('2026-08-22T10:00:00.000Z')
@@ -475,8 +587,8 @@ describe('submitStoryReview', () => {
       ],
     })
 
-    const round5 = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now })
-    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now })).resolves.toMatchObject({ round: 5, roundCompleted: 5 })
+    const round5 = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 5, result: 'remembered', now })
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 5, result: 'remembered', now })).resolves.toMatchObject({ round: 5, roundCompleted: 5 })
 
     expect(round5.round).toBe(5)
     expect(round5.roundCompleted).toBe(5)
@@ -487,8 +599,8 @@ describe('submitStoryReview', () => {
   it('treats duplicate same-round retries as idempotent instead of mutating progress twice', async () => {
     const prisma = createReviewPrisma()
 
-    const first = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'vague', now })
-    const retry = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'vague', now })
+    const first = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', now })
+    const retry = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', now })
 
     expect(retry).toMatchObject({ round: first.round, roundCompleted: first.roundCompleted, grade: 2 })
     expect(prisma.state.attempts).toHaveLength(1)
@@ -498,10 +610,10 @@ describe('submitStoryReview', () => {
   it('uses the immutable-round conflict code for a duplicate retry with a different result', async () => {
     const prisma = createReviewPrisma()
 
-    await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'vague', now })
+    await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', now })
 
     await expect(
-      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'forgotten', now }),
+      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'forgotten', now }),
     ).rejects.toMatchObject({ code: STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT })
     expect(prisma.state.attempts).toHaveLength(1)
   })
@@ -545,7 +657,7 @@ describe('submitStoryReview', () => {
       },
     })
 
-    const result = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'vague', now })
+    const result = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', now })
 
     expect(result).toMatchObject({ round: 1, roundCompleted: 1, grade: 2, userWordMeaningMastery: 57, userWordMastery: 57 })
     expect(result.nextReviewAt?.toISOString()).toBe(tomorrow.toISOString())
@@ -564,7 +676,7 @@ describe('submitStoryReview', () => {
     })
 
     await expect(
-      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now }),
+      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'remembered', now }),
     ).rejects.toMatchObject({ code: STORY_ERROR_CODES.REVIEW_RETRY_EXHAUSTED })
     expect(conflictCount).toBe(3)
   })
@@ -583,7 +695,7 @@ describe('submitStoryReview', () => {
     })
 
     await expect(
-      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now }),
+      submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'remembered', now }),
     ).rejects.toBe(infrastructureError)
     expect(attemptCount).toBe(1)
   })
@@ -598,11 +710,11 @@ describe('submitStoryReview', () => {
       lessonProgress: [step3Progress('lesson-ready-1'), step3Progress('lesson-archived-course')],
     })
 
-    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-archived-course-word-1', result: 'remembered', now })).rejects.toMatchObject({
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-archived-course-word-1', round: 1, result: 'remembered', now })).rejects.toMatchObject({
       code: STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND,
       message: expect.stringMatching(/not in the current ready story course/),
     })
-    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-unpassed-word-1', result: 'remembered', now })).rejects.toMatchObject({
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-unpassed-word-1', round: 1, result: 'remembered', now })).rejects.toMatchObject({
       code: STORY_ERROR_CODES.LESSON_WORD_NOT_REVIEWABLE,
       message: expect.stringMatching(/Step3/),
     })
@@ -618,7 +730,7 @@ describe('submitStoryReview', () => {
       ],
     })
 
-    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'remembered', now })).rejects.toMatchObject({
+    await expect(submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'remembered', now })).rejects.toMatchObject({
       code: STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT,
       message: expect.stringMatching(/different result/),
     })
@@ -643,7 +755,7 @@ describe('submitStoryReview', () => {
       ],
     })
 
-    const result = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', result: 'forgotten', now })
+    const result = await submitStoryReview({ prisma, userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 3, result: 'forgotten', now })
 
     expect(result).toMatchObject({ round: 3, roundCompleted: 3, grade: 0 })
     expect(prisma.state.userWordMeanings.find((row) => row.id === 'uwm-alpha')).toMatchObject({ interval: 1, mastery: 57 })

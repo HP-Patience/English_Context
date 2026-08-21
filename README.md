@@ -62,6 +62,8 @@ node scripts/import-new.js
 node scripts/generate-meanings.js
 ```
 
+> **破坏性重置警告：** `node scripts/import-new.js` 会先在单个数据库事务中清空现有词汇数据。该重置也会删除所有已发布/草稿故事课程、故事课与 lesson-word 关联，以及全部用户故事首次学习进度、Step4 词进度和复习尝试历史。只能对明确允许完全重建的本地或专用数据库运行；不要对生产数据库运行。
+
 ## 故事学习运行时
 
 ### 页面与学习流程

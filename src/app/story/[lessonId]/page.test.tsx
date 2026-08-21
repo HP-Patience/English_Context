@@ -61,8 +61,8 @@ beforeEach(() => {
   mocks.getLocalUserId.mockResolvedValue('local-user')
   mocks.getStoryLesson.mockResolvedValue(readyLesson)
   mocks.listStoryLessons.mockResolvedValue([
-    { id: 'lesson-1', order: 1, completedStep: 0 },
-    { id: 'lesson-2', order: 2, completedStep: 0 },
+    { id: 'lesson-1', order: 1, completedStep: 0, isUnlocked: true },
+    { id: 'lesson-2', order: 2, completedStep: 0, isUnlocked: true },
   ])
 })
 
@@ -87,6 +87,17 @@ describe('/story/[lessonId] server page', () => {
     })
     expect(captured.lesson.content).not.toHaveProperty('sourceSummary')
     expect(captured.lesson.content).not.toHaveProperty('continuityNotes')
+  })
+
+  it('does not offer a locked later lesson as the next navigation target', async () => {
+    mocks.listStoryLessons.mockResolvedValueOnce([
+      { id: 'lesson-1', order: 1, completedStep: 3, isUnlocked: true },
+      { id: 'lesson-2', order: 2, completedStep: 0, isUnlocked: false },
+    ])
+
+    render(await StoryLessonPage({ params: Promise.resolve({ lessonId: 'lesson-1' }) }))
+
+    expect(mocks.shellProps[0]).toMatchObject({ nextLessonId: null })
   })
 
   it('rejects malformed dynamic params before querying lesson data', async () => {

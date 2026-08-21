@@ -70,6 +70,10 @@ type StoryReviewAttemptRow = {
   lessonWordId: string
   round: number
   result: string
+  nextReviewAt?: Date | string | null
+  grade?: number | null
+  userWordMeaningMastery?: number | null
+  userWordMastery?: number | null
   createdAt: Date | string
 }
 
@@ -139,6 +143,9 @@ type InternalPrismaClient = {
   }
   storyLessonWord: {
     findFirst(args: unknown): Promise<unknown>
+  }
+  userStoryProgress: {
+    updateMany(args: unknown): Promise<unknown>
   }
   userStoryWordProgress: {
     findUnique(args: unknown): Promise<unknown>
@@ -215,17 +222,25 @@ export async function submitStoryReview({
   prisma,
   userId,
   lessonWordId,
+  round,
   result,
   now = new Date(),
-}: StoryReviewParams & { lessonWordId: string; result: StoryReviewSubmissionResult }): Promise<StoryReviewResult> {
+}: StoryReviewParams & { lessonWordId: string; round: number; result: StoryReviewSubmissionResult }): Promise<StoryReviewResult> {
   const client = asPrisma(prisma)
   const grade = mapStoryResultToGrade(result)
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await submitStoryReviewOnce({ client, userId, lessonWordId, result, grade, now })
+      return await submitStoryReviewOnce({ client, userId, lessonWordId, submittedRound: round, result, grade, now })
     } catch (error) {
       if (!isRetryableStoryReviewConflict(error)) throw error
-      const committed = await reloadCommittedStoryReviewResult({ client, userId, lessonWordId, result, grade })
+      const committed = await reloadCommittedStoryReviewResult({
+        client,
+        userId,
+        lessonWordId,
+        submittedRound: round,
+        result,
+        grade,
+      })
       if (committed) return committed
     }
   }
@@ -240,6 +255,7 @@ async function submitStoryReviewOnce({
   client,
   userId,
   lessonWordId,
+  submittedRound,
   result,
   grade,
   now,
@@ -247,6 +263,7 @@ async function submitStoryReviewOnce({
   client: InternalPrismaClient
   userId: string
   lessonWordId: string
+  submittedRound: number
   result: StoryReviewSubmissionResult
   grade: 0 | 2 | 4
   now: Date
@@ -261,35 +278,38 @@ async function submitStoryReviewOnce({
     }
 
     const lessonWord = await findReadyLessonWordForReview(tx, userId, lessonWordId, course.id)
+    const existingAttempt = await findSubmittedRoundAttempt(tx, userId, lessonWordId, submittedRound)
+    if (existingAttempt) {
+      return immutableAttemptResult({
+        tx,
+        userId,
+        lessonWord,
+        attempt: existingAttempt,
+        submittedResult: result,
+        fallbackGrade: grade,
+      })
+    }
 
     const currentProgress = asWordProgressRowOrNull(await tx.userStoryWordProgress.findUnique({
       where: { userId_lessonWordId: { userId, lessonWordId } },
     })) ?? firstWordProgress(lessonWord, userId)
-
-    const isDue = isDueProgress(currentProgress, now)
-    if (!isDue) {
-      const duplicate = await duplicateCurrentRound(tx, userId, lessonWordId, currentProgress, result)
-      if (duplicate) {
-        return duplicateReviewResult({
-          tx,
-          userId,
-          lessonWord,
-          progress: currentProgress,
-          result,
-          grade,
-        })
-      }
+    const expectedRound = (currentProgress?.reviewRoundCompleted ?? 0) + 1
+    if (!isReviewRound(submittedRound) || submittedRound !== expectedRound) {
       throw new StoryDomainError(
-        STORY_ERROR_CODES.REVIEW_NOT_DUE,
-        `Story lesson word is not due for review: ${lessonWordId}`,
+        STORY_ERROR_CODES.REVIEW_ROUND_MISMATCH,
+        `Story review round ${submittedRound} does not match the next round ${expectedRound}: ${lessonWordId}`,
       )
     }
-
-    const round = (currentProgress?.reviewRoundCompleted ?? 0) + 1
-    if (round > MAX_STORY_REVIEW_ROUND) {
+    if (expectedRound > MAX_STORY_REVIEW_ROUND) {
       throw new StoryDomainError(
         STORY_ERROR_CODES.REVIEW_ROUNDS_COMPLETE,
         `Story lesson word already completed all ${MAX_STORY_REVIEW_ROUND} review rounds: ${lessonWordId}`,
+      )
+    }
+    if (!isDueProgress(currentProgress, now)) {
+      throw new StoryDomainError(
+        STORY_ERROR_CODES.REVIEW_NOT_DUE,
+        `Story lesson word is not due for review: ${lessonWordId}`,
       )
     }
 
@@ -309,25 +329,49 @@ async function submitStoryReviewOnce({
     const previousMeaning = await findOrCreateUserWordMeaning(tx, userWord.id, lessonWord.meaningId, now)
     const sm2 = calculateSM2(previousMeaning.easeFactor, previousMeaning.interval, grade, now)
     const userWordMeaningMastery = masteryFromEaseFactor(sm2.easeFactor)
+    const currentMeanings = (await tx.userWordMeaning.findMany({
+      where: { userWordId: userWord.id },
+    })).map(asUserWordMeaningRow)
+    const updatedMeaning = {
+      ...previousMeaning,
+      easeFactor: sm2.easeFactor,
+      interval: sm2.interval,
+      nextReviewAt: sm2.nextReviewAt,
+      mastery: userWordMeaningMastery,
+      lastRatedAt: now,
+    }
+    const allMeanings = currentMeanings.some((meaning) => meaning.id === previousMeaning.id)
+      ? currentMeanings.map((meaning) => meaning.id === previousMeaning.id ? updatedMeaning : meaning)
+      : [updatedMeaning, ...currentMeanings]
+    const userWordMastery = averageMastery(allMeanings)
+    const nextReviewAt = submittedRound >= MAX_STORY_REVIEW_ROUND ? null : sm2.nextReviewAt
 
     await tx.storyReviewAttempt.create({
-      data: { userId, lessonWordId, round, result, createdAt: now },
+      data: {
+        userId,
+        lessonWordId,
+        round: submittedRound,
+        result,
+        nextReviewAt,
+        grade,
+        userWordMeaningMastery,
+        userWordMastery,
+        createdAt: now,
+      },
     })
 
-    const roundCompleted = round
-    const nextReviewAt = roundCompleted >= MAX_STORY_REVIEW_ROUND ? null : sm2.nextReviewAt
     await tx.userStoryWordProgress.upsert({
       where: { userId_lessonWordId: { userId, lessonWordId } },
       create: {
         userId,
         lessonWordId,
-        reviewRoundCompleted: roundCompleted,
+        reviewRoundCompleted: submittedRound,
         nextReviewAt,
         lastResult: result,
         lastReviewedAt: now,
       },
       update: {
-        reviewRoundCompleted: roundCompleted,
+        reviewRoundCompleted: submittedRound,
         nextReviewAt,
         lastResult: result,
         lastReviewedAt: now,
@@ -345,14 +389,6 @@ async function submitStoryReviewOnce({
       },
     })
 
-    const refreshedMeanings = (await tx.userWordMeaning.findMany({
-      where: { userWordId: userWord.id },
-    })).map(asUserWordMeaningRow)
-    const allMeanings = refreshedMeanings.some((meaning) => meaning.id === previousMeaning.id)
-      ? refreshedMeanings
-      : [{ ...previousMeaning, easeFactor: sm2.easeFactor, interval: sm2.interval, nextReviewAt: sm2.nextReviewAt, mastery: userWordMeaningMastery, lastRatedAt: now }, ...refreshedMeanings]
-    const userWordMastery = averageMastery(allMeanings)
-
     await tx.userWord.update({
       where: { id: userWord.id },
       data: {
@@ -362,10 +398,12 @@ async function submitStoryReviewOnce({
       },
     })
 
+    await updateLessonReviewStatus(tx, userId, lessonWord.lessonId, course.id)
+
     return {
       lessonWordId,
-      round,
-      roundCompleted,
+      round: submittedRound,
+      roundCompleted: submittedRound,
       result,
       nextReviewAt,
       grade,
@@ -379,12 +417,14 @@ async function reloadCommittedStoryReviewResult({
   client,
   userId,
   lessonWordId,
+  submittedRound,
   result,
   grade,
 }: {
   client: InternalPrismaClient
   userId: string
   lessonWordId: string
+  submittedRound: number
   result: StoryReviewSubmissionResult
   grade: 0 | 2 | 4
 }): Promise<StoryReviewResult | null> {
@@ -397,23 +437,164 @@ async function reloadCommittedStoryReviewResult({
   }
 
   const lessonWord = await findReadyLessonWordForReview(client, userId, lessonWordId, course.id)
-  const progress = asWordProgressRowOrNull(await client.userStoryWordProgress.findUnique({
-    where: { userId_lessonWordId: { userId, lessonWordId } },
-  })) ?? firstWordProgress(lessonWord, userId)
-  if (!progress || progress.reviewRoundCompleted < 1) return null
-
-  const attempt = asStoryReviewAttemptRowOrNull(await client.storyReviewAttempt.findUnique({
-    where: { userId_lessonWordId_round: { userId, lessonWordId, round: progress.reviewRoundCompleted } },
-  }))
+  const attempt = await findSubmittedRoundAttempt(client, userId, lessonWordId, submittedRound)
   if (!attempt) return null
-  if (attempt.result !== result) {
+  return immutableAttemptResult({
+    tx: client,
+    userId,
+    lessonWord,
+    attempt,
+    submittedResult: result,
+    fallbackGrade: grade,
+  })
+}
+
+async function findSubmittedRoundAttempt(
+  client: InternalPrismaClient,
+  userId: string,
+  lessonWordId: string,
+  submittedRound: number,
+): Promise<StoryReviewAttemptRow | null> {
+  return asStoryReviewAttemptRowOrNull(await client.storyReviewAttempt.findUnique({
+    where: { userId_lessonWordId_round: { userId, lessonWordId, round: submittedRound } },
+  }))
+}
+
+async function immutableAttemptResult({
+  tx,
+  userId,
+  lessonWord,
+  attempt,
+  submittedResult,
+  fallbackGrade,
+}: {
+  tx: InternalPrismaClient
+  userId: string
+  lessonWord: LessonWordRow
+  attempt: StoryReviewAttemptRow
+  submittedResult: StoryReviewSubmissionResult
+  fallbackGrade: 0 | 2 | 4
+}): Promise<StoryReviewResult> {
+  if (attempt.result !== submittedResult) {
     throw new StoryDomainError(
       STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT,
       `Story review round ${attempt.round} was already committed with a different result`,
     )
   }
+  if (
+    isReviewGrade(attempt.grade)
+    && typeof attempt.userWordMeaningMastery === 'number'
+    && typeof attempt.userWordMastery === 'number'
+  ) {
+    return {
+      lessonWordId: lessonWord.id,
+      round: attempt.round,
+      roundCompleted: attempt.round,
+      result: submittedResult,
+      nextReviewAt: toDateOrNull(attempt.nextReviewAt ?? null),
+      grade: attempt.grade,
+      userWordMeaningMastery: attempt.userWordMeaningMastery,
+      userWordMastery: attempt.userWordMastery,
+    }
+  }
 
-  return duplicateReviewResult({ tx: client, userId, lessonWord, progress, result, grade })
+  const progress = asWordProgressRowOrNull(await tx.userStoryWordProgress.findUnique({
+    where: { userId_lessonWordId: { userId, lessonWordId: lessonWord.id } },
+  })) ?? firstWordProgress(lessonWord, userId)
+  if (!progress || progress.reviewRoundCompleted !== attempt.round) {
+    throw new StoryDomainError(
+      STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT,
+      `Story review round ${attempt.round} predates immutable response snapshots`,
+    )
+  }
+  return legacyCurrentAttemptResult({
+    tx,
+    userId,
+    lessonWord,
+    progress,
+    result: submittedResult,
+    grade: fallbackGrade,
+  })
+}
+
+async function legacyCurrentAttemptResult({
+  tx,
+  userId,
+  lessonWord,
+  progress,
+  result,
+  grade,
+}: {
+  tx: InternalPrismaClient
+  userId: string
+  lessonWord: LessonWordRow
+  progress: UserStoryWordProgressRow
+  result: StoryReviewSubmissionResult
+  grade: 0 | 2 | 4
+}): Promise<StoryReviewResult> {
+  const userWord = asUserWordRow(await tx.userWord.upsert({
+    where: { userId_wordId: { userId, wordId: lessonWord.wordId } },
+    create: {
+      userId,
+      wordId: lessonWord.wordId,
+      status: 'reviewing',
+      mastery: 0,
+      bookmarked: false,
+      learnRound: 0,
+      lastRatedAt: null,
+    },
+    update: {},
+  }))
+  const meaning = await findOrCreateUserWordMeaning(
+    tx,
+    userWord.id,
+    lessonWord.meaningId,
+    new Date(progress.lastReviewedAt ?? new Date()),
+  )
+  return {
+    lessonWordId: lessonWord.id,
+    round: progress.reviewRoundCompleted,
+    roundCompleted: progress.reviewRoundCompleted,
+    result,
+    nextReviewAt: progress.reviewRoundCompleted >= MAX_STORY_REVIEW_ROUND
+      ? null
+      : toDateOrNull(progress.nextReviewAt),
+    grade,
+    userWordMeaningMastery: meaning.mastery,
+    userWordMastery: userWord.mastery,
+  }
+}
+
+async function updateLessonReviewStatus(
+  tx: InternalPrismaClient,
+  userId: string,
+  lessonId: string,
+  readyCourseId: string,
+): Promise<void> {
+  await tx.userStoryProgress.updateMany({
+    where: { userId, lessonId, status: 'first_passed' },
+    data: { status: 'reviewing' },
+  })
+
+  const lessons = (await tx.storyLesson.findMany({
+    where: { id: lessonId, courseId: readyCourseId, status: READY_STATUS },
+    include: {
+      words: {
+        include: { userProgress: { where: { userId }, take: 1 } },
+      },
+    },
+  })).map(asLessonRow)
+  const lesson = lessons[0]
+  if (!lesson || orderedLessonWords(lesson).length === 0) return
+  const allRoundsComplete = orderedLessonWords(lesson).every((word) => (
+    firstWordProgress(word, userId)?.reviewRoundCompleted === MAX_STORY_REVIEW_ROUND
+  ))
+  if (!allRoundsComplete) return
+
+  await tx.userStoryProgress.updateMany({
+    where: { userId, lessonId, status: { not: 'reinforced' } },
+    data: { status: 'reinforced' },
+  })
 }
 
 async function findReadyLessonWordForReview(
@@ -456,6 +637,14 @@ function isRetryableStoryReviewConflict(error: unknown): boolean {
     && (error.code === 'P2002' || error.code === 'P2034')
 }
 
+
+function isReviewRound(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= MAX_STORY_REVIEW_ROUND
+}
+
+function isReviewGrade(value: number | null | undefined): value is 0 | 2 | 4 {
+  return value === 0 || value === 2 || value === 4
+}
 
 function compareDueStoryWords(left: DueStoryWord, right: DueStoryWord): number {
   return (left.lessonOrder - right.lessonOrder)
@@ -515,70 +704,6 @@ function toDueStoryWord(lesson: LessonRow, lessonWord: LessonWordRow, progress: 
     dueRound: roundCompleted + 1,
     roundCompleted,
     nextReviewAt: toIso(progress?.nextReviewAt ?? null),
-  }
-}
-
-async function duplicateCurrentRound(
-  tx: InternalPrismaClient,
-  userId: string,
-  lessonWordId: string,
-  progress: UserStoryWordProgressRow | null,
-  result: StoryReviewSubmissionResult,
-): Promise<StoryReviewAttemptRow | null> {
-  const completedRound = progress?.reviewRoundCompleted ?? 0
-  if (completedRound < 1) return null
-  const attempt = asStoryReviewAttemptRowOrNull(await tx.storyReviewAttempt.findUnique({
-    where: { userId_lessonWordId_round: { userId, lessonWordId, round: completedRound } },
-  }))
-  if (!attempt) return null
-  if (attempt.result !== result) {
-    throw new StoryDomainError(
-      STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT,
-      `Story review round ${attempt.round} was already committed with a different result`,
-    )
-  }
-  return attempt
-}
-
-async function duplicateReviewResult({
-  tx,
-  userId,
-  lessonWord,
-  progress,
-  result,
-  grade,
-}: {
-  tx: InternalPrismaClient
-  userId: string
-  lessonWord: LessonWordRow
-  progress: UserStoryWordProgressRow | null
-  result: StoryReviewSubmissionResult
-  grade: 0 | 2 | 4
-}): Promise<StoryReviewResult> {
-  if (!progress) throw new Error('Cannot build a duplicate story review result without progress')
-  const userWord = asUserWordRow(await tx.userWord.upsert({
-    where: { userId_wordId: { userId, wordId: lessonWord.wordId } },
-    create: {
-      userId,
-      wordId: lessonWord.wordId,
-      status: 'reviewing',
-      mastery: 0,
-      bookmarked: false,
-      learnRound: 0,
-      lastRatedAt: null,
-    },
-    update: {},
-  }))
-  const meaning = await findOrCreateUserWordMeaning(tx, userWord.id, lessonWord.meaningId, new Date(progress.lastReviewedAt ?? new Date()))
-  return {
-    lessonWordId: lessonWord.id,
-    round: progress.reviewRoundCompleted,
-    roundCompleted: progress.reviewRoundCompleted,
-    result,
-    nextReviewAt: progress.reviewRoundCompleted >= MAX_STORY_REVIEW_ROUND ? null : toDateOrNull(progress.nextReviewAt),
-    grade,
-    userWordMeaningMastery: meaning.mastery,
-    userWordMastery: userWord.mastery,
   }
 }
 

@@ -93,18 +93,24 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
                       </p>
                     </div>
 
-                    <Link
-                      href={`/story/${lesson.id}`}
-                      aria-current={isCurrent ? 'step' : undefined}
-                      className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-stone-950 ${
-                        isCurrent
-                          ? 'bg-red-900 text-white shadow-sm hover:bg-red-800 dark:bg-red-800 dark:hover:bg-red-700'
-                          : 'border border-stone-300 bg-stone-50 text-stone-800 hover:border-stone-400 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-200 dark:hover:border-stone-600 dark:hover:bg-stone-800'
-                      }`}
-                    >
-                      {actionLabel(lesson, isCurrent)}
-                      <span aria-hidden="true" className="ml-2">→</span>
-                    </Link>
+                    {lesson.isUnlocked ? (
+                      <Link
+                        href={`/story/${lesson.id}`}
+                        aria-current={isCurrent ? 'step' : undefined}
+                        className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-stone-950 ${
+                          isCurrent
+                            ? 'bg-red-900 text-white shadow-sm hover:bg-red-800 dark:bg-red-800 dark:hover:bg-red-700'
+                            : 'border border-stone-300 bg-stone-50 text-stone-800 hover:border-stone-400 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-200 dark:hover:border-stone-600 dark:hover:bg-stone-800'
+                        }`}
+                      >
+                        {actionLabel(lesson, isCurrent)}
+                        <span aria-hidden="true" className="ml-2">→</span>
+                      </Link>
+                    ) : (
+                      <span className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-stone-100 px-4 py-2.5 text-sm font-semibold text-stone-500 dark:border-stone-800 dark:bg-stone-950 dark:text-stone-500">
+                        完成上一篇第三步后解锁
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-100 pt-3 text-xs dark:border-stone-800">

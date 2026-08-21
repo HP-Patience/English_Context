@@ -467,14 +467,14 @@ describe('story runtime smoke', () => {
 
     const invalidIdentifierResponse = await postReview(jsonRequest(
       'http://runtime.test/api/story/review',
-      { lessonWordId: 'fixture-lesson-word-1', result: 'remember' },
+      { lessonWordId: 'fixture-lesson-word-1', round: 1, result: 'remember' },
     ))
     expect(invalidIdentifierResponse.status).toBe(400)
 
     const reviewStartedAt = Date.now()
     const reviewResponse = await postReview(jsonRequest(
       'http://runtime.test/api/story/review',
-      { lessonWordId: 'fixture-lesson-word-1', result: 'remembered' },
+      { lessonWordId: 'fixture-lesson-word-1', round: 1, result: 'remembered' },
     ))
     expect(reviewResponse.status).toBe(200)
     const submittedReview = (await responseJson(reviewResponse)).review
@@ -492,7 +492,7 @@ describe('story runtime smoke', () => {
       { params: Promise.resolve({ id: 'fixture-lesson-1' }) },
     )
     const reloadedDetail = (await responseJson(reloadedDetailResponse)).lesson
-    expect(reloadedDetail.progress).toMatchObject({ completedStep: 3, currentStep: 4, status: 'first_passed' })
+    expect(reloadedDetail.progress).toMatchObject({ completedStep: 3, currentStep: 4, status: 'reviewing' })
     expect(reloadedDetail.reviewState).toEqual({
       words: [
         { lessonWordId: 'fixture-lesson-word-1', roundCompleted: 1, nextReviewAt: submittedReview.nextReviewAt },

@@ -29,7 +29,7 @@ export default async function StoryLessonPage({ params }: StoryLessonPageProps) 
   const lessons = await listStoryLessons({ prisma, userId })
   const nextLessonId = [...lessons]
     .sort((left, right) => left.order - right.order)
-    .find((candidate) => candidate.order > lesson.order)?.id ?? null
+    .find((candidate) => candidate.order > lesson.order && candidate.isUnlocked)?.id ?? null
 
   const lessonView = toPublicStoryLessonDetail(lesson)
 

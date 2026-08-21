@@ -26,6 +26,7 @@ function lesson(overrides: Partial<CourseFixtureLesson>): CourseFixtureLesson {
     completedStep: 0,
     currentStep: 1,
     dueReviewCount: 0,
+    isUnlocked: true,
     publicationStatus: 'ready',
     ...overrides,
   }
@@ -76,6 +77,23 @@ describe('StoryCourseList', () => {
     expect(within(currentLesson).getByText('2 个待强化')).toBeInTheDocument()
     expect(within(currentLesson).getByRole('link', { name: '继续第 2 步' })).toHaveAttribute('href', '/story/lesson-2')
     expect(screen.getByRole('link', { name: '查看第 1 篇' })).toHaveAttribute('href', '/story/lesson-1')
+  })
+
+  it('renders locked lessons as disabled non-links while preserving the current unlocked continuation', () => {
+    render(
+      <StoryCourseList
+        currentLessonId="lesson-1"
+        lessons={[
+          lesson({ id: 'lesson-1', order: 1, isUnlocked: true }),
+          lesson({ id: 'lesson-2', order: 2, title: '尚未解锁', isUnlocked: false }),
+        ]}
+      />,
+    )
+
+    expect(screen.getByRole('link', { name: '继续第 1 步' })).toHaveAttribute('href', '/story/lesson-1')
+    const locked = screen.getByRole('article', { name: '第 2 篇：尚未解锁' })
+    expect(within(locked).queryByRole('link')).not.toBeInTheDocument()
+    expect(within(locked).getByText('完成上一篇第三步后解锁')).toBeInTheDocument()
   })
 
   it('shows an accessible empty state when no ready course is published', () => {

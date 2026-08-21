@@ -183,9 +183,13 @@ model StoryReviewAttempt {
   id           String   @id @default(cuid())
   userId       String
   lessonWordId String
-  round        Int      // 1-5
-  result       String   // remembered | vague | forgotten
-  createdAt    DateTime @default(now())
+  round                  Int       // 1-5
+  result                 String    // remembered | vague | forgotten
+  nextReviewAt           DateTime?
+  grade                  Int?
+  userWordMeaningMastery Float?
+  userWordMastery        Float?
+  createdAt              DateTime  @default(now())
 
   user       User            @relation(fields: [userId], references: [id])
   lessonWord StoryLessonWord @relation(fields: [lessonWordId], references: [id])

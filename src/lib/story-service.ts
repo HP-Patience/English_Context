@@ -40,6 +40,7 @@ export type StoryLessonListItem = {
   completedStep: 0 | StoryFirstPassStep
   currentStep: StoryLessonStep
   dueReviewCount: number
+  isUnlocked: boolean
 }
 
 export type StoryLessonWordDto = {
@@ -184,6 +185,7 @@ export async function listStoryLessons({ prisma, userId, now = new Date() }: Sto
     include: lessonInclude(userId),
   })).map(asLessonRow)
 
+  const unlockStates = storyLessonUnlockStates(lessons, userId)
   return lessons.map((lesson) => {
     const progress = progressDtoFromRow(firstProgress(lesson), userId, lesson.id)
     return {
@@ -197,6 +199,7 @@ export async function listStoryLessons({ prisma, userId, now = new Date() }: Sto
       completedStep: progress.completedStep,
       currentStep: progress.currentStep,
       dueReviewCount: countDueReviews(lesson, progress, userId, now),
+      isUnlocked: unlockStates.get(lesson.id) ?? false,
     }
   })
 }
@@ -211,6 +214,9 @@ export async function getStoryLesson({
   const course = await findReadyCourse(client)
   if (!course) return null
 
+  const unlockState = await readyLessonUnlockState(client, course.id, userId, lessonId)
+  if (unlockState === null) return null
+  if (!unlockState) throwLessonLocked(lessonId)
   const row = await client.storyLesson.findFirst({
     where: { id: lessonId, courseId: course.id, status: READY_STATUS },
     include: lessonInclude(userId, true),
@@ -303,6 +309,14 @@ export async function saveFirstPassStep({
       )
     }
 
+    const unlockState = await readyLessonUnlockState(tx, course.id, userId, lessonId)
+    if (unlockState === null) {
+      throw new StoryDomainError(
+        STORY_ERROR_CODES.LESSON_NOT_FOUND,
+        `Story lesson is not ready or does not exist: ${lessonId}`,
+      )
+    }
+    if (!unlockState) throwLessonLocked(lessonId)
     const lesson = await tx.storyLesson.findFirst({
       where: { id: lessonId, courseId: course.id, status: READY_STATUS },
     })
@@ -334,6 +348,47 @@ export async function saveFirstPassStep({
 
     return progressDtoFromRow(asProgressRow(saved), userId, lessonId)
   }, { isolationLevel: 'Serializable' })
+}
+
+function storyLessonUnlockStates(lessons: LessonRow[], userId: string): Map<string, boolean> {
+  const ordered = [...lessons].sort((left, right) => left.order - right.order)
+  const states = new Map<string, boolean>()
+  for (let index = 0; index < ordered.length; index += 1) {
+    const lesson = ordered[index]
+    const progress = progressDtoFromRow(firstProgress(lesson), userId, lesson.id)
+    const previous = index > 0 ? ordered[index - 1] : null
+    const previousProgress = previous
+      ? progressDtoFromRow(firstProgress(previous), userId, previous.id)
+      : null
+    states.set(
+      lesson.id,
+      progress.completedStep >= 3 || lesson.order === 1 || previousProgress?.completedStep === 3,
+    )
+  }
+  return states
+}
+
+async function readyLessonUnlockState(
+  prisma: InternalPrismaClient,
+  readyCourseId: string,
+  userId: string,
+  lessonId: string,
+): Promise<boolean | null> {
+  const lessons = (await prisma.storyLesson.findMany({
+    where: { courseId: readyCourseId, status: READY_STATUS },
+    orderBy: { order: 'asc' },
+    include: { userProgress: { where: { userId }, take: 1 } },
+  })).map(asLessonRow)
+  const target = lessons.find((lesson) => lesson.id === lessonId)
+  if (!target) return null
+  return storyLessonUnlockStates(lessons, userId).get(lessonId) ?? false
+}
+
+function throwLessonLocked(lessonId: string): never {
+  throw new StoryDomainError(
+    STORY_ERROR_CODES.LESSON_LOCKED,
+    `Story lesson is locked: ${lessonId}`,
+  )
 }
 
 async function findReadyCourse(prisma: InternalPrismaClient): Promise<ReadyCourseRow | null> {

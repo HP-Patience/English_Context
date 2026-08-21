@@ -54,6 +54,7 @@ const lessonOne = {
   completedStep: 3,
   currentStep: 4,
   dueReviewCount: 2,
+  isUnlocked: true,
 }
 
 const lessonTwo = {
@@ -67,6 +68,7 @@ const lessonTwo = {
   completedStep: 1,
   currentStep: 2,
   dueReviewCount: 1,
+  isUnlocked: true,
 }
 
 const progress = {
@@ -190,8 +192,12 @@ describe('story API payload parsers', () => {
   it('accepts only first-pass steps and the exact review result identifiers', () => {
     expect(parseStoryProgressPayload({ step: 3 })).toEqual({ step: 3 })
     expect(parseStoryProgressPayload({ step: 4 })).toBeNull()
-    expect(parseStoryReviewPayload({ lessonWordId: ' lesson-word-1 ', result: 'vague' })).toEqual({ lessonWordId: 'lesson-word-1', result: 'vague' })
-    expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', result: 'fuzzy' })).toBeNull()
+    expect(parseStoryReviewPayload({ lessonWordId: ' lesson-word-1 ', round: 2, result: 'vague' })).toEqual({ lessonWordId: 'lesson-word-1', round: 2, result: 'vague' })
+    expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', round: 2, result: 'fuzzy' })).toBeNull()
+    expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', result: 'vague' })).toBeNull()
+    expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', round: 0, result: 'vague' })).toBeNull()
+    expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', round: 6, result: 'vague' })).toBeNull()
+    expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', round: 1.5, result: 'vague' })).toBeNull()
   })
 
   it('accepts only a complete POST review response matching the requested due round', () => {
@@ -225,8 +231,29 @@ describe('story API payload parsers', () => {
     expect(parseStoryReviewApiResponse({ review: { ...response.review, round: 5, roundCompleted: 5, nextReviewAt: null } }, { ...expected, round: 5 })).toEqual({ ...response.review, round: 5, roundCompleted: 5, nextReviewAt: null })
   })
 
+  it('accepts an immutable delayed replay whose stored next-review timestamp is already past', () => {
+    const response = {
+      review: {
+        lessonWordId: 'lesson-word-1',
+        round: 1,
+        roundCompleted: 1,
+        result: 'vague',
+        nextReviewAt: '2026-08-22T08:00:00.000Z',
+        grade: 2,
+        userWordMeaningMastery: 57,
+        userWordMastery: 57,
+      },
+    }
+
+    expect(parseStoryReviewApiResponse(response, {
+      lessonWordId: 'lesson-word-1',
+      round: 1,
+      result: 'vague',
+      submittedAt: new Date('2026-08-24T07:00:00.000Z'),
+    })).toEqual(response.review)
+  })
+
   it.each([
-    ['a past canonical timestamp', { nextReviewAt: '2026-08-24T06:59:59.999Z' }],
     ['a parseable noncanonical timestamp', { nextReviewAt: '2026-08-24T08:00:00Z' }],
     ['a grade that does not match the submitted result', { grade: 0 }],
   ])('rejects review responses with %s', (_case, invalidFields) => {
@@ -448,7 +475,7 @@ describe('GET /api/story/review', () => {
 
 describe('POST /api/story/review', () => {
   it('rejects fuzzy and other invalid review identifiers with 400', async () => {
-    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'fuzzy' }))
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', round: 2, result: 'fuzzy' }))
 
     expect(response.status).toBe(400)
     await expect(responseJson(response)).resolves.toEqual({ error: 'Invalid story review payload' })
@@ -456,7 +483,7 @@ describe('POST /api/story/review', () => {
   })
 
   it('accepts vague and serializes the next review state', async () => {
-    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: ' lesson-word-1 ', result: 'vague' }))
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: ' lesson-word-1 ', round: 2, result: 'vague' }))
 
     expect(response.status).toBe(200)
     await expect(responseJson(response)).resolves.toEqual({
@@ -471,7 +498,7 @@ describe('POST /api/story/review', () => {
         userWordMastery: 60,
       },
     })
-    expect(mocks.submitStoryReview).toHaveBeenCalledWith({ prisma: { mocked: true }, userId: 'user-1', lessonWordId: 'lesson-word-1', result: 'vague' })
+    expect(mocks.submitStoryReview).toHaveBeenCalledWith({ prisma: { mocked: true }, userId: 'user-1', lessonWordId: 'lesson-word-1', round: 2, result: 'vague' })
   })
 
   it('returns idempotent success for an identical duplicate retry', async () => {
@@ -486,7 +513,7 @@ describe('POST /api/story/review', () => {
       userWordMastery: 63,
     })
 
-    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'remembered' }))
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', round: 2, result: 'remembered' }))
 
     expect(response.status).toBe(200)
     expect((await responseJson(response)).review).toMatchObject({ round: 1, roundCompleted: 1 })
@@ -494,10 +521,10 @@ describe('POST /api/story/review', () => {
 
   it('maps unauthorized lesson words to 404 and conflicting immutable-round submissions to 409', async () => {
     mocks.submitStoryReview.mockRejectedValueOnce(new StoryDomainError(STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND, 'Story lesson word is not in the current ready story course: hidden-word'))
-    const unauthorized = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'hidden-word', result: 'remembered' }))
+    const unauthorized = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'hidden-word', round: 2, result: 'remembered' }))
 
     mocks.submitStoryReview.mockRejectedValueOnce(new StoryDomainError(STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT, 'Story review round 1 was already committed with a different result'))
-    const conflict = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'forgotten' }))
+    const conflict = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', round: 2, result: 'forgotten' }))
 
     expect(unauthorized.status).toBe(404)
     expect(conflict.status).toBe(409)
@@ -509,7 +536,7 @@ describe('POST /api/story/review', () => {
       'Story review submission conflicted after retries',
     ))
 
-    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'remembered' }))
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', round: 2, result: 'remembered' }))
 
     expect(response.status).toBe(409)
     await expect(responseJson(response)).resolves.toEqual({ error: 'Story review conflict' })
@@ -519,7 +546,7 @@ describe('POST /api/story/review', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     mocks.submitStoryReview.mockRejectedValue(new Error('database transport failed: already committed with a different result'))
 
-    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'remembered' }))
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', round: 2, result: 'remembered' }))
 
     expect(response.status).toBe(500)
     await expect(responseJson(response)).resolves.toEqual({ error: 'Internal server error' })
@@ -530,7 +557,7 @@ describe('POST /api/story/review', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     mocks.submitStoryReview.mockRejectedValue({ code: 'P2002', message: 'Unique constraint failed' })
 
-    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'remembered' }))
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', round: 2, result: 'remembered' }))
 
     expect(response.status).toBe(500)
     await expect(responseJson(response)).resolves.toEqual({ error: 'Internal server error' })
@@ -541,10 +568,32 @@ describe('POST /api/story/review', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     mocks.submitStoryReview.mockRejectedValue(new Error('postgresql://secret@db.internal:5432/story'))
 
-    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', result: 'remembered' }))
+    const response = await postReview(jsonRequest('http://localhost/api/story/review', { lessonWordId: 'lesson-word-1', round: 2, result: 'remembered' }))
 
     expect(response.status).toBe(500)
     await expect(responseJson(response)).resolves.toEqual({ error: 'Internal server error' })
     consoleError.mockRestore()
+  })
+})
+
+
+describe('locked story lesson route enforcement', () => {
+  it.each([
+    ['detail GET', async () => getLesson(new NextRequest('http://localhost/api/story/lessons/lesson-2'), routeContext('lesson-2')), mocks.getStoryLesson],
+    ['words GET', async () => getLessonWords(new NextRequest('http://localhost/api/story/lessons/lesson-2/words'), routeContext('lesson-2')), mocks.listStoryLessonWords],
+    ['progress POST', async () => postProgress(jsonRequest('http://localhost/api/story/lessons/lesson-2/progress', { step: 1 }), routeContext('lesson-2')), mocks.saveFirstPassStep],
+  ])('returns the stable typed locked response for %s', async (_label, requestRoute, serviceMock) => {
+    serviceMock.mockRejectedValueOnce(new StoryDomainError(
+      STORY_ERROR_CODES.LESSON_LOCKED,
+      'Story lesson is locked: lesson-2',
+    ))
+
+    const response = await requestRoute()
+
+    expect(response.status).toBe(403)
+    await expect(responseJson(response)).resolves.toEqual({
+      error: 'Story lesson is locked',
+      code: 'STORY_LESSON_LOCKED',
+    })
   })
 })
