@@ -1,12 +1,24 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
-import type { PublicStoryLessonDetail, StoryProgressApiResponse } from '@/lib/story-api-types'
+import type {
+  PublicStoryLessonDetail,
+  StoryProgressApiResponse,
+  StoryReviewApiResponse,
+  StoryReviewQueueApiResponse,
+} from '@/lib/story-api-types'
 import type { UserStoryProgressDto } from '@/lib/story-service'
 import type { StoryFirstPassStep } from '@/lib/story-progress'
 import { StoryReader } from './StoryReader'
+import {
+  StoryReviewTable,
+  type StoryReviewAttemptView,
+  type StoryReviewRound,
+  type StoryReviewSubmission,
+  type StoryReviewTableWord,
+} from './StoryReviewTable'
 import { StoryRecall, type StoryRecallRating } from './StoryRecall'
 import { StoryStepNav } from './StoryStepNav'
 import { StoryWordList } from './StoryWordList'
@@ -55,6 +67,27 @@ function buildWordLedger(lesson: StoryLessonView): StoryWordDisplay[] {
   }))
 }
 
+function toReviewRound(value: number): StoryReviewRound | null {
+  if (value === 1 || value === 2 || value === 3 || value === 4 || value === 5) return value
+  return null
+}
+
+function buildReviewWords(lesson: StoryLessonView): StoryReviewTableWord[] {
+  return lesson.lessonWords.map((word) => ({
+    lessonWordId: word.id,
+    word: word.word.text,
+    gloss: word.glossCn,
+    phonetic: word.word.phonetic,
+    partOfSpeech: word.meaning.partOfSpeech,
+    dueRound: null,
+    roundCompleted: 0,
+    nextReviewAt: null,
+    isDue: false,
+  }))
+}
+
+const noReviewAttempts: StoryReviewAttemptView[] = []
+
 const stepHeading: Record<FirstPassView, string> = {
   1: '第一步 · 入境识词',
   2: '第二步 · 遮义回想',
@@ -75,11 +108,60 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
   const [recallStatus, setRecallStatus] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [scene, setScene] = useState('')
+  const [reviewWords, setReviewWords] = useState<StoryReviewTableWord[]>(() => buildReviewWords(lesson))
+  const [reviewQueueLoaded, setReviewQueueLoaded] = useState(false)
+  const [reviewQueueLoading, setReviewQueueLoading] = useState(false)
+  const [reviewQueueError, setReviewQueueError] = useState<string | null>(null)
+  const [currentDueWords, setCurrentDueWords] = useState(dueWords)
   const wordLedger = useMemo(() => buildWordLedger(lesson), [lesson])
   const scenes = useMemo(
     () => [...new Set(wordLedger.map((word) => word.sceneTitle))],
     [wordLedger],
   )
+
+  const loadReviewQueue = useCallback(async () => {
+    setReviewQueueLoading(true)
+    setReviewQueueError(null)
+    try {
+      const response = await fetch(`/api/story/review?lessonId=${encodeURIComponent(lesson.id)}`)
+      if (!response.ok) throw new Error('review queue request failed')
+
+      const payload = await response.json() as StoryReviewQueueApiResponse
+      const lessonQueue = payload.lessons.find((group) => group.lessonId === lesson.id)
+      const dueByLessonWordId = new Map((lessonQueue?.words ?? []).map((word) => [word.lessonWordId, word]))
+      setReviewWords((current) => current.map((word) => {
+        const dueWord = dueByLessonWordId.get(word.lessonWordId)
+        if (!dueWord) return { ...word, isDue: false }
+        const dueRound = toReviewRound(dueWord.dueRound)
+        return {
+          ...word,
+          dueRound,
+          roundCompleted: dueWord.roundCompleted,
+          nextReviewAt: dueWord.nextReviewAt,
+          isDue: dueRound !== null,
+        }
+      }))
+      setCurrentDueWords(lessonQueue?.dueCount ?? 0)
+      setReviewQueueLoaded(true)
+    } catch {
+      setReviewQueueError('到期强化列表未能载入。现有学习进度未改变，请重试。')
+    } finally {
+      setReviewQueueLoading(false)
+    }
+  }, [lesson.id])
+
+  async function submitReview(submission: StoryReviewSubmission) {
+    const response = await fetch('/api/story/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(submission),
+    })
+    if (!response.ok) throw new Error('review request failed')
+
+    const payload = await response.json() as StoryReviewApiResponse
+    setCurrentDueWords((current) => Math.max(0, current - 1))
+    return payload.review
+  }
 
   async function completeStep(step: StoryFirstPassStep) {
     if (savingStep !== null || savedProgress.completedStep >= step) return
@@ -233,9 +315,12 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
               </Link>
               <Link
                 href="#step-4"
+                onClick={() => {
+                  if (!reviewQueueLoaded && !reviewQueueLoading) void loadReviewQueue()
+                }}
                 className="inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-800/30 px-4 py-2 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 dark:border-emerald-700 dark:text-emerald-200 dark:hover:bg-emerald-950"
               >
-                {dueWords > 0 ? `查看 ${dueWords} 个到期强化词` : '查看 Step4 强化说明'}
+                {currentDueWords > 0 ? `查看 ${currentDueWords} 个到期强化词` : '查看 Step4 强化说明'}
               </Link>
             </div>
           </div>
@@ -249,10 +334,35 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800 dark:text-amber-400">Later reinforcement</p>
         <h2 id="step-4-title" className="mt-1 font-serif text-xl font-bold text-stone-900 dark:text-stone-100">Step4 · 到期强化</h2>
         <p className="mt-2 text-sm leading-6 text-stone-600 dark:text-stone-300">
-          {dueWords > 0
-            ? `本篇当前有 ${dueWords} 个词到期。强化按到期时间逐轮进行，不要求现在一次做完。`
+          {currentDueWords > 0
+            ? `本篇当前有 ${currentDueWords} 个词到期。强化按到期时间逐轮进行，不要求现在一次做完。`
             : '本篇当前没有到期词。强化会在未来按计划出现，不影响继续故事。'}
         </p>
+
+        {!firstPassComplete ? (
+          <p className="mt-4 rounded-xl border border-stone-300 bg-white/70 px-4 py-3 text-sm text-stone-600 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-300">
+            完成 Step3 后可开始到期强化；下一篇仍会立即解锁。
+          </p>
+        ) : (
+          <div className="mt-5">
+            {reviewQueueError ? (
+              <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-900 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                {reviewQueueError}
+              </p>
+            ) : null}
+            {!reviewQueueLoaded ? (
+              <button
+                type="button"
+                disabled={reviewQueueLoading}
+                onClick={() => void loadReviewQueue()}
+                className="mb-4 inline-flex min-h-11 items-center justify-center rounded-xl border border-amber-800/40 bg-white px-4 py-2 text-sm font-semibold text-amber-950 transition enabled:hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60 dark:border-amber-700 dark:bg-stone-950 dark:text-amber-100 dark:enabled:hover:bg-amber-950"
+              >
+                {reviewQueueLoading ? '正在载入到期词…' : '载入到期强化词'}
+              </button>
+            ) : null}
+            <StoryReviewTable words={reviewWords} attempts={noReviewAttempts} onSubmit={submitReview} />
+          </div>
+        )}
       </section>
     </article>
   )
