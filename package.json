@@ -14,7 +14,8 @@
     "story:parse": "node scripts/parse-novel.mjs",
     "story:outline": "node scripts/build-story-outline.mjs",
     "story:generate": "node scripts/generate-story-lessons.mjs",
-    "story:validate": "node scripts/validate-story-lessons.mjs"
+    "story:validate": "node scripts/validate-story-lessons.mjs",
+    "test:runtime": "vitest run src/lib/*.test.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -34,6 +35,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }
