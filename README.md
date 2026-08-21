@@ -99,57 +99,69 @@ scripts/
 
 ## 故事词汇课离线生成流水线
 
-> 这条流水线用于把本地小说源文件离线加工成可入库的故事词汇课。它不是运行时功能：真实生成只应由操作者在本机/受控环境中手动执行，不会在应用请求链路中调用 LLM，也不会依赖线上原始小说文件。
+> 这是一条由操作者手动运行的离线发布流水线，不在应用请求链路中调用 LLM。默认原始小说路径固定为 `F:\english_context\蛊真人.txt`；默认词表必须精确为 **6098** 个词，课程必须有 **61–150** 课，每课最多 **100** 个目标词。
 
-### 本地原始文件与缓存
+### 数据传输、版权、隐私与本地持久化
 
-- 原始小说文件固定放在仓库外层工作区根目录：`F:\english_context\蛊真人.txt`。
-- `蛊真人.txt` 是 local-only 文件，不能提交到 Git；仓库 `.gitignore` 已忽略 `/蛊真人.txt`。
-- 生成缓存写入 `scripts/.story-cache/`，包括章节索引、outline checkpoint、lesson checkpoint、生成报告和验证报告；该目录也已被 `.gitignore` 忽略。
-- 章节索引只保存元数据，不保存正文；outline/lesson checkpoint 用于断点续跑。
+- `story:outline` 会把**原始章节正文作为 prompt 内容发送到配置的 LLM endpoint**，用于生成章节摘要。这里的“离线流水线”表示不在产品运行时执行，并不表示正文不会离开本机。
+- LLM provider、代理或自定义 endpoint 可能记录、保留或审查 prompt。运行前必须由操作者确认 endpoint 的数据保留政策、版权/授权条件、隐私要求和组织合规政策；不要向未经批准的 endpoint 发送小说正文。
+- 原始文件 `F:\english_context\蛊真人.txt` 仅保存在本地，已由 `.gitignore` 排除，不能提交到 Git。
+- `scripts/.story-cache/` 只持久化章节元数据、生成摘要、outline、生成课程、验证报告和 SHA-256 输入指纹；章节索引、checkpoint、报告和数据库记录都**不得保存原始章节正文或凭证**。
+- 环境变量值和 API key 不会写入日志、checkpoint 或报告。文档只列出变量名称。
 
-### 环境变量名称（不要把值写进文档或提交）
+### 环境变量名称
 
-复制 `.env.example` 到 `.env` 后，在本地填写需要的值：
+复制 `.env.example` 到 `.env` 后在本地填写：
 
-- `DATABASE_URL`：`story:generate` 和 `story:validate` 使用的数据库连接。请指向本地或专门的离线生成库，不要指向生产库。
-- `STORY_LLM_API_KEY` / `OPENAI_API_KEY` / `LLM_API_KEY`：LLM API key，按优先级选择第一个有值的变量。
-- `STORY_LLM_BASE_URL` / `OPENAI_BASE_URL` / `LLM_BASE_URL`：可选，自定义 LLM endpoint。
-- `STORY_LLM_MODEL` / `OPENAI_MODEL` / `LLM_MODEL`：可选，未设置时使用脚本默认模型。
+- `DATABASE_URL`：`story:generate` / `story:validate` 使用的本地或专用离线数据库；不要指向生产库。
+- `STORY_LLM_API_KEY` / `OPENAI_API_KEY` / `LLM_API_KEY`：按顺序选择第一个非空 API key。
+- `STORY_LLM_BASE_URL` / `OPENAI_BASE_URL` / `LLM_BASE_URL`：可选的 OpenAI-compatible endpoint。
+- `STORY_LLM_MODEL` / `OPENAI_MODEL` / `LLM_MODEL`：可选模型名。
+- `STORY_LLM_TRANSPORT`：`auto`（默认，优先 Chat Completions，缺失时回退 Responses）、`chat-completions` 或 `responses`。
 
 已导出的 shell 环境变量优先于 `.env` / `.env.local`；`.env.local` 不应提交。
+
+### 版本化发布架构
+
+- 每次语料生成属于一个版本化 `StoryCourse`。`StoryLesson` 以 `(courseId, order)` 唯一，不再全局按课序唯一。
+- `story:generate` 只创建或续跑输入指纹完全一致的 **draft course**；它绝不会修改、降级或删除已经发布的课程。
+- 每个 course version 使用独立 lesson checkpoint 目录。source、章节批次、摘要集合、outline/词汇分配和上一课 continuity 都绑定 SHA-256 输入指纹；输入变化时旧 checkpoint 会被拒绝。
+- `story:validate` 在一个 Serializable Prisma/PostgreSQL 事务内读取并完整校验 draft。只有全部校验成功后，才把 draft 标记为唯一 `ready` course，并把此前的 ready course 标记为 `archived`。
+- `StoryCourse.readySlot` 的唯一约束配合事务/application checks 保证最多一个 ready publication。验证失败或生成中断时，现有 ready course 保持不变，draft 可继续生成。
+- 已发布版本不可变；旧版本的 lesson ID、lesson-word ID 和用户进度仍可继续使用。后续 runtime 工作应只查询 `readySlot = "ready"` 的 course。
 
 ### 执行顺序
 
 ```bash
-# 1. 解析本地 GB18030 小说源，生成 metadata-only 章节索引
+# 1. 解析本地 GB18030 小说，写 metadata-only 索引、输入指纹和编号异常诊断
 npm run story:parse
 
-# 2. 使用离线 LLM 调用构建连续剧情 outline，并写入可续跑 checkpoint
+# 2. 把章节正文发送给已批准的 LLM endpoint，生成摘要和连续剧情 outline
 npm run story:outline
 
-# 3. 使用离线 LLM 调用生成课程并持久化 ready lesson（需要离线数据库）
+# 3. 创建/续跑 draft StoryCourse，并生成/持久化 draft 中的 lesson
 npm run story:generate
 
-# 4. 校验 ready lesson 数量、每课最多 100 个目标词、全词表精确覆盖、重复/遗漏、关联行一致性
+# 4. 完整校验 draft；成功后原子发布并归档上一 ready course
 npm run story:validate
 ```
 
-常用覆盖参数（调试/夹具时使用，避免碰生产路径）：
+解析命令会向操作者报告章节编号跳号，以及无法解析/非单调编号导致的 order repair。必须审阅这些诊断；最终 outline 和 corpus 校验按索引中的实际章节顺序做精确首尾、无遗漏、无重叠覆盖，而不是假设章节编号连续。
+
+常用覆盖参数（仅用于本地夹具/调试）：
 
 ```bash
 node scripts/parse-novel.mjs --source path/to/fixture.txt --output path/to/cache/novel-index.json
-node scripts/build-story-outline.mjs --source path/to/fixture.txt --index path/to/cache/novel-index.json --output path/to/cache/story-outline.json
-node scripts/generate-story-lessons.mjs --index path/to/cache/novel-index.json --outline path/to/cache/story-outline.json --checkpoint-dir path/to/cache/lessons --report path/to/cache/story-generation-report.json
-node scripts/validate-story-lessons.mjs --report path/to/cache/story-validation-report.json
+node scripts/build-story-outline.mjs --source path/to/fixture.txt --index path/to/cache/novel-index.json --output path/to/cache/story-outline.json --vocabulary-count 205
+node scripts/generate-story-lessons.mjs --index path/to/cache/novel-index.json --outline path/to/cache/story-outline.json --checkpoint-dir path/to/cache/lessons --report path/to/cache/story-generation-report.json --expected-word-count 205
+node scripts/validate-story-lessons.mjs --index path/to/cache/novel-index.json --outline path/to/cache/story-outline.json --report path/to/cache/story-validation-report.json --expected-word-count 205
 ```
 
-### 断点续跑与校验
+### 断点续跑与验证
 
-- `story:outline` 会复用 `scripts/.story-cache/outline/chapter-summaries.json` 和 `story-outline.checkpoint.json`；如果 checkpoint 结构不合法，脚本会失败而不是静默降级。
-- `story:generate` 会复用 `scripts/.story-cache/lessons/lesson-####.json`，并从数据库中第一个非 `ready` lesson 开始继续，保持课程连续性。
-- `story:validate` 应在真实生成后运行；只有报告 `ok: true` 才能认为本次离线生成可交付。
-- 可运行离线 smoke test 验证夹具链路（不读 12.7 MB 原始小说、不连生产 DB、不需要真实凭证）：
+- 默认生产约束保持为：精确 6098 个词、61–150 课、每课不超过 100 词；outline 总容量必须在写 checkpoint 前覆盖全部词汇。
+- generation 和 final validation 都会重新核对 source index、outline 指纹、词序/释义、lesson-word 双射和实际章节索引覆盖。
+- 运行纯夹具 smoke test 可验证四个 command entry point、repository transaction、生成中断、失败发布回滚、续跑和最终原子切换；它不读取真实小说、不调用真实 LLM、不连接真实数据库：
 
 ```bash
 npm run test:story -- scripts/test/story-pipeline-smoke.mjs

@@ -72,9 +72,31 @@ model Meaning {
   storyLessonWords   StoryLessonWord[]
 }
 
+model StoryCourse {
+  id                    String    @id @default(cuid())
+  version               Int       @unique
+  status                String    @default("draft") // draft | ready | archived | failed
+  readySlot             String?   @unique // "ready" only for the single published course; PostgreSQL permits multiple nulls
+  sourceFingerprint     String
+  summaryFingerprint    String
+  outlineFingerprint    String
+  assignmentFingerprint String
+  generationError       String?
+  publishedAt           DateTime?
+  archivedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  lessons StoryLesson[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
 model StoryLesson {
   id                 String   @id @default(cuid())
-  order              Int      @unique
+  courseId           String
+  order              Int
   title              String
   wordGroupId        String?
   sourceChapterStart String
@@ -88,12 +110,13 @@ model StoryLesson {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  course       StoryCourse         @relation(fields: [courseId], references: [id], onDelete: Restrict)
   wordGroup    WordGroup?          @relation(fields: [wordGroupId], references: [id])
   words        StoryLessonWord[]
   userProgress UserStoryProgress[]
 
-  @@index([order])
-  @@index([status])
+  @@unique([courseId, order])
+  @@index([courseId, status])
   @@index([wordGroupId])
 }
 

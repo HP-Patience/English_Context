@@ -1,3 +1,5 @@
+import { fingerprintBytes, fingerprintValue } from './input-fingerprint.mjs'
+
 const DEFAULT_MAX_REPLACEMENT_DENSITY = 0.001
 
 const CHINESE_DIGITS = new Map([
@@ -87,30 +89,70 @@ export function cleanNovelText(text) {
  * @returns {Array<{ order: number, title: string, text: string, startOffset: number, endOffset: number }>}
  */
 export function parseChapters(text) {
+  return parseChaptersWithDiagnostics(text).chapters
+}
+
+export function parseChaptersWithDiagnostics(text) {
   if (typeof text !== 'string') {
     throw new TypeError('parseChapters expects a string')
   }
 
   const headings = findChapterHeadings(text)
+  const numberingGaps = []
+  const repairedOrders = []
   let previousOrder = 0
+  let previousParsedOrder = null
 
-  return headings.map((heading, index) => {
+  const chapters = headings.map((heading, index) => {
     const nextHeading = headings[index + 1]
     const endOffset = nextHeading?.startOffset ?? text.length
     const parsedOrder = parseChapterNumber(heading.numberText)
     const order = Number.isInteger(parsedOrder) && parsedOrder > previousOrder
       ? parsedOrder
       : previousOrder + 1
+
+    if (Number.isInteger(parsedOrder) && previousParsedOrder !== null && parsedOrder > previousParsedOrder + 1) {
+      numberingGaps.push({
+        headingIndex: index + 1,
+        afterSourceOrder: previousParsedOrder,
+        beforeSourceOrder: parsedOrder,
+        missingStart: previousParsedOrder + 1,
+        missingEnd: parsedOrder - 1,
+      })
+    }
+    if (!Number.isInteger(parsedOrder) || parsedOrder <= previousOrder) {
+      repairedOrders.push({
+        headingIndex: index + 1,
+        parsedOrder: Number.isInteger(parsedOrder) ? parsedOrder : null,
+        assignedOrder: order,
+        reason: Number.isInteger(parsedOrder) ? 'non_monotonic' : 'unparseable',
+        title: normalizeChapterTitle(heading.title),
+      })
+    }
+
+    if (Number.isInteger(parsedOrder)) previousParsedOrder = parsedOrder
     previousOrder = order
 
     return {
       order,
+      sourceOrder: Number.isInteger(parsedOrder) ? parsedOrder : null,
+      orderRepaired: order !== parsedOrder,
       title: normalizeChapterTitle(heading.title),
       text: text.slice(heading.contentStartOffset, endOffset).trim(),
       startOffset: heading.startOffset,
       endOffset,
     }
   })
+
+  return {
+    chapters,
+    diagnostics: {
+      numberingGapCount: numberingGaps.length,
+      repairedOrderCount: repairedOrders.length,
+      numberingGaps,
+      repairedOrders,
+    },
+  }
 }
 
 /**
@@ -149,7 +191,8 @@ export async function writeNovelIndex({
   }
 
   const cleanedText = cleanNovelText(decodedText)
-  const chapters = parseChapters(cleanedText)
+  const { chapters, diagnostics } = parseChaptersWithDiagnostics(cleanedText)
+  const sourceFingerprint = fingerprintBytes(bytes)
 
   if (chapters.length === 0) {
     throw new Error('no chapter headings found in decoded novel text')
@@ -164,15 +207,20 @@ export async function writeNovelIndex({
     cleanedCharacterCount: cleanedText.length,
     replacementCharacterCount,
     replacementDensity,
+    sourceFingerprint,
     chapterCount: chapters.length,
+    diagnostics,
     chapters: chapters.map((chapter) => ({
       order: chapter.order,
+      sourceOrder: chapter.sourceOrder,
+      orderRepaired: chapter.orderRepaired,
       title: chapter.title,
       startOffset: chapter.startOffset,
       endOffset: chapter.endOffset,
       characterCount: chapter.text.length,
     })),
   }
+  index.chapterIndexFingerprint = fingerprintValue(index.chapters)
 
   await mkdir(dirname(outputFilePath), { recursive: true })
   await writeFile(outputPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8')
@@ -185,6 +233,9 @@ export async function writeNovelIndex({
     cleanedCharacterCount: cleanedText.length,
     replacementCharacterCount,
     replacementDensity,
+    sourceFingerprint,
+    chapterIndexFingerprint: index.chapterIndexFingerprint,
+    diagnostics,
   }
 }
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { decodeNovelBuffer, cleanNovelText, parseChapters, writeNovelIndex } from '../lib/novel-parser.mjs'
+import { decodeNovelBuffer, cleanNovelText, parseChapters, parseChaptersWithDiagnostics, writeNovelIndex } from '../lib/novel-parser.mjs'
 
 test('decodes GB18030 Chinese text', async () => {
   const bytes = await readFile(new URL('./fixtures/novel-sample-gb18030.bin', import.meta.url))
@@ -39,9 +39,35 @@ test('writes a non-text chapter index without raw chapter bodies', async () => {
     const index = JSON.parse(await readFile(outputPath, 'utf8'))
     assert.equal(index.chapterCount, 2)
     assert.equal(index.replacementCharacterCount, 0)
+    assert.match(index.sourceFingerprint, /^[a-f0-9]{64}$/)
+    assert.match(index.chapterIndexFingerprint, /^[a-f0-9]{64}$/)
+    assert.deepEqual(index.diagnostics, { numberingGapCount: 0, repairedOrderCount: 0, numberingGaps: [], repairedOrders: [] })
     assert.deepEqual(index.chapters.map((chapter) => chapter.order), [1, 2])
     assert.equal(index.chapters.some((chapter) => 'text' in chapter), false)
   } finally {
     await rm(tempDir, { recursive: true, force: true })
   }
+})
+
+
+test('reports source numbering gaps and repaired non-monotonic chapter orders', () => {
+  const { chapters, diagnostics } = parseChaptersWithDiagnostics(cleanNovelText(`第一章 开始
+甲
+第三章 跳号
+乙
+第二章 倒序
+丙`))
+  assert.deepEqual(chapters.map((chapter) => chapter.order), [1, 3, 4])
+  assert.equal(diagnostics.numberingGapCount, 1)
+  assert.deepEqual(diagnostics.numberingGaps[0], {
+    headingIndex: 2,
+    afterSourceOrder: 1,
+    beforeSourceOrder: 3,
+    missingStart: 2,
+    missingEnd: 2,
+  })
+  assert.equal(diagnostics.repairedOrderCount, 1)
+  assert.equal(diagnostics.repairedOrders[0].parsedOrder, 2)
+  assert.equal(diagnostics.repairedOrders[0].assignedOrder, 4)
+  assert.equal(diagnostics.repairedOrders[0].reason, 'non_monotonic')
 })

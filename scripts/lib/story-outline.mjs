@@ -1,5 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { fingerprintValue } from './input-fingerprint.mjs'
+import { validateSourceIndexCoverage } from './story-source-coverage.mjs'
 
 export const DEFAULT_CHAPTER_BATCH_SIZE = 25
 export const MIN_LESSON_COUNT = 61
@@ -56,67 +58,60 @@ export async function buildChapterSummaries({
   generateJson,
   checkpointPath,
   chapterBatchSize = DEFAULT_CHAPTER_BATCH_SIZE,
+  sourceFingerprint,
 }) {
-  if (!Array.isArray(chapters) || chapters.length === 0) {
-    throw new Error('buildChapterSummaries requires a non-empty chapters array')
-  }
-  if (typeof generateJson !== 'function') {
-    throw new TypeError('buildChapterSummaries requires generateJson')
-  }
-  if (!checkpointPath) {
-    throw new TypeError('buildChapterSummaries requires checkpointPath')
-  }
-  if (!Number.isInteger(chapterBatchSize) || chapterBatchSize < 1) {
-    throw new TypeError('chapterBatchSize must be a positive integer')
-  }
+  if (!Array.isArray(chapters) || chapters.length === 0) throw new Error('buildChapterSummaries requires a non-empty chapters array')
+  if (typeof generateJson !== 'function') throw new TypeError('buildChapterSummaries requires generateJson')
+  if (!checkpointPath) throw new TypeError('buildChapterSummaries requires checkpointPath')
+  if (!Number.isInteger(chapterBatchSize) || chapterBatchSize < 1) throw new TypeError('chapterBatchSize must be a positive integer')
 
   const orderedChapters = normalizeChaptersStrict(chapters)
+  const resolvedSourceFingerprint = sourceFingerprint ?? fingerprintValue(orderedChapters)
   const batches = chunk(orderedChapters, chapterBatchSize)
-  const expectedRanges = new Set(batches.map((batch) => rangeKey(batch[0].order, batch[batch.length - 1].order)))
+  const batchFingerprints = new Map(batches.map((batch) => [rangeKey(batch[0].order, batch[batch.length - 1].order), fingerprintValue({ sourceFingerprint: resolvedSourceFingerprint, batch })]))
+  const expectedRanges = new Set(batchFingerprints.keys())
+  const checkpointInputFingerprint = fingerprintValue({ sourceFingerprint: resolvedSourceFingerprint, chapterBatchSize, batchFingerprints: [...batchFingerprints.values()] })
   const checkpoint = await readJsonIfExists(checkpointPath)
   const summariesByRange = new Map()
 
   if (checkpoint !== null) {
-    if (!isPlainObject(checkpoint) || !Array.isArray(checkpoint.summaries)) {
-      throw new Error('malformed chapter summary checkpoint: expected an object with summaries array')
+    if (!isPlainObject(checkpoint) || checkpoint.version !== 2 || !Array.isArray(checkpoint.summaries)) {
+      throw new Error('malformed chapter summary checkpoint: expected fingerprint-bound version 2 with summaries array')
     }
-
+    if (checkpoint.sourceFingerprint !== resolvedSourceFingerprint || checkpoint.chapterBatchSize !== chapterBatchSize || checkpoint.inputFingerprint !== checkpointInputFingerprint) {
+      throw new Error('chapter summary checkpoint source/batch fingerprint does not match current input')
+    }
     for (const [summaryIndex, summary] of checkpoint.summaries.entries()) {
       const normalized = parseStoredChapterSummaryStrict(summary, `checkpoint.summaries[${summaryIndex}]`)
       const key = rangeKey(normalized.sourceChapterStart, normalized.sourceChapterEnd)
-      if (!expectedRanges.has(key)) {
-        throw new Error(`malformed chapter summary checkpoint: range ${key} is not an expected chapter batch`)
-      }
-      summariesByRange.set(key, normalized)
+      if (!expectedRanges.has(key)) throw new Error(`malformed chapter summary checkpoint: range ${key} is not an expected chapter batch`)
+      if (summary.inputFingerprint !== batchFingerprints.get(key)) throw new Error(`chapter summary checkpoint batch fingerprint mismatch for range ${key}`)
+      summariesByRange.set(key, { ...normalized, inputFingerprint: summary.inputFingerprint })
     }
   }
 
   const summaries = []
-
   for (const [batchIndex, batch] of batches.entries()) {
-    const start = batch[0].order
-    const end = batch[batch.length - 1].order
-    const key = rangeKey(start, end)
+    const startOrder = batch[0].order
+    const endOrder = batch[batch.length - 1].order
+    const key = rangeKey(startOrder, endOrder)
     let summary = summariesByRange.get(key)
-
     if (!summary) {
       const prompt = createChapterSummaryPrompt({ batch, batchIndex, batchCount: batches.length })
       const response = await generateJson(prompt, 'chapter-summary')
-      summary = parseGeneratedChapterSummaryStrict(response, { batch, batchIndex })
+      summary = { ...parseGeneratedChapterSummaryStrict(response, { batch, batchIndex }), inputFingerprint: batchFingerprints.get(key) }
       summariesByRange.set(key, summary)
       await writeJsonAtomic(checkpointPath, {
-        version: 1,
+        version: 2,
+        sourceFingerprint: resolvedSourceFingerprint,
         chapterBatchSize,
+        inputFingerprint: checkpointInputFingerprint,
         generatedAt: new Date().toISOString(),
-        summaries: batches
-          .map((candidateBatch) => summariesByRange.get(rangeKey(candidateBatch[0].order, candidateBatch[candidateBatch.length - 1].order)))
-          .filter(Boolean),
+        summaries: batches.map((candidateBatch) => summariesByRange.get(rangeKey(candidateBatch[0].order, candidateBatch[candidateBatch.length - 1].order))).filter(Boolean),
       })
     }
-
     summaries.push(summary)
   }
-
   return summaries
 }
 
@@ -132,43 +127,42 @@ export async function buildStoryOutline({
   generateJson,
   checkpointPath,
   allowDeterministicFallback = false,
+  sourceFingerprint,
+  sourceChapters,
 }) {
-  if (!Array.isArray(chapterSummaries) || chapterSummaries.length === 0) {
-    throw new Error('buildStoryOutline requires a non-empty chapterSummaries array')
-  }
-  if (!Number.isInteger(vocabularyCount) || vocabularyCount < 0) {
-    throw new TypeError('vocabularyCount must be a non-negative integer')
-  }
-  if (typeof generateJson !== 'function') {
-    throw new TypeError('buildStoryOutline requires generateJson')
-  }
-  if (!checkpointPath) {
-    throw new TypeError('buildStoryOutline requires checkpointPath')
-  }
+  if (!Array.isArray(chapterSummaries) || chapterSummaries.length === 0) throw new Error('buildStoryOutline requires a non-empty chapterSummaries array')
+  if (!Number.isInteger(vocabularyCount) || vocabularyCount < 0) throw new TypeError('vocabularyCount must be a non-negative integer')
+  if (typeof generateJson !== 'function') throw new TypeError('buildStoryOutline requires generateJson')
+  if (!checkpointPath) throw new TypeError('buildStoryOutline requires checkpointPath')
 
   const normalizedSummaries = chapterSummaries.map((summary, index) => parseStoredChapterSummaryStrict(summary, `chapterSummaries[${index}]`))
-
+  const summaryFingerprint = fingerprintValue(normalizedSummaries)
+  const resolvedSourceFingerprint = sourceFingerprint ?? fingerprintValue(normalizedSummaries.map(({ sourceChapterStart, sourceChapterEnd }) => ({ sourceChapterStart, sourceChapterEnd })))
+  const inputFingerprint = fingerprintValue({ sourceFingerprint: resolvedSourceFingerprint, summaryFingerprint, vocabularyCount })
   const existing = await readJsonIfExists(checkpointPath)
   if (existing !== null) {
-    if (!isPlainObject(existing) || !Array.isArray(existing.lessons)) {
-      throw new Error('malformed story outline checkpoint: expected an object with lessons array')
+    if (!isPlainObject(existing) || existing.version !== 2 || !Array.isArray(existing.lessons)) throw new Error('malformed story outline checkpoint: expected fingerprint-bound version 2 with lessons array')
+    if (existing.inputFingerprint !== inputFingerprint || existing.summaryFingerprint !== summaryFingerprint || existing.sourceFingerprint !== resolvedSourceFingerprint) {
+      throw new Error('story outline checkpoint summary/input fingerprint does not match current input')
     }
-    const parsedExisting = parseStoryOutlineStrict(existing, { vocabularyCount, generatedAt: existing.generatedAt })
-    validateStoryOutline(parsedExisting, normalizedSummaries)
+    const parsedExisting = parseStoryOutlineStrict(existing, { vocabularyCount, generatedAt: existing.generatedAt, metadata: existing })
+    validateStoryOutline(parsedExisting, normalizedSummaries, { sourceChapters })
     return parsedExisting
   }
 
   const prompt = createStoryOutlinePrompt({ chapterSummaries: normalizedSummaries, vocabularyCount })
   const response = await generateJson(prompt, 'story-outline')
-  let outline
-
-  if (allowDeterministicFallback && !findLessonsArray(response)) {
-    outline = createDeterministicStoryOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
-  } else {
-    outline = parseStoryOutlineStrict(response, { vocabularyCount })
+  const parsed = allowDeterministicFallback && !findLessonsArray(response)
+    ? createDeterministicStoryOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
+    : parseStoryOutlineStrict(response, { vocabularyCount })
+  const outline = {
+    ...parsed,
+    version: 2,
+    sourceFingerprint: resolvedSourceFingerprint,
+    summaryFingerprint,
+    inputFingerprint,
   }
-
-  validateStoryOutline(outline, normalizedSummaries)
+  validateStoryOutline(outline, normalizedSummaries, { sourceChapters })
   await writeJsonAtomic(checkpointPath, outline)
   return outline
 }
@@ -221,7 +215,7 @@ export function createStoryOutlinePrompt({ chapterSummaries, vocabularyCount }) 
   ].join('\n')
 }
 
-export function validateStoryOutline(outline, chapterSummaries = []) {
+export function validateStoryOutline(outline, chapterSummaries = [], { sourceChapters } = {}) {
   const errors = []
 
   if (!isPlainObject(outline)) {
@@ -236,6 +230,10 @@ export function validateStoryOutline(outline, chapterSummaries = []) {
     }
 
     const expectedSpan = getChapterSpan(chapterSummaries)
+    const totalCapacity = outline.lessons.reduce((total, lesson) => total + (Number.isInteger(lesson?.targetWordCapacity) ? lesson.targetWordCapacity : 0), 0)
+    if (Number.isInteger(outline.vocabularyCount) && totalCapacity < outline.vocabularyCount) {
+      errors.push(`outline target-word capacity ${totalCapacity} cannot cover vocabularyCount ${outline.vocabularyCount}`)
+    }
     let previousEnd = null
     for (const [index, lesson] of outline.lessons.entries()) {
       const path = `lessons[${index}]`
@@ -281,7 +279,7 @@ export function validateStoryOutline(outline, chapterSummaries = []) {
         errors.push(`${path} overlaps or moves backward from the previous range ending at ${previousEnd}`)
       }
 
-      if (previousEnd !== null && start > previousEnd + 1) {
+      if ((!Array.isArray(sourceChapters) || sourceChapters.length === 0) && previousEnd !== null && start > previousEnd + 1) {
         errors.push(`${path} leaves a gap after chapter ${previousEnd}`)
       }
 
@@ -290,6 +288,10 @@ export function validateStoryOutline(outline, chapterSummaries = []) {
       }
 
       previousEnd = end
+    }
+
+    if (Array.isArray(sourceChapters) && sourceChapters.length > 0) {
+      errors.push(...validateSourceIndexCoverage({ lessons: outline.lessons, sourceChapters, label: 'lessons' }))
     }
 
     if (expectedSpan && outline.lessons.length > 0) {
@@ -454,19 +456,23 @@ function parseStoredChapterSummaryStrict(summary, path) {
   return withoutUndefined(parsed)
 }
 
-function parseStoryOutlineStrict(value, { vocabularyCount, generatedAt = new Date().toISOString() }) {
+function parseStoryOutlineStrict(value, { vocabularyCount, generatedAt = new Date().toISOString(), metadata = value }) {
   const lessonsInput = findLessonsArray(value)
   if (!Array.isArray(lessonsInput)) {
     throw new Error('invalid story-outline response: lessons must be an array')
   }
 
   const lessons = lessonsInput.map((lesson, index) => parseStoryLessonStrict(lesson, index))
-  return {
+  return withoutUndefined({
+    version: metadata?.version,
     generatedAt,
     lessonCount: lessons.length,
     vocabularyCount,
+    sourceFingerprint: metadata?.sourceFingerprint,
+    summaryFingerprint: metadata?.summaryFingerprint,
+    inputFingerprint: metadata?.inputFingerprint,
     lessons,
-  }
+  })
 }
 
 function parseStoryLessonStrict(lesson, index) {

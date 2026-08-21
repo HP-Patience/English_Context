@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -41,7 +41,7 @@ function makeLessons(count) {
     events: [`事件${index + 1}`],
     continuityStart: index === 0 ? '重生开始' : `承接第${index}课`,
     continuityEnd: index === count - 1 ? '主线阶段收束' : `交给第${index + 2}课`,
-    targetWordCapacity: 80,
+    targetWordCapacity: 100,
   }))
 }
 
@@ -89,41 +89,41 @@ test('chapter summaries request chapter batches in chronological order', async (
   }
 })
 
-test('chapter summaries load completed batches from checkpoint and resume remaining work', async () => {
+test('chapter summaries load completed fingerprint-bound batches and resume remaining work', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-resume-'))
   const checkpointPath = join(tempDir, 'chapter-summaries.json')
-  await mkdir(tempDir, { recursive: true })
-  await writeFile(checkpointPath, JSON.stringify({
-    version: 1,
-    chapterBatchSize: 2,
-    summaries: [{
-      order: 1,
-      sourceChapterStart: 1,
-      sourceChapterEnd: 2,
-      summary: '已有摘要',
-      characters: ['方源'],
-      events: ['开局'],
-    }],
-  }, null, 2))
-
-  const calls = []
-  const fakeClient = {
-    async generateJson(prompt) {
-      calls.push(prompt)
-      const [, start, end] = prompt.match(/source chapters (\d+)-(\d+)/i)
-      return { summary: `新摘要${start}-${end}`, characters: ['方源'], events: ['推进'] }
-    },
-  }
+  const chapters = makeChapters(5)
+  let interruptedCalls = 0
 
   try {
+    await assert.rejects(
+      buildChapterSummaries({
+        chapters,
+        checkpointPath,
+        chapterBatchSize: 2,
+        generateJson: async (prompt) => {
+          interruptedCalls += 1
+          if (interruptedCalls === 2) throw new Error('fixture interruption')
+          const [, start, end] = prompt.match(/source chapters (\d+)-(\d+)/i)
+          return { summary: `已有摘要${start}-${end}`, characters: ['方源'], events: ['开局'] }
+        },
+      }),
+      /fixture interruption/,
+    )
+
+    const calls = []
     const summaries = await buildChapterSummaries({
-      chapters: makeChapters(5),
-      generateJson: fakeClient.generateJson.bind(fakeClient),
+      chapters,
       checkpointPath,
       chapterBatchSize: 2,
+      generateJson: async (prompt) => {
+        calls.push(prompt)
+        const [, start, end] = prompt.match(/source chapters (\d+)-(\d+)/i)
+        return { summary: `新摘要${start}-${end}`, characters: ['方源'], events: ['推进'] }
+      },
     })
 
-    assert.equal(summaries[0].summary, '已有摘要')
+    assert.equal(summaries[0].summary, '已有摘要1-2')
     assert.deepEqual(calls.map((prompt) => prompt.match(/source chapters (\d+)-(\d+)/i).slice(1)), [
       ['3', '4'],
       ['5', '5'],
@@ -261,14 +261,20 @@ test('malformed LLM summary responses and checkpoints are rejected without place
     )
     assert.equal(existsSync(badResponseCheckpoint), false)
 
-    await writeFile(malformedCheckpoint, JSON.stringify({
-      version: 1,
-      summaries: [{ order: 1, sourceChapterStart: 1, sourceChapterEnd: 1, characters: ['方源'], events: ['事件'] }],
-    }))
+    const chapters = makeChapters(1, { includeText: true })
+    await buildChapterSummaries({
+      chapters,
+      generateJson: async () => ({ summary: '有效摘要', characters: ['方源'], events: ['事件'] }),
+      checkpointPath: malformedCheckpoint,
+      chapterBatchSize: 1,
+    })
+    const malformedSummary = JSON.parse(await readFile(malformedCheckpoint, 'utf8'))
+    delete malformedSummary.summaries[0].summary
+    await writeFile(malformedCheckpoint, JSON.stringify(malformedSummary))
 
     await assert.rejects(
       buildChapterSummaries({
-        chapters: makeChapters(1, { includeText: true }),
+        chapters,
         generateJson: async () => ({ summary: '不会调用', characters: ['方源'], events: ['事件'] }),
         checkpointPath: malformedCheckpoint,
         chapterBatchSize: 1,
@@ -297,12 +303,19 @@ test('malformed outline responses and checkpoints are rejected without determini
     )
     assert.equal(existsSync(badResponseCheckpoint), false)
 
-    const checkpointLessons = makeLessons(61)
-    delete checkpointLessons[0].plotSummary
-    await writeFile(malformedCheckpoint, JSON.stringify({ lessons: checkpointLessons }))
+    const chapterSummaries = makeSummaries(61)
+    await buildStoryOutline({
+      chapterSummaries,
+      vocabularyCount: 6100,
+      generateJson: async () => ({ lessons: makeLessons(61) }),
+      checkpointPath: malformedCheckpoint,
+    })
+    const malformedOutline = JSON.parse(await readFile(malformedCheckpoint, 'utf8'))
+    delete malformedOutline.lessons[0].plotSummary
+    await writeFile(malformedCheckpoint, JSON.stringify(malformedOutline))
     await assert.rejects(
       buildStoryOutline({
-        chapterSummaries: makeSummaries(61),
+        chapterSummaries,
         vocabularyCount: 6100,
         generateJson: async () => ({ lessons: makeLessons(61) }),
         checkpointPath: malformedCheckpoint,

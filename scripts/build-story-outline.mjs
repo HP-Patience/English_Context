@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createLlmJsonClient } from './lib/llm-json.mjs'
+import { fingerprintBytes, fingerprintValue } from './lib/input-fingerprint.mjs'
 import { cleanNovelText, decodeNovelBuffer, parseChapters } from './lib/novel-parser.mjs'
 import { buildChapterSummaries, buildStoryOutline, writeJsonAtomic } from './lib/story-outline.mjs'
 
@@ -17,55 +18,72 @@ export const DEFAULT_OUTPUT_PATH = resolve(PROJECT_ROOT, 'scripts/.story-cache/s
 export const DEFAULT_VOCABULARY_PATH = resolve(PROJECT_ROOT, 'data/2026考研英语词汇闪过.txt')
 export const DEFAULT_MODEL = 'gpt-4.1-mini'
 
-export async function main(args = process.argv.slice(2)) {
+export async function main(args = process.argv.slice(2), dependencies = {}) {
   const options = parseArgs(args)
-  loadEnvFiles([resolve(PROJECT_ROOT, '.env'), resolve(PROJECT_ROOT, '.env.local')])
+  const log = dependencies.log ?? console.log
+  if (options.help) {
+    log(helpText())
+    return { help: true }
+  }
+
+  const env = dependencies.env ?? process.env
+  if (dependencies.loadEnvironment !== false) {
+    loadEnvFiles([resolve(PROJECT_ROOT, '.env'), resolve(PROJECT_ROOT, '.env.local')], env)
+  }
 
   const sourcePath = options.sourcePath ?? DEFAULT_SOURCE_PATH
   const indexPath = options.indexPath ?? DEFAULT_INDEX_PATH
   const outputPath = options.outputPath ?? DEFAULT_OUTPUT_PATH
   const chapterCheckpointPath = options.chapterCheckpointPath ?? DEFAULT_CHAPTER_SUMMARY_CHECKPOINT_PATH
   const outlineCheckpointPath = options.outlineCheckpointPath ?? DEFAULT_OUTLINE_CHECKPOINT_PATH
-  const vocabularyCount = options.vocabularyCount ?? await readVocabularyCount(options.vocabularyPath ?? DEFAULT_VOCABULARY_PATH)
+  const fileExists = dependencies.existsSync ?? existsSync
+  const readBytes = dependencies.readFile ?? readFile
+  const readJson = dependencies.readJson ?? (async (path) => JSON.parse(await readFile(path, 'utf8')))
+  const vocabularyCount = options.vocabularyCount ?? await (dependencies.readVocabularyCount ?? readVocabularyCount)(options.vocabularyPath ?? DEFAULT_VOCABULARY_PATH)
 
-  if (!existsSync(indexPath)) {
-    throw new Error(`novel index not found: ${displayPath(indexPath)}`)
-  }
-  if (!existsSync(sourcePath)) {
-    throw new Error(`source novel not found: ${sourcePath}`)
-  }
+  if (!fileExists(indexPath)) throw new Error(`novel index not found: ${displayPath(indexPath)}`)
+  if (!fileExists(sourcePath)) throw new Error(`source novel not found: ${sourcePath}`)
 
-  const index = JSON.parse(await readFile(indexPath, 'utf8'))
-  if (!Array.isArray(index.chapters) || index.chapters.length === 0) {
-    throw new Error('novel index must contain a non-empty chapters array')
-  }
+  const index = await readJson(indexPath)
+  if (!Array.isArray(index.chapters) || index.chapters.length === 0) throw new Error('novel index must contain a non-empty chapters array')
+  if (!index.sourceFingerprint || !index.chapterIndexFingerprint) throw new Error('novel index is missing input fingerprints; rerun story:parse')
+  if (fingerprintValue(index.chapters) !== index.chapterIndexFingerprint) throw new Error('novel index chapter fingerprint does not match its chapter metadata')
 
-  const chapters = await loadSourceChapters({ sourcePath, indexChapters: index.chapters })
-  const llm = createLlmJsonClient({
-    apiKey: getFirstEnv(['STORY_LLM_API_KEY', 'OPENAI_API_KEY', 'LLM_API_KEY']),
-    baseURL: getFirstEnv(['STORY_LLM_BASE_URL', 'OPENAI_BASE_URL', 'LLM_BASE_URL']),
-    model: getFirstEnv(['STORY_LLM_MODEL', 'OPENAI_MODEL', 'LLM_MODEL']) ?? DEFAULT_MODEL,
-  })
+  const sourceBytes = await readBytes(sourcePath)
+  const sourceFingerprint = fingerprintBytes(sourceBytes)
+  if (sourceFingerprint !== index.sourceFingerprint) throw new Error('raw novel source fingerprint does not match the parsed index; rerun story:parse')
+  const chapters = await (dependencies.loadSourceChapters ?? loadSourceChapters)({ sourcePath, sourceBytes, indexChapters: index.chapters })
 
-  const chapterSummaries = await buildChapterSummaries({
+  const generateJson = dependencies.generateJson ?? (dependencies.createLlmJsonClient ?? createLlmJsonClient)({
+    apiKey: getFirstEnv(['STORY_LLM_API_KEY', 'OPENAI_API_KEY', 'LLM_API_KEY'], env),
+    baseURL: getFirstEnv(['STORY_LLM_BASE_URL', 'OPENAI_BASE_URL', 'LLM_BASE_URL'], env),
+    model: getFirstEnv(['STORY_LLM_MODEL', 'OPENAI_MODEL', 'LLM_MODEL'], env) ?? DEFAULT_MODEL,
+    transport: getFirstEnv(['STORY_LLM_TRANSPORT'], env) ?? 'auto',
+  }).generateJson
+
+  const chapterSummaries = await (dependencies.buildChapterSummaries ?? buildChapterSummaries)({
     chapters,
-    generateJson: llm.generateJson,
+    generateJson,
     checkpointPath: chapterCheckpointPath,
+    sourceFingerprint,
   })
 
-  const outline = await buildStoryOutline({
+  const outline = await (dependencies.buildStoryOutline ?? buildStoryOutline)({
     chapterSummaries,
     vocabularyCount,
-    generateJson: llm.generateJson,
+    generateJson,
     checkpointPath: outlineCheckpointPath,
+    sourceFingerprint,
+    sourceChapters: index.chapters,
   })
 
-  await writeJsonAtomic(outputPath, outline)
+  await (dependencies.writeJsonAtomic ?? writeJsonAtomic)(outputPath, outline)
 
-  console.log(`Chapter summaries: ${chapterSummaries.length}`)
-  console.log(`Outline lessons: ${outline.lessons.length}`)
-  console.log(`Vocabulary count: ${vocabularyCount}`)
-  console.log(`Story outline written: ${displayPath(outputPath)}`)
+  log(`Chapter summaries: ${chapterSummaries.length}`)
+  log(`Outline lessons: ${outline.lessons.length}`)
+  log(`Vocabulary count: ${vocabularyCount}`)
+  log(`Story outline written: ${displayPath(outputPath)}`)
+  return outline
 }
 
 export function parseArgs(args) {
@@ -115,8 +133,8 @@ export function parseArgs(args) {
     }
 
     if (arg === '--help' || arg === '-h') {
-      printHelp()
-      process.exit(0)
+      options.help = true
+      continue
     }
 
     throw new Error(`unknown argument: ${arg}`)
@@ -125,7 +143,7 @@ export function parseArgs(args) {
   return options
 }
 
-export async function loadSourceChapters({ sourcePath, indexChapters }) {
+export async function loadSourceChapters({ sourcePath, sourceBytes, indexChapters }) {
   if (!sourcePath) {
     throw new TypeError('loadSourceChapters requires sourcePath')
   }
@@ -133,7 +151,7 @@ export async function loadSourceChapters({ sourcePath, indexChapters }) {
     throw new TypeError('loadSourceChapters requires a non-empty indexChapters array')
   }
 
-  const bytes = await readFile(sourcePath)
+  const bytes = sourceBytes ?? await readFile(sourcePath)
   const parsedChapters = parseChapters(cleanNovelText(decodeNovelBuffer(bytes)))
   const parsedByOrder = new Map(parsedChapters.map((chapter) => [chapter.order, chapter]))
   const chapters = []
@@ -231,9 +249,9 @@ function stripInlineComment(value) {
   return (match ? match[1] : value).trim()
 }
 
-function getFirstEnv(names) {
+function getFirstEnv(names, env = process.env) {
   for (const name of names) {
-    const value = process.env[name]
+    const value = env[name]
     if (typeof value === 'string' && value.trim()) {
       return value.trim()
     }
@@ -254,8 +272,8 @@ function displayPath(path) {
   return relativePath && !relativePath.startsWith('..') ? relativePath : path
 }
 
-function printHelp() {
-  console.log(`Usage: node scripts/build-story-outline.mjs [options]
+export function helpText() {
+  return `Usage: node scripts/build-story-outline.mjs [options]
 
 Options:
   --source, --source-path PATH          GB18030 raw novel source (default: ${DEFAULT_SOURCE_PATH})
@@ -272,7 +290,7 @@ Environment:
   STORY_LLM_BASE_URL / OPENAI_BASE_URL / LLM_BASE_URL
   STORY_LLM_MODEL / OPENAI_MODEL / LLM_MODEL (default: ${DEFAULT_MODEL})
 
-Exported shell environment values take precedence over .env and .env.local.`)
+Exported shell environment values take precedence over .env and .env.local.`
 }
 
 function isDirectRun() {

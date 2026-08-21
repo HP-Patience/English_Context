@@ -5,21 +5,21 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { writeNovelIndex } from '../lib/novel-parser.mjs'
-import { buildChapterSummaries, buildStoryOutline, writeJsonAtomic } from '../lib/story-outline.mjs'
-import { assignWordsToOutline, generateLessonsFromAssignments } from '../lib/story-lesson-generator.mjs'
-import { buildWordAndMeaningMaps, READY_STATUS, resolveLessonWordRows } from '../lib/story-lesson-repository.mjs'
-import { validateReadyLessons } from '../validate-story-lessons.mjs'
-import { loadSourceChapters } from '../build-story-outline.mjs'
+import { main as parseNovelCommand } from '../parse-novel.mjs'
+import { main as buildOutlineCommand } from '../build-story-outline.mjs'
+import { main as generateLessonsCommand } from '../generate-story-lessons.mjs'
+import { main as validateLessonsCommand } from '../validate-story-lessons.mjs'
+import { assignWordsToOutline } from '../lib/story-lesson-generator.mjs'
+import { ARCHIVED_COURSE_STATUS, READY_COURSE_SLOT, READY_COURSE_STATUS } from '../lib/story-lesson-repository.mjs'
+import { createFakeStoryPrisma } from './helpers/fake-story-prisma.mjs'
 
 const CHAPTER_COUNT = 61
 const WORD_COUNT = 205
 const MAX_WORDS_PER_LESSON = 100
-
 const GB18030_DI = Buffer.from([0xb5, 0xda])
 const GB18030_ZHANG = Buffer.from([0xd5, 0xc2])
 
-test('offline fixture verifies parse to outline to generation to validation without production services', async () => {
+test('offline command smoke resumes interruption and atomically swaps the published course', async () => {
   const tempRoot = await mkdtemp(join(tmpdir(), 'story-pipeline-smoke-'))
   const rawPath = join(tempRoot, 'fixture-novel-gb18030.txt')
   const cacheDir = join(tempRoot, '.story-cache')
@@ -28,162 +28,215 @@ test('offline fixture verifies parse to outline to generation to validation with
   const outlineCheckpointPath = join(cacheDir, 'outline', 'story-outline.checkpoint.json')
   const outlinePath = join(cacheDir, 'story-outline.json')
   const lessonCheckpointDir = join(cacheDir, 'lessons')
+  const generationReportPath = join(cacheDir, 'story-generation-report.json')
   const validationReportPath = join(cacheDir, 'story-validation-report.json')
+  const logs = []
+  const log = (message) => logs.push(String(message))
+  const wordGroups = createFixtureWordGroups(WORD_COUNT)
+  const prisma = createFakeStoryPrisma({ wordGroups })
+
+  const oldCourse = {
+    id: 'published-v1',
+    version: 1,
+    status: READY_COURSE_STATUS,
+    readySlot: READY_COURSE_SLOT,
+    sourceFingerprint: 'old-source',
+    summaryFingerprint: 'old-summary',
+    outlineFingerprint: 'old-outline',
+    assignmentFingerprint: 'old-assignment',
+  }
+  const oldLesson = { id: 'published-lesson-v1', courseId: oldCourse.id, order: 1, status: 'ready', contentJson: '{}' }
+  const oldLessonWord = { id: 'published-lesson-word-v1', lessonId: oldLesson.id, wordId: 'old-word', meaningId: 'old-meaning', sortOrder: 1, glossCn: '旧释义' }
+  const oldProgress = { id: 'progress-v1', lessonId: oldLesson.id, lessonWordId: oldLessonWord.id }
+  prisma.state.courses.set(oldCourse.id, oldCourse)
+  prisma.state.lessons.set(oldLesson.id, oldLesson)
+  prisma.state.lessonWords.set(oldLessonWord.id, oldLessonWord)
+  prisma.state.userProgress = new Map([[oldProgress.id, oldProgress]])
 
   try {
     await writeFile(rawPath, createGb18030NovelFixture(CHAPTER_COUNT))
 
-    const parseResult = await writeNovelIndex({ sourcePath: rawPath, outputPath: indexPath })
+    const parseResult = await parseNovelCommand([
+      '--source', rawPath,
+      '--output', indexPath,
+    ], { log })
     assert.equal(parseResult.chapterCount, CHAPTER_COUNT)
+    assert.equal(parseResult.diagnostics.numberingGapCount, 0)
 
-    const novelIndex = await readJson(indexPath)
-    assertJsonKeys(novelIndex, ['generatedAt', 'sourceEncoding', 'chapterCount', 'chapters'])
-    assert.equal(novelIndex.sourceEncoding, 'gb18030')
-    assert.equal(novelIndex.chapters.length, CHAPTER_COUNT)
-    assert.equal(novelIndex.chapters.every((chapter) => chapter.text === undefined), true)
-
-    const chapters = await loadSourceChapters({ sourcePath: rawPath, indexChapters: novelIndex.chapters })
-    const chapterSummaries = await buildChapterSummaries({
-      chapters,
-      checkpointPath: chapterCheckpointPath,
-      chapterBatchSize: 1,
-      generateJson: createFakeChapterSummarizer(),
+    const outline = await buildOutlineCommand([
+      '--source', rawPath,
+      '--index', indexPath,
+      '--output', outlinePath,
+      '--chapter-checkpoint', chapterCheckpointPath,
+      '--outline-checkpoint', outlineCheckpointPath,
+      '--vocabulary-count', String(WORD_COUNT),
+    ], {
+      log,
+      loadEnvironment: false,
+      env: {},
+      generateJson: createOutlineCommandFake(),
     })
-    assert.equal(chapterSummaries.length, CHAPTER_COUNT)
+    assert.equal(outline.lessonCount, CHAPTER_COUNT)
+    assert.equal(outline.vocabularyCount, WORD_COUNT)
+    assert.match(outline.sourceFingerprint, /^[a-f0-9]{64}$/)
 
-    const outline = await buildStoryOutline({
-      chapterSummaries,
-      vocabularyCount: WORD_COUNT,
-      checkpointPath: outlineCheckpointPath,
-      generateJson: async (_prompt, schemaName) => {
-        assert.equal(schemaName, 'story-outline')
-        return createFixtureOutline(chapterSummaries)
-      },
-    })
-    await writeJsonAtomic(outlinePath, outline)
-
-    const outlineJson = await readJson(outlinePath)
-    assertJsonKeys(outlineJson, ['generatedAt', 'lessonCount', 'vocabularyCount', 'lessons'])
-    assert.equal(outlineJson.lessonCount, CHAPTER_COUNT)
-    assert.equal(outlineJson.vocabularyCount, WORD_COUNT)
-
-    const wordGroups = createFixtureWordGroups(WORD_COUNT)
-    const { wordMap, meaningMap } = buildWordAndMeaningMaps(wordGroups)
-    const wordsById = new Map([...wordMap.values()].map((word) => [word.id, word]))
-    const meaningsById = new Map([...meaningMap.values()].map((meaning) => [meaning.id, meaning]))
     const assignmentResult = assignWordsToOutline({ wordGroups, outline, maxWordsPerLesson: MAX_WORDS_PER_LESSON })
-    const populatedAssignments = assignmentResult.assignments.filter((assignment) => assignment.words.length > 0)
-
     assert.equal(assignmentResult.unassignedWords.length, 0)
     assert.equal(assignmentResult.report.assignedWordCount, WORD_COUNT)
-    assert.deepEqual(populatedAssignments.map((assignment) => assignment.words.length), [100, 100, 5])
-    assert.equal(populatedAssignments.every((assignment) => assignment.words.length <= MAX_WORDS_PER_LESSON), true)
 
-    const readyLessons = []
-    let lessonCall = 0
-    await generateLessonsFromAssignments({
-      assignments: populatedAssignments,
-      checkpointDir: lessonCheckpointDir,
-      maxWordsPerLesson: MAX_WORDS_PER_LESSON,
+    let interruptedOrder = 0
+    await assert.rejects(
+      generateLessonsCommand(generateArgs(), {
+        prisma,
+        log,
+        loadEnvironment: false,
+        env: {},
+        generateJson: async (_prompt, schemaName) => {
+          assert.equal(schemaName, 'story-lesson')
+          interruptedOrder += 1
+          if (interruptedOrder === 10) throw new Error('fixture generation interruption')
+          const assignment = assignmentResult.assignments[interruptedOrder - 1]
+          return createFixtureLessonDocument(assignment.outlineLesson, assignment.words)
+        },
+      }),
+      /fixture generation interruption/,
+    )
+
+    const draftAfterInterruption = [...prisma.state.courses.values()].find((course) => course.status === 'draft')
+    assert.ok(draftAfterInterruption)
+    assert.equal([...prisma.state.lessons.values()].filter((lesson) => lesson.courseId === draftAfterInterruption.id && lesson.status === 'ready').length, 9)
+    assertSingleReadyCourse(prisma, oldCourse.id)
+
+    await assert.rejects(
+      validateLessonsCommand(validateArgs(), {
+        prisma,
+        log,
+        loadEnvironment: false,
+        env: {},
+      }),
+      /story course validation failed/,
+    )
+    assert.equal(prisma.state.courses.get(draftAfterInterruption.id).status, 'draft')
+    assertSingleReadyCourse(prisma, oldCourse.id)
+
+    let resumedOrder = 9
+    const generationReport = await generateLessonsCommand(generateArgs(), {
+      prisma,
+      log,
+      loadEnvironment: false,
+      env: {},
       generateJson: async (_prompt, schemaName) => {
         assert.equal(schemaName, 'story-lesson')
-        const assignment = populatedAssignments[lessonCall]
-        lessonCall += 1
+        resumedOrder += 1
+        const assignment = assignmentResult.assignments[resumedOrder - 1]
         return createFixtureLessonDocument(assignment.outlineLesson, assignment.words)
       },
-      persistLesson: async (lessonDocument) => {
-        const lessonId = `fixture-lesson-${lessonDocument.order}`
-        const rows = resolveLessonWordRows({ lessonId, lessonDocument, wordMap, meaningMap })
-        readyLessons.push({
-          id: lessonId,
-          title: lessonDocument.title,
-          order: lessonDocument.order,
-          sourceChapterStart: lessonDocument.sourceChapterStart,
-          sourceChapterEnd: lessonDocument.sourceChapterEnd,
-          sourceSummary: lessonDocument.sourceSummary,
-          continuityNotes: lessonDocument.continuityNotes,
-          status: READY_STATUS,
-          contentJson: JSON.stringify(lessonDocument),
-          words: rows.map((row) => ({
-            ...row,
-            id: `${row.lessonId}-${row.sortOrder}`,
-            word: wordsById.get(row.wordId),
-            meaning: meaningsById.get(row.meaningId),
-          })),
-        })
-      },
     })
+    assert.equal(resumedOrder, CHAPTER_COUNT)
+    assert.equal(generationReport.courseId, draftAfterInterruption.id)
+    assert.equal(generationReport.wordCount, WORD_COUNT)
 
-    assert.equal(lessonCall, 3)
-    assert.equal(readyLessons.length, 3)
-
-    const validationReport = validateReadyLessons({
-      lessons: readyLessons,
-      allWordTexts: [...wordMap.keys()],
-      expectedWordCount: WORD_COUNT,
-      minLessons: 3,
-      maxLessons: 3,
-      maxWordsPerLesson: MAX_WORDS_PER_LESSON,
+    const validationReport = await validateLessonsCommand(validateArgs(), {
+      prisma,
+      log,
+      loadEnvironment: false,
+      env: {},
     })
-    await writeJsonAtomic(validationReportPath, validationReport)
+    assert.equal(validationReport.ok, true)
+    assert.equal(validationReport.published, true)
+    assert.equal(validationReport.lessonCount, CHAPTER_COUNT)
+    assert.equal(validationReport.assignedWordCount, WORD_COUNT)
+    assert.equal(validationReport.lessonWordLinkCount, WORD_COUNT)
 
-    const reportJson = await readJson(validationReportPath)
-    assertJsonKeys(reportJson, ['ok', 'errors', 'lessonCount', 'expectedWordCount', 'assignedWordCount', 'maxWordsPerLesson', 'lessonWordLinkCount'])
-    assert.equal(reportJson.ok, true)
-    assert.deepEqual(reportJson.errors, [])
-    assert.equal(reportJson.lessonCount, 3)
-    assert.equal(reportJson.expectedWordCount, WORD_COUNT)
-    assert.equal(reportJson.assignedWordCount, WORD_COUNT)
-    assert.equal(reportJson.lessonWordLinkCount, WORD_COUNT)
-    assert.equal(reportJson.maxWordsPerLesson, MAX_WORDS_PER_LESSON)
+    assert.equal(prisma.state.courses.get(oldCourse.id).status, ARCHIVED_COURSE_STATUS)
+    assert.equal(prisma.state.courses.get(oldCourse.id).readySlot, null)
+    assertSingleReadyCourse(prisma, draftAfterInterruption.id)
+    assert.equal(prisma.state.lessons.get(oldLesson.id).id, oldLesson.id)
+    assert.equal(prisma.state.lessonWords.get(oldLessonWord.id).id, oldLessonWord.id)
+    assert.deepEqual(prisma.state.userProgress.get(oldProgress.id), oldProgress)
 
-    for (const artifactPath of [indexPath, outlinePath, validationReportPath]) {
+    const index = await readJson(indexPath)
+    assert.equal(index.chapters.every((chapter) => chapter.text === undefined), true)
+    assert.equal(JSON.stringify(index).includes('Fixture body'), false)
+    assert.match(index.sourceFingerprint, /^[a-f0-9]{64}$/)
+    assert.match(index.chapterIndexFingerprint, /^[a-f0-9]{64}$/)
+
+    const failedPublicationReport = await readJson(validationReportPath)
+    assert.equal(failedPublicationReport.published, true)
+    for (const artifactPath of [indexPath, outlinePath, generationReportPath, validationReportPath]) {
       assert.equal(existsSync(artifactPath), true, `${artifactPath} should exist after the fixture run`)
     }
+    assert.equal(logs.some((line) => /API_KEY|DATABASE_URL=.*|Fixture body/.test(line)), false)
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
   }
+
+  function generateArgs() {
+    return [
+      '--index', indexPath,
+      '--outline', outlinePath,
+      '--checkpoint-dir', lessonCheckpointDir,
+      '--report', generationReportPath,
+      '--expected-word-count', String(WORD_COUNT),
+      '--max-words-per-lesson', String(MAX_WORDS_PER_LESSON),
+    ]
+  }
+
+  function validateArgs() {
+    return [
+      '--index', indexPath,
+      '--outline', outlinePath,
+      '--report', validationReportPath,
+      '--expected-word-count', String(WORD_COUNT),
+      '--min-lessons', String(CHAPTER_COUNT),
+      '--max-lessons', String(CHAPTER_COUNT),
+      '--max-words-per-lesson', String(MAX_WORDS_PER_LESSON),
+    ]
+  }
 })
+
+function assertSingleReadyCourse(prisma, expectedId) {
+  const ready = [...prisma.state.courses.values()].filter((course) => course.readySlot === READY_COURSE_SLOT)
+  assert.deepEqual(ready.map((course) => course.id), [expectedId])
+}
+
+function createOutlineCommandFake() {
+  return async (prompt, schemaName) => {
+    if (schemaName === 'chapter-summary') {
+      const [, start, end] = prompt.match(/source chapters (\d+)-(\d+)/i)
+      return {
+        summary: `Fixture summary for chapters ${start}-${end}.`,
+        characters: ['Fang Yuan'],
+        events: [`Fixture event ${start}-${end}`],
+        continuityStart: `Fixture chapter range ${start}-${end} starts.`,
+        continuityEnd: `Fixture chapter range ${start}-${end} ends.`,
+      }
+    }
+    assert.equal(schemaName, 'story-outline')
+    return {
+      lessons: Array.from({ length: CHAPTER_COUNT }, (_, index) => ({
+        order: index + 1,
+        sourceChapterStart: index + 1,
+        sourceChapterEnd: index + 1,
+        plotSummary: `Fixture plot ${index + 1}.`,
+        characters: ['Fang Yuan'],
+        events: [`Fixture event ${index + 1}`],
+        continuityStart: index === 0 ? 'Fixture story starts.' : `Continue from lesson ${index}.`,
+        continuityEnd: index === CHAPTER_COUNT - 1 ? 'Fixture story closes.' : `Continue to lesson ${index + 2}.`,
+        targetWordCapacity: MAX_WORDS_PER_LESSON,
+      })),
+    }
+  }
+}
 
 function createGb18030NovelFixture(chapterCount) {
   const chunks = []
   for (let order = 1; order <= chapterCount; order += 1) {
     chunks.push(GB18030_DI, Buffer.from(String(order)), GB18030_ZHANG)
     chunks.push(Buffer.from(` Fixture Chapter ${order}\n`))
-    chunks.push(Buffer.from(`Fixture body for chapter ${order}. The smoke test source is synthetic and offline.\n\n`))
+    chunks.push(Buffer.from(`Fixture body for chapter ${order}. Synthetic offline smoke data only.\n\n`))
   }
   return Buffer.concat(chunks)
-}
-
-function createFakeChapterSummarizer() {
-  let call = 0
-  return async (_prompt, schemaName) => {
-    assert.equal(schemaName, 'chapter-summary')
-    call += 1
-    return {
-      summary: `Fixture summary for chapter ${call}.`,
-      characters: ['Fang Yuan'],
-      events: [`Fixture event ${call}`],
-      continuityStart: `Fixture chapter ${call} starts.`,
-      continuityEnd: `Fixture chapter ${call} ends.`,
-    }
-  }
-}
-
-function createFixtureOutline(chapterSummaries) {
-  return {
-    lessons: chapterSummaries.map((summary, index) => ({
-      order: index + 1,
-      sourceChapterStart: summary.sourceChapterStart,
-      sourceChapterEnd: summary.sourceChapterEnd,
-      plotSummary: summary.summary,
-      characters: summary.characters,
-      events: summary.events,
-      continuityStart: summary.continuityStart ?? `Fixture lesson ${index + 1} starts.`,
-      continuityEnd: summary.continuityEnd ?? `Fixture lesson ${index + 1} ends.`,
-      targetWordCapacity: index < 3 ? MAX_WORDS_PER_LESSON : 40,
-    })),
-  }
 }
 
 function createFixtureWordGroups(wordCount) {
@@ -232,10 +285,4 @@ function createFixtureLessonDocument(outlineLesson, words) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'))
-}
-
-function assertJsonKeys(value, keys) {
-  for (const key of keys) {
-    assert.equal(Object.hasOwn(value, key), true, `expected JSON key ${key}`)
-  }
 }

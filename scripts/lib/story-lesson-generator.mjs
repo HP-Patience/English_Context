@@ -1,6 +1,8 @@
 import { mkdir, readFile } from 'node:fs/promises'
 import { validateLessonDocument } from './story-content.mjs'
 import { writeJsonAtomic } from './story-outline.mjs'
+import { fingerprintValue } from './input-fingerprint.mjs'
+import { validateSourceIndexCoverage } from './story-source-coverage.mjs'
 
 export const DEFAULT_MAX_WORDS_PER_LESSON = 100
 export const DEFAULT_MIN_LESSONS = 61
@@ -213,7 +215,16 @@ export async function generateLessonsFromAssignments({
     const previousLesson = generated[index - 1] ?? null
     const nextLesson = assignments[index + 1]?.outlineLesson ?? null
     const checkpointPath = checkpointDir ? `${checkpointDir}/lesson-${String(assignment.lessonOrder).padStart(4, '0')}.json` : null
-    let lessonDocument = checkpointPath ? await readValidatedLessonCheckpoint(checkpointPath, assignment.outlineLesson, assignment.words, maxWordsPerLesson) : null
+    const inputFingerprint = createLessonInputFingerprint(assignment)
+    const priorContinuityFingerprint = createPriorContinuityFingerprint(previousLesson)
+    let lessonDocument = checkpointPath ? await readValidatedLessonCheckpoint({
+      path: checkpointPath,
+      outlineLesson: assignment.outlineLesson,
+      words: assignment.words,
+      maxWordsPerLesson,
+      inputFingerprint,
+      priorContinuityFingerprint,
+    }) : null
 
     if (!lessonDocument) {
       lessonDocument = await generateLesson({
@@ -225,7 +236,12 @@ export async function generateLessonsFromAssignments({
         maxWordsPerLesson,
       })
       if (checkpointPath) {
-        await writeJsonAtomic(checkpointPath, lessonDocument)
+        await writeJsonAtomic(checkpointPath, {
+          version: 2,
+          inputFingerprint,
+          priorContinuityFingerprint,
+          lesson: lessonDocument,
+        })
       }
     }
 
@@ -247,6 +263,7 @@ export function validateCorpus({
   maxWordsPerLesson = DEFAULT_MAX_WORDS_PER_LESSON,
   requireReadyStatus = true,
   expectedWordCount,
+  sourceChapters,
 } = {}) {
   const errors = []
   const warnings = []
@@ -324,6 +341,10 @@ export function validateCorpus({
     }
   }
 
+  if (Array.isArray(sourceChapters) && sourceChapters.length > 0) {
+    errors.push(...validateSourceIndexCoverage({ lessons: normalizedLessons.filter(Boolean), sourceChapters }))
+  }
+
   for (const word of expectedWords) {
     if (!seen.has(word)) {
       errors.push(`missing corpus word: ${word}`)
@@ -373,19 +394,39 @@ export function parseLessonContent(value) {
   return value
 }
 
-async function readValidatedLessonCheckpoint(path, outlineLesson, words, maxWordsPerLesson) {
+async function readValidatedLessonCheckpoint({ path, outlineLesson, words, maxWordsPerLesson, inputFingerprint, priorContinuityFingerprint }) {
   try {
     const value = JSON.parse(await readFile(path, 'utf8'))
-    const validation = validateLessonDocument(value, { maxTargetWords: maxWordsPerLesson })
+    if (value?.version !== 2 || value.inputFingerprint !== inputFingerprint || value.priorContinuityFingerprint !== priorContinuityFingerprint) return null
+    const validation = validateLessonDocument(value.lesson, { maxTargetWords: maxWordsPerLesson })
     if (!validation.ok) return null
     assertLessonTargetsMatchAssignment(validation.value, words, outlineLesson)
     return validation.value
   } catch (error) {
-    if (error?.code === 'ENOENT') {
-      return null
-    }
+    if (error?.code === 'ENOENT') return null
     return null
   }
+}
+
+export function createLessonInputFingerprint(assignment) {
+  return fingerprintValue({
+    outlineLesson: assignment?.outlineLesson,
+    words: normalizeAssignedWords(assignment?.words ?? []).map((word) => ({
+      id: word.id,
+      text: word.text,
+      meaningId: word.meaning?.id,
+      definitionCn: getWordGloss(word),
+    })),
+  })
+}
+
+export function createPriorContinuityFingerprint(previousLesson) {
+  return fingerprintValue(previousLesson ? {
+    order: previousLesson.order,
+    continuityNotes: previousLesson.continuityNotes,
+    sourceSummary: previousLesson.sourceSummary,
+    sourceChapterEnd: previousLesson.sourceChapterEnd,
+  } : null)
 }
 
 function normalizeOutlineLessons(outline) {

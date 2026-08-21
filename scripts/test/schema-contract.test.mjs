@@ -18,8 +18,9 @@ function assertContains(block, expected) {
   assert.ok(block.includes(expected), `expected ${expected}`)
 }
 
-test('declares the five story lesson and progress models', () => {
+test('declares the versioned story course, lesson, and progress models', () => {
   for (const name of [
+    'StoryCourse',
     'StoryLesson',
     'StoryLessonWord',
     'UserStoryProgress',
@@ -30,12 +31,31 @@ test('declares the five story lesson and progress models', () => {
   }
 })
 
-test('StoryLesson persists generated lesson metadata without raw novel text', () => {
+test('StoryCourse provides a versioned single-ready publication boundary', () => {
+  const block = modelBlock('StoryCourse')
+  for (const [field, pattern] of [
+    ['id', 'String\\s+@id\\s+@default\\(cuid\\(\\)\\)'],
+    ['version', 'Int\\s+@unique'],
+    ['status', 'String\\s+@default\\(\"draft\"\\)'],
+    ['readySlot', 'String\\?\\s+@unique'],
+    ['sourceFingerprint', 'String\\b'],
+    ['summaryFingerprint', 'String\\b'],
+    ['outlineFingerprint', 'String\\b'],
+    ['assignmentFingerprint', 'String\\b'],
+    ['publishedAt', 'DateTime\\?'],
+    ['archivedAt', 'DateTime\\?'],
+  ]) assertField(block, field, pattern)
+  assertContains(block, '@@index([status])')
+  assert.doesNotMatch(block, /rawNovel|novelText|sourceText/i)
+})
+
+test('StoryLesson belongs to a course and persists generated metadata without raw novel text', () => {
   const block = modelBlock('StoryLesson')
 
   for (const [field, pattern] of [
     ['id', 'String\\s+@id\\s+@default\\(cuid\\(\\)\\)'],
-    ['order', 'Int\\s+@unique'],
+    ['courseId', 'String\\b'],
+    ['order', 'Int\\b'],
     ['title', 'String\\b'],
     ['wordGroupId', 'String\\?'],
     ['sourceChapterStart', 'String\\b'],
@@ -52,8 +72,9 @@ test('StoryLesson persists generated lesson metadata without raw novel text', ()
     assertField(block, field, pattern)
   }
 
-  assertContains(block, '@@index([order])')
-  assertContains(block, '@@index([status])')
+  assertField(block, 'course', 'StoryCourse\\s+@relation\\(fields: \\[courseId\\], references: \\[id\\], onDelete: Restrict\\)')
+  assertContains(block, '@@unique([courseId, order])')
+  assertContains(block, '@@index([courseId, status])')
   assert.doesNotMatch(block, /rawNovel|novelText|sourceText/i)
 })
 

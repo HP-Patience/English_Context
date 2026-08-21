@@ -9,7 +9,10 @@ const JSON_INSTRUCTIONS = 'Return only valid JSON. Do not include markdown fence
  * @param {{ apiKey?: string, baseURL?: string, model?: string, client?: unknown }} options
  * @returns {{ generateJson(prompt: string, schemaName?: string): Promise<unknown> }}
  */
-export function createLlmJsonClient({ apiKey, baseURL, model, client } = {}) {
+export function createLlmJsonClient({ apiKey, baseURL, model, client, transport = 'auto' } = {}) {
+  if (!['auto', 'chat-completions', 'responses'].includes(transport)) {
+    throw new Error('LLM transport must be auto, chat-completions, or responses')
+  }
   const configuredModel = model
   let resolvedClient = client
 
@@ -30,23 +33,10 @@ export function createLlmJsonClient({ apiKey, baseURL, model, client } = {}) {
         throw new Error('LLM model is required')
       }
 
-      if (activeClient.responses?.create) {
-        const response = await activeClient.responses.create({
-          model: configuredModel,
-          input: [
-            { role: 'system', content: JSON_INSTRUCTIONS },
-            { role: 'user', content: prompt },
-          ],
-          text: {
-            format: {
-              type: 'json_object',
-            },
-          },
-        })
-        return parseJsonLike(extractResponseText(response), schemaName)
-      }
+      const canUseChat = typeof activeClient.chat?.completions?.create === 'function'
+      const canUseResponses = typeof activeClient.responses?.create === 'function'
 
-      if (activeClient.chat?.completions?.create) {
+      if ((transport === 'auto' || transport === 'chat-completions') && canUseChat) {
         const response = await activeClient.chat.completions.create({
           model: configuredModel,
           messages: [
@@ -58,7 +48,19 @@ export function createLlmJsonClient({ apiKey, baseURL, model, client } = {}) {
         return parseJsonLike(response.choices?.[0]?.message?.content, schemaName)
       }
 
-      throw new Error('LLM client must expose generateJson, responses.create, or chat.completions.create')
+      if ((transport === 'auto' || transport === 'responses') && canUseResponses) {
+        const response = await activeClient.responses.create({
+          model: configuredModel,
+          input: [
+            { role: 'system', content: JSON_INSTRUCTIONS },
+            { role: 'user', content: prompt },
+          ],
+          text: { format: { type: 'json_object' } },
+        })
+        return parseJsonLike(extractResponseText(response), schemaName)
+      }
+
+      throw new Error(`LLM client does not expose the requested ${transport} transport`)
     },
   }
 }

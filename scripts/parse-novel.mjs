@@ -9,28 +9,44 @@ export const DEFAULT_SOURCE_PATH = 'F:\\english_context\\蛊真人.txt'
 export const DEFAULT_OUTPUT_PATH = resolve(PROJECT_ROOT, 'scripts/.story-cache/novel-index.json')
 export const DEFAULT_MAX_REPLACEMENT_DENSITY = 0.001
 
-export async function main(args = process.argv.slice(2)) {
+export async function main(args = process.argv.slice(2), dependencies = {}) {
   const options = parseArgs(args)
+  const log = dependencies.log ?? console.log
+  if (options.help) {
+    log(helpText())
+    return { help: true }
+  }
+
   const sourcePath = options.sourcePath ?? DEFAULT_SOURCE_PATH
   const outputPath = options.outputPath ?? DEFAULT_OUTPUT_PATH
   const maxReplacementDensity = options.maxReplacementDensity ?? DEFAULT_MAX_REPLACEMENT_DENSITY
+  const fileExists = dependencies.existsSync ?? existsSync
 
-  if (!existsSync(sourcePath)) {
+  if (!fileExists(sourcePath)) {
     throw new Error(`source file not found; expected GB18030 novel source at ${sourcePath}`)
   }
 
-  const result = await writeNovelIndex({
+  const result = await (dependencies.writeNovelIndex ?? writeNovelIndex)({
     sourcePath,
     outputPath,
     maxReplacementDensity,
   })
 
-  console.log(`Parsed chapters: ${result.chapterCount}`)
-  console.log(`Source bytes: ${result.byteCount}`)
-  console.log(`Decoded characters: ${result.characterCount}`)
-  console.log(`Cleaned characters: ${result.cleanedCharacterCount}`)
-  console.log(`Replacement characters: ${result.replacementCharacterCount} (${result.replacementDensity.toFixed(6)})`)
-  console.log(`Index written: ${displayPath(result.outputPath)}`)
+  log(`Parsed chapters: ${result.chapterCount}`)
+  log(`Source bytes: ${result.byteCount}`)
+  log(`Decoded characters: ${result.characterCount}`)
+  log(`Cleaned characters: ${result.cleanedCharacterCount}`)
+  log(`Replacement characters: ${result.replacementCharacterCount} (${result.replacementDensity.toFixed(6)})`)
+  log(`Chapter numbering gaps: ${result.diagnostics?.numberingGapCount ?? 0}`)
+  log(`Repaired/non-monotonic chapter orders: ${result.diagnostics?.repairedOrderCount ?? 0}`)
+  for (const gap of result.diagnostics?.numberingGaps ?? []) {
+    log(`  Gap after source chapter ${gap.afterSourceOrder}: missing ${gap.missingStart}-${gap.missingEnd} before ${gap.beforeSourceOrder}`)
+  }
+  for (const repair of result.diagnostics?.repairedOrders ?? []) {
+    log(`  Repaired heading ${repair.headingIndex}: parsed ${repair.parsedOrder ?? 'unparseable'} -> assigned ${repair.assignedOrder} (${repair.reason})`)
+  }
+  log(`Index written: ${displayPath(result.outputPath)}`)
+  return result
 }
 
 export function parseArgs(args) {
@@ -52,18 +68,14 @@ export function parseArgs(args) {
     if (arg === '--max-replacement-density') {
       const rawValue = requireValue(args, ++index, arg)
       const value = Number(rawValue)
-
-      if (!Number.isFinite(value) || value < 0) {
-        throw new Error(`${arg} must be a non-negative number`)
-      }
-
+      if (!Number.isFinite(value) || value < 0) throw new Error(`${arg} must be a non-negative number`)
       options.maxReplacementDensity = value
       continue
     }
 
     if (arg === '--help' || arg === '-h') {
-      printHelp()
-      process.exit(0)
+      options.help = true
+      continue
     }
 
     throw new Error(`unknown argument: ${arg}`)
@@ -74,11 +86,7 @@ export function parseArgs(args) {
 
 function requireValue(args, index, flag) {
   const value = args[index]
-
-  if (!value || value.startsWith('--')) {
-    throw new Error(`${flag} requires a value`)
-  }
-
+  if (!value || value.startsWith('--')) throw new Error(`${flag} requires a value`)
   return value
 }
 
@@ -87,8 +95,14 @@ function displayPath(path) {
   return relativePath && !relativePath.startsWith('..') ? relativePath : path
 }
 
-function printHelp() {
-  console.log('Usage: node scripts/parse-novel.mjs [--source PATH] [--output PATH] [--max-replacement-density N]')
+export function helpText() {
+  return `Usage: node scripts/parse-novel.mjs [options]
+
+Options:
+  --source, --source-path PATH          GB18030 raw novel source (default: ${DEFAULT_SOURCE_PATH})
+  --output, --output-path PATH          Metadata-only chapter index (default: scripts/.story-cache/novel-index.json)
+  --max-replacement-density N           Maximum decoded replacement-character ratio (default: ${DEFAULT_MAX_REPLACEMENT_DENSITY})
+  -h, --help                            Show this help`
 }
 
 function isDirectRun() {
