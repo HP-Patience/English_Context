@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+﻿# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
 /node_modules
@@ -61,3 +61,7 @@ scripts/.migrate-cache/
 next-env.d.ts
 .playwright-mcp/
 .gstack/
+
+# story source and generated cache
+/蛊真人.txt
+/scripts/.story-cache/
