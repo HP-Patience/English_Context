@@ -135,6 +135,7 @@ test('offline command smoke resumes interruption and atomically swaps the publis
     assert.equal(resumedOrder, CHAPTER_COUNT)
     assert.equal(generationReport.courseId, draftAfterInterruption.id)
     assert.equal(generationReport.wordCount, WORD_COUNT)
+    assert.equal([...prisma.state.words.values()].every((word) => word.phonetic === '/ˈfɪkstʃər wɜːd/'), true)
 
     const validationReport = await validateLessonsCommand(validateArgs(), {
       prisma,
@@ -251,6 +252,7 @@ function createFixtureWordGroups(wordCount) {
         word: {
           id: wordId,
           text: `fixtureWord${order}`,
+          phonetic: null,
           meanings: [{
             id: `fixture-meaning-${order}`,
             wordId,
@@ -275,7 +277,7 @@ function createFixtureLessonDocument(outlineLesson, words) {
       segments: [
         { type: 'text', value: `Offline fixture scene for lesson ${outlineLesson.order}.` },
         ...words.flatMap((word, index) => [
-          { type: 'targetWord', word: word.text, definitionCn: word.meaning.definitionCn, wordOrder: index + 1 },
+          { type: 'targetWord', word: word.text, definitionCn: word.meaning.definitionCn, phonetic: '/ˈfɪkstʃər wɜːd/', wordOrder: index + 1 },
           { type: 'text', value: `Context sentence ${index + 1}.` },
         ]),
       ],

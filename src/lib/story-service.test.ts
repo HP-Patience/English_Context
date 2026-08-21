@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildWordAndMeaningMaps,
+  createOrResumeDraftCourse,
+  persistDraftLesson,
+  publishDraftCourse,
+} from '../../scripts/lib/story-lesson-repository.mjs'
+import { createFakeStoryPrisma } from '../../scripts/test/helpers/fake-story-prisma.mjs'
+import { validateReadyLessons } from '../../scripts/validate-story-lessons.mjs'
+
+import {
   getStoryLesson,
   listStoryLessonWords,
   listStoryLessons,
@@ -23,7 +32,7 @@ function makeContent({ title = 'Ready Lesson', order = 1 } = {}) {
         sceneTitle: '山寨晨雾',
         segments: [
           { type: 'text', value: '方源看着 ' },
-          { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', wordOrder: 1 },
+          { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', phonetic: '/ˈælfə/', wordOrder: 1 },
           { type: 'text', value: '。' },
         ],
       },
@@ -31,7 +40,7 @@ function makeContent({ title = 'Ready Lesson', order = 1 } = {}) {
         sceneTitle: '学堂试炼',
         segments: [
           { type: 'text', value: '随后面对 ' },
-          { type: 'targetWord', word: 'beta', definitionCn: '贝塔', wordOrder: 2 },
+          { type: 'targetWord', word: 'beta', definitionCn: '贝塔', phonetic: '/ˈbeɪtə/', wordOrder: 2 },
           { type: 'text', value: '。' },
         ],
       },
@@ -321,6 +330,59 @@ describe('listStoryLessons', () => {
 })
 
 describe('getStoryLesson', () => {
+  it('carries generated phonetics through draft persistence, publication, and the runtime DTO', async () => {
+    const wordGroups = [{
+      words: [
+        {
+          sortOrder: 1,
+          word: {
+            id: 'word-alpha',
+            text: 'alpha',
+            phonetic: null,
+            meanings: [{ id: 'meaning-alpha', wordId: 'word-alpha', partOfSpeech: 'n.', definition: 'alpha', definitionCn: '阿尔法', example: null }],
+          },
+        },
+        {
+          sortOrder: 2,
+          word: {
+            id: 'word-beta',
+            text: 'beta',
+            phonetic: null,
+            meanings: [{ id: 'meaning-beta', wordId: 'word-beta', partOfSpeech: 'n.', definition: 'beta', definitionCn: '贝塔', example: null }],
+          },
+        },
+      ],
+    }]
+    const prisma = createFakeStoryPrisma({ wordGroups })
+    const course = await createOrResumeDraftCourse({
+      prisma,
+      fingerprints: { sourceFingerprint: 'source', summaryFingerprint: 'summary', outlineFingerprint: 'outline', assignmentFingerprint: 'assignment' },
+    })
+    const { wordMap, meaningMap } = buildWordAndMeaningMaps(wordGroups)
+    const artifact = JSON.parse(makeContent())
+    const persisted = await persistDraftLesson({ prisma, courseId: course.id, lessonDocument: artifact, wordMap, meaningMap })
+
+    await publishDraftCourse({
+      prisma,
+      courseId: course.id,
+      validateCourse: (candidate: { lessons: unknown[] }) => validateReadyLessons({
+        courseId: course.id,
+        lessons: candidate.lessons,
+        assignments: undefined,
+        allWordTexts: ['alpha', 'beta'],
+        expectedWordCount: 2,
+        minLessons: 1,
+        maxLessons: 1,
+        maxWordsPerLesson: 100,
+        sourceChapters: undefined,
+      }),
+    })
+
+    const detail = await getStoryLesson({ prisma, userId: 'local-user', lessonId: persisted.lessonId })
+
+    expect(detail?.lessonWords.map((item) => item.word.phonetic)).toEqual(['/ˈælfə/', '/ˈbeɪtə/'])
+  })
+
   it('returns parsed content and ordered lesson words only after ready-course visibility filtering', async () => {
     const prisma = createServicePrisma({
       lessons: [

@@ -6,6 +6,7 @@
 **Base SHA:** `515c62ac5c2fe54b16fb71699ce7c7294611c5c8`
 **Original Task 6 commit:** `d7965e09ef217a93a3429ac270756fbc02c16ea8` (`feat: add story Step1 through Step3 learning flow`)
 **Review-fix commit message:** `fix: address story lesson review findings`
+**Round 2 commit message:** `fix: require phonetics before story publication`
 
 ## Delivered scope
 
@@ -199,3 +200,117 @@ The review fix is limited to:
 - this report.
 
 No raw novel text, generated lesson drafts, fabricated phonetics, dependency changes, or unrelated application work were added.
+
+## Round 2 — phonetics enforced by lesson generation
+
+The second scoped review required phonetics to become a publication invariant of the approved offline generation pipeline rather than remaining optional importer plumbing.
+
+### Generated target-word contract
+
+- `TargetWordSegment.phonetic` is now a required, non-empty string in both the offline lesson-document contract and the runtime persisted-content contract.
+- The lesson-generation prompt's exact JSON shape includes `phonetic` on every `targetWord` segment.
+- Prompt requirements explicitly request one non-empty canonical IPA value per assigned target word and prohibit omission or placeholder values.
+- The offline lesson validator rejects missing, empty, or whitespace-only phonetics before a generated artifact can be checkpointed or persisted.
+- The runtime persisted-content parser applies the same invariant, so newly generated content cannot silently lose the field between generation and serving.
+
+No phonetics were invented for the canonical vocabulary source. Optional TSV phonetic support remains intact; generation is now the mandatory enrichment point for publishable story lessons.
+
+### Transactional persistence and publication
+
+`persistDraftLesson` now persists each validated generated IPA onto the linked `Word.phonetic` inside the same serializable transaction that writes the draft lesson and its lesson-word links.
+
+- A `null` persisted value is populated from the validated generated target segment.
+- An identical non-null value is reused without rewriting it.
+- A conflicting non-null value rejects the lesson. Transaction rollback prevents phonetics from earlier target words in the same failed lesson from leaking into the database.
+- The existing failed-lesson path records the bounded generation error after rollback.
+
+Full-course publication validation now inspects every generated target segment and corresponding `StoryLessonWord` relation. It rejects a course when the linked `Word.phonetic` is missing/blank or differs from the validated generated IPA. Thus every lesson word in a newly publishable course is guaranteed to have a persisted phonetic.
+
+The runtime DTO and Step 3 UI continue to read `Word.phonetic`. The existing `音标暂无` fallback remains only as a defensive display for legacy rows that predate this publication invariant.
+
+### Round 2 strict TDD evidence
+
+Tests were written or strengthened before each production change and observed failing for the intended reason.
+
+#### RED — generation contract and runtime parser
+
+Focused contract tests initially proved that:
+
+- the offline validator accepted missing/blank target phonetics;
+- the generation prompt did not require canonical IPA;
+- a generated lesson could pass without phonetic enrichment; and
+- the runtime persisted-content parser accepted target segments without phonetics.
+
+#### GREEN — generation contract
+
+```text
+npm run test:story -- scripts/test/story-content.test.mjs scripts/test/story-lesson-generator.test.mjs
+15 passed / 0 failed
+
+npm run test:runtime -- src/lib/story-progress.test.ts
+8 passed / 0 failed
+```
+
+#### RED — persistence and publication
+
+Repository/publication tests initially proved that:
+
+- a generated IPA was not copied into a null `Word.phonetic`;
+- a conflicting existing non-null IPA did not reject persistence; and
+- full-course validation accepted missing or content-mismatched persisted phonetics.
+
+#### GREEN — persistence and publication
+
+```text
+npm run test:story -- scripts/test/story-lesson-repository.test.mjs
+8 passed / 0 failed
+```
+
+Coverage proves null-to-populated persistence, identical reuse, conflict rejection with transaction rollback, missing persisted-phonetic rejection, and generated/persisted mismatch rejection.
+
+A final integration regression was added to exercise one representative generated lesson artifact through draft persistence, validated publication, and `getStoryLesson`. The runtime DTO returns the exact persisted IPA values. Its initial RED failure exposed that the shared pipeline fake did not yet support runtime relation loading; the fake was extended without changing production behavior, and the focused suite then passed.
+
+The 205-word offline smoke fixture also asserts that every linked synthetic fixture word receives its generated fixture IPA before publication. These are explicit test-only values for synthetic words, not production vocabulary backfills.
+
+### Round 2 final validation
+
+```text
+# Full offline story/data pipeline
+npm run test:story
+63 passed / 0 failed
+
+# Explicit interruption/resume/publication smoke
+node --test scripts/test/story-pipeline-smoke.mjs
+1 passed / 0 failed
+
+# Full runtime/story UI and service suite
+npm run test:runtime -- src
+Test Files  9 passed (9)
+Tests       73 passed (73)
+
+# TypeScript
+npx tsc --noEmit
+exit 0
+
+# Prisma, with placeholder DATABASE_URL
+npx prisma validate
+schema valid
+
+npx prisma generate
+Prisma Client v5.22.0 generated
+
+# Changed-file lint
+npx eslint <all changed JS/MJS/TS/TSX files>
+exit 0
+
+# Production build, with placeholder DATABASE_URL
+npm run build
+Next.js 16.2.9 build passed
+/story/[lessonId] remains ƒ Dynamic
+
+# Diff hygiene
+git diff --check
+exit 0
+```
+
+The build emitted only the previously documented multiple-lockfile workspace-root warning. No generated client or build output is included in the scoped source diff.

@@ -24,6 +24,7 @@ export type TargetWordSegment = {
   type: 'targetWord'
   word: string
   definitionCn: string
+  phonetic: string
   wordOrder: number
 }
 
@@ -98,6 +99,7 @@ function validateStoryLessonDocument(value: unknown): StoryLessonDocument {
           targetWordCount += 1
           addRequiredStringError(errors, segment.word, `${segmentPath}.word`)
           addRequiredStringError(errors, segment.definitionCn, `${segmentPath}.definitionCn`)
+          addRequiredStringError(errors, segment.phonetic, `${segmentPath}.phonetic`)
 
           if (!Number.isInteger(segment.wordOrder) || Number(segment.wordOrder) < 1) {
             errors.push(`${segmentPath}.wordOrder must be a positive integer`)

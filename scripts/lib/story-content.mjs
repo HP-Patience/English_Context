@@ -30,6 +30,7 @@
  * @property {'targetWord'} type
  * @property {string} word
  * @property {string} definitionCn
+ * @property {string} phonetic
  * @property {number} wordOrder
  */
 
@@ -124,6 +125,7 @@ export function validateLessonDocument(value, context = {}) {
           targetWordCount += 1
           addRequiredStringError(errors, segment.word, `${segmentPath}.word`)
           addRequiredStringError(errors, segment.definitionCn, `${segmentPath}.definitionCn`)
+          addRequiredStringError(errors, segment.phonetic, `${segmentPath}.phonetic`)
 
           if (!Number.isInteger(segment.wordOrder) || segment.wordOrder < 1) {
             errors.push(`${segmentPath}.wordOrder must be a positive integer`)

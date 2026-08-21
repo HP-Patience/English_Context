@@ -24,19 +24,19 @@ function makeLessonDocument() {
       sceneTitle: '场景',
       segments: [
         { type: 'text', value: '先学习 ' },
-        { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', wordOrder: 1 },
+        { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', phonetic: '/ˈælfə/', wordOrder: 1 },
         { type: 'text', value: ' 和 ' },
-        { type: 'targetWord', word: 'beta', definitionCn: '贝塔', wordOrder: 2 },
+        { type: 'targetWord', word: 'beta', definitionCn: '贝塔', phonetic: '/ˈbeɪtə/', wordOrder: 2 },
       ],
     }],
   }
 }
 
-function makeMaps({ mismatchedMeaning = false } = {}) {
+function makeMaps({ mismatchedMeaning = false, alphaPhonetic = null, betaPhonetic = null } = {}) {
   return {
     wordMap: new Map([
-      ['alpha', { id: 'word-alpha', text: 'alpha' }],
-      ['beta', { id: 'word-beta', text: 'beta' }],
+      ['alpha', { id: 'word-alpha', text: 'alpha', phonetic: alphaPhonetic }],
+      ['beta', { id: 'word-beta', text: 'beta', phonetic: betaPhonetic }],
     ]),
     meaningMap: new Map([
       ['alpha', { id: 'meaning-alpha', wordId: mismatchedMeaning ? 'different-word' : 'word-alpha', definitionCn: '阿尔法' }],
@@ -45,8 +45,13 @@ function makeMaps({ mismatchedMeaning = false } = {}) {
   }
 }
 
-async function makeDraftPrisma() {
-  const prisma = createFakeStoryPrisma()
+async function makeDraftPrisma({ alphaPhonetic = null, betaPhonetic = null } = {}) {
+  const { wordMap } = makeMaps({ alphaPhonetic, betaPhonetic })
+  const prisma = createFakeStoryPrisma({
+    wordGroups: [{
+      words: [...wordMap.values()].map((word, index) => ({ sortOrder: index + 1, word })),
+    }],
+  })
   const course = await createOrResumeDraftCourse({ prisma, fingerprints })
   return { prisma, course }
 }
@@ -68,6 +73,36 @@ test('valid lesson is persisted idempotently inside one draft course with one St
   assert.equal([...prisma.state.lessons.values()][0].status, 'ready')
   assert.equal([...prisma.state.lessons.values()][0].courseId, course.id)
   assert.equal(prisma.state.courses.get(course.id).status, 'draft')
+  assert.equal(prisma.state.words.get('word-alpha').phonetic, '/ˈælfə/')
+  assert.equal(prisma.state.words.get('word-beta').phonetic, '/ˈbeɪtə/')
+})
+
+
+test('draft persistence allows an identical existing phonetic value', async () => {
+  const { prisma, course } = await makeDraftPrisma({ alphaPhonetic: '/ˈælfə/' })
+  const lessonDocument = makeLessonDocument()
+  const { wordMap, meaningMap } = makeMaps({ alphaPhonetic: '/ˈælfə/' })
+
+  await assert.doesNotReject(
+    persistDraftLesson({ prisma, courseId: course.id, lessonDocument, wordMap, meaningMap }),
+  )
+  assert.equal(prisma.state.words.get('word-alpha').phonetic, '/ˈælfə/')
+})
+
+test('draft persistence rejects conflicting existing phonetics transactionally', async () => {
+  const { prisma, course } = await makeDraftPrisma({ betaPhonetic: '/ˈbiːtə/' })
+  const lessonDocument = makeLessonDocument()
+  const { wordMap, meaningMap } = makeMaps({ betaPhonetic: '/ˈbiːtə/' })
+
+  await assert.rejects(
+    persistDraftLesson({ prisma, courseId: course.id, lessonDocument, wordMap, meaningMap }),
+    /conflicting phonetic.*beta.*\/ˈbiːtə\/.*\/ˈbeɪtə\//,
+  )
+
+  assert.equal(prisma.state.words.get('word-alpha').phonetic, null)
+  assert.equal(prisma.state.words.get('word-beta').phonetic, '/ˈbiːtə/')
+  assert.equal([...prisma.state.lessons.values()][0].status, 'failed')
+  assert.equal(prisma.state.lessonWords.size, 0)
 })
 
 test('Meaning/Word mismatches are rejected before a draft lesson becomes ready', async () => {
@@ -91,7 +126,7 @@ test('duplicate target segments are rejected by repository before draft-ready pe
   const lessonDocument = makeLessonDocument()
   lessonDocument.paragraphs[0].segments.push(
     { type: 'text', value: ' 重复 ' },
-    { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', wordOrder: 3 },
+    { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', phonetic: '/ˈælfə/', wordOrder: 3 },
   )
   const { wordMap, meaningMap } = makeMaps()
 
@@ -116,7 +151,7 @@ function makePersistedLesson({ rows = undefined } = {}) {
       meaningId: 'meaning-alpha',
       sortOrder: 1,
       glossCn: '阿尔法',
-      word: { id: 'word-alpha', text: 'alpha' },
+      word: { id: 'word-alpha', text: 'alpha', phonetic: '/ˈælfə/' },
       meaning: { id: 'meaning-alpha', wordId: 'word-alpha' },
     },
     {
@@ -126,7 +161,7 @@ function makePersistedLesson({ rows = undefined } = {}) {
       meaningId: 'meaning-beta',
       sortOrder: 2,
       glossCn: '贝塔',
-      word: { id: 'word-beta', text: 'beta' },
+      word: { id: 'word-beta', text: 'beta', phonetic: '/ˈbeɪtə/' },
       meaning: { id: 'meaning-beta', wordId: 'word-beta' },
     },
   ]
@@ -149,6 +184,36 @@ test('story validation proves a bijection between target segments and StoryLesso
     maxWordsPerLesson: 100,
   })
   assert.equal(validReport.ok, true)
+
+
+
+  const missingPhoneticRows = structuredClone(makePersistedLesson().words)
+  missingPhoneticRows[1].word.phonetic = null
+  const missingPhoneticReport = validateReadyLessons({
+    lessons: [makePersistedLesson({ rows: missingPhoneticRows })],
+    allWordTexts: ['alpha', 'beta'],
+    expectedWordCount: 2,
+    minLessons: 1,
+    maxLessons: 1,
+    maxWordsPerLesson: 100,
+  })
+  assert.equal(missingPhoneticReport.ok, false)
+  assert.match(missingPhoneticReport.errors.join('\n'), /word beta.*non-empty persisted phonetic/i)
+
+
+
+  const conflictingPersistedRows = structuredClone(makePersistedLesson().words)
+  conflictingPersistedRows[0].word.phonetic = '/ælˈfɑː/'
+  const conflictingPersistedReport = validateReadyLessons({
+    lessons: [makePersistedLesson({ rows: conflictingPersistedRows })],
+    allWordTexts: ['alpha', 'beta'],
+    expectedWordCount: 2,
+    minLessons: 1,
+    maxLessons: 1,
+    maxWordsPerLesson: 100,
+  })
+  assert.equal(conflictingPersistedReport.ok, false)
+  assert.match(conflictingPersistedReport.errors.join('\n'), /persisted phonetic.*does not match content phonetic/i)
 
   const missingReport = validateReadyLessons({
     lessons: [makePersistedLesson({ rows: makePersistedLesson().words.slice(0, 1) })],
@@ -181,7 +246,6 @@ test('story validation proves a bijection between target segments and StoryLesso
   assert.match(wrongReport.errors.join('\n'), /row word gamma does not match content target word beta/)
   assert.match(wrongReport.errors.join('\n'), /row glossCn 错误释义 does not match content gloss 贝塔/)
 })
-
 
 test('ready-course lookup uses the unique ready slot and validates the returned row', async () => {
   const calls = []

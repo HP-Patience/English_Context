@@ -64,6 +64,7 @@ export async function persistDraftLesson({ prisma, courseId, lessonDocument, wor
       const validation = validateLessonDocument(lessonDocument, { maxTargetWords: 100 })
       if (!validation.ok) throw new Error(`invalid lesson document: ${validation.errors.join('; ')}`)
       const rows = resolveLessonWordRows({ lessonId: lesson.id, lessonDocument: validation.value, wordMap, meaningMap })
+      await persistLessonWordPhonetics(tx, validation.value, rows)
 
       await tx.storyLesson.update({ where: { id: lesson.id }, data: { ...draftLessonData(courseId, validation.value), courseId } })
       await tx.storyLessonWord.deleteMany({ where: { lessonId: lesson.id } })
@@ -141,6 +142,22 @@ export function resolveLessonWordRows({ lessonId, lessonDocument, wordMap, meani
     rows.push({ lessonId, wordId: word.id, meaningId: meaning.id, sortOrder: segment.wordOrder, glossCn: segment.definitionCn })
   }
   return rows
+}
+
+async function persistLessonWordPhonetics(prisma, lessonDocument, rows) {
+  const targetSegments = collectTargetWordSegments(lessonDocument)
+  for (const [index, row] of rows.entries()) {
+    const segment = targetSegments[index]
+    const generatedPhonetic = segment.phonetic.trim()
+    const word = await prisma.word.findUnique({ where: { id: row.wordId } })
+    if (!word) throw new Error(`target word not found in Word table: ${segment.word}`)
+    if (word.phonetic !== null && word.phonetic !== generatedPhonetic) {
+      throw new Error(`conflicting phonetic for target word ${segment.word}: persisted ${word.phonetic}, generated ${generatedPhonetic}`)
+    }
+    if (word.phonetic === null) {
+      await prisma.word.update({ where: { id: row.wordId }, data: { phonetic: generatedPhonetic } })
+    }
+  }
 }
 
 export function buildWordAndMeaningMaps(wordGroups) {

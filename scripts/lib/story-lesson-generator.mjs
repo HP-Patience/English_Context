@@ -106,7 +106,7 @@ export function createLessonPrompt({ outlineLesson, words, previousLesson = null
   return [
     'Generate one structured story vocabulary lesson as JSON only.',
     'Use the exact StoryLessonDocument shape:',
-    '{ "title": string, "order": number, "sourceChapterStart": string, "sourceChapterEnd": string, "sourceSummary": string, "continuityNotes": string, "paragraphs": [{ "sceneTitle": string, "segments": [{ "type": "text", "value": string } | { "type": "targetWord", "word": string, "definitionCn": string, "wordOrder": number }] }] }',
+    '{ "title": string, "order": number, "sourceChapterStart": string, "sourceChapterEnd": string, "sourceSummary": string, "continuityNotes": string, "paragraphs": [{ "sceneTitle": string, "segments": [{ "type": "text", "value": string } | { "type": "targetWord", "word": string, "definitionCn": string, "phonetic": string, "wordOrder": number }] }] }',
     'Requirements:',
     `- source chapter range: ${sourceChapterRange}`,
     `- previous lesson continuity end: ${previousLesson?.continuityNotes ?? previousLesson?.continuityEnd ?? outlineLesson.continuityStart ?? '无；这是第一课。'}`,
@@ -114,6 +114,7 @@ export function createLessonPrompt({ outlineLesson, words, previousLesson = null
     `- next lesson continuity start: ${nextLesson?.continuityStart ?? nextLesson?.sourceSummary ?? '无；这是最后一课。'}`,
     '- the complete target-word list is provided below and every item is mandatory.',
     '- include one contextual Chinese gloss for every target word using the provided glossary.',
+    '- enrich every targetWord segment with one required non-empty phonetic value in canonical IPA; never use a placeholder or omit it.',
     '- no target word omitted; every target word must appear in at least one targetWord segment exactly as listed.',
     '- do not add targetWord segments for words outside the target list.',
     '- do not quote or reproduce raw novel prose; retell only from the summary/continuity information.',

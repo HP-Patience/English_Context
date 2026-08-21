@@ -19,7 +19,7 @@ const validContent = JSON.stringify({
       sceneTitle: '醒来',
       segments: [
         { type: 'text', value: '他回到了 ' },
-        { type: 'targetWord', word: 'dorm', definitionCn: '宿舍', wordOrder: 1 },
+        { type: 'targetWord', word: 'dorm', definitionCn: '宿舍', phonetic: '/dɔːm/', wordOrder: 1 },
         { type: 'text', value: '。' },
       ],
     },
@@ -35,8 +35,18 @@ describe('parseStoryContent', () => {
       type: 'targetWord',
       word: 'dorm',
       definitionCn: '宿舍',
+      phonetic: '/dɔːm/',
       wordOrder: 1,
     })
+  })
+
+  it('rejects persisted target words without generated phonetics', () => {
+    const missingPhonetic = JSON.parse(validContent)
+    delete missingPhonetic.paragraphs[0].segments[1].phonetic
+
+    expect(() => parseStoryContent(JSON.stringify(missingPhonetic))).toThrow(
+      /phonetic must be a non-empty string/,
+    )
   })
 
   it('throws a descriptive Error for invalid persisted JSON', () => {

@@ -125,6 +125,9 @@ export function validateReadyLessons({ courseId, lessons, assignments, allWordTe
       if (!row) { report.errors.push(`${lessonLabel} is missing StoryLessonWord row for target word ${segment.word} at wordOrder ${segment.wordOrder}`); continue }
       if (row.word?.text !== segment.word) report.errors.push(`${lessonLabel} StoryLessonWord row word ${row.word?.text ?? 'unknown'} does not match content target word ${segment.word} at wordOrder ${segment.wordOrder}`)
       if (row.glossCn !== segment.definitionCn) report.errors.push(`${lessonLabel} StoryLessonWord row glossCn ${row.glossCn} does not match content gloss ${segment.definitionCn} at wordOrder ${segment.wordOrder}`)
+      const persistedPhonetic = typeof row.word?.phonetic === 'string' ? row.word.phonetic.trim() : ''
+      if (!persistedPhonetic) report.errors.push(`${lessonLabel} StoryLessonWord row word ${segment.word} must have a non-empty persisted phonetic`)
+      else if (persistedPhonetic !== segment.phonetic.trim()) report.errors.push(`${lessonLabel} StoryLessonWord row word ${segment.word} persisted phonetic ${persistedPhonetic} does not match content phonetic ${segment.phonetic.trim()}`)
     }
     const assignment = assignments?.[lessonIndex]
     if (assignment) {

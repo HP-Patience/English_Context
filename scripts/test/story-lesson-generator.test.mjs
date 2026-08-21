@@ -45,7 +45,7 @@ function documentFor(outlineLesson, targetWords) {
       sceneTitle: '场景',
       segments: targetWords.flatMap((word, index) => [
         { type: 'text', value: `文本${index + 1}` },
-        { type: 'targetWord', word: word.text, definitionCn: word.meaning.definitionCn, wordOrder: index + 1 },
+        { type: 'targetWord', word: word.text, definitionCn: word.meaning.definitionCn, phonetic: '/wɜːd/', wordOrder: index + 1 },
       ]),
     }],
   }
@@ -113,9 +113,31 @@ test('generated lesson prompt includes continuity, chapter range, full word list
   assert.match(prompt, /next lesson continuity start/i)
   assert.match(prompt, /complete target-word list/i)
   assert.match(prompt, /contextual Chinese gloss/i)
+  assert.match(prompt, /canonical IPA/i)
+  assert.match(prompt, /phonetic/i)
   assert.match(prompt, /no target word omitted/i)
   assert.match(prompt, /word1/)
   assert.match(prompt, /释义2/)
+})
+
+
+
+test('generated lesson rejects a target word with missing phonetic enrichment', async () => {
+  const targetWords = words(1)
+  const outlineLesson = outline(1, 100).lessons[0]
+
+  await assert.rejects(
+    generateLesson({
+      outlineLesson,
+      words: targetWords,
+      generateJson: async () => {
+        const document = documentFor(outlineLesson, targetWords)
+        delete document.paragraphs[0].segments[1].phonetic
+        return document
+      },
+    }),
+    /phonetic must be a non-empty string/,
+  )
 })
 
 test('corpus validation reports full coverage, caps, monotonic ranges, and status errors', () => {

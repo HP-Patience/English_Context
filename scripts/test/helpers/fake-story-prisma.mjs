@@ -20,6 +20,7 @@ function snapshotState(state) {
     courses: structuredClone(state.courses),
     lessons: structuredClone(state.lessons),
     lessonWords: structuredClone(state.lessonWords),
+    words: structuredClone(state.words),
     nextCourse: state.nextCourse,
     nextLesson: state.nextLesson,
     nextLessonWord: state.nextLessonWord,
@@ -30,55 +31,65 @@ function restoreState(state, snapshot) {
   state.courses = snapshot.courses
   state.lessons = snapshot.lessons
   state.lessonWords = snapshot.lessonWords
+  state.words = snapshot.words
   state.nextCourse = snapshot.nextCourse
   state.nextLesson = snapshot.nextLesson
   state.nextLessonWord = snapshot.nextLessonWord
 }
 
+/** @param {{ wordGroups?: any[] }} [options] */
 export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
   const state = {
     courses: new Map(),
     lessons: new Map(),
     lessonWords: new Map(),
+    words: new Map(),
     wordGroups,
     nextCourse: 1,
     nextLesson: 1,
     nextLessonWord: 1,
   }
 
-  const wordsById = new Map()
   const meaningsById = new Map()
   for (const group of wordGroups) {
     for (const item of group.words ?? group.items ?? []) {
       const word = item.word ?? item
       if (!word?.id) continue
-      wordsById.set(word.id, word)
+      state.words.set(word.id, structuredClone(word))
       for (const meaning of word.meanings ?? []) meaningsById.set(meaning.id, meaning)
       if (word.meaning?.id) meaningsById.set(word.meaning.id, word.meaning)
       if (word.selectedMeaning?.id) meaningsById.set(word.selectedMeaning.id, word.selectedMeaning)
     }
   }
 
+  function includeLessonRelations(lesson, include) {
+    if (!lesson) return null
+    const result = structuredClone(lesson)
+    if (include?.userProgress) result.userProgress = []
+    if (include?.words) {
+      result.words = sortRows(
+        [...state.lessonWords.values()]
+          .filter((row) => row.lessonId === lesson.id)
+          .map((row) => ({
+            ...structuredClone(row),
+            ...(include.words.include?.word ? { word: structuredClone(state.words.get(row.wordId)) } : {}),
+            ...(include.words.include?.meaning ? { meaning: structuredClone(meaningsById.get(row.meaningId)) } : {}),
+            ...(include.words.include?.userProgress ? { userProgress: [] } : {}),
+          })),
+        include.words.orderBy,
+      )
+    }
+    return result
+  }
+
   function includeCourseRelations(course, include) {
     if (!course || !include?.lessons) return course ? structuredClone(course) : null
     const lessonRows = sortRows(
-      [...state.lessons.values()].filter((lesson) => lesson.courseId === course.id).map((lesson) => structuredClone(lesson)),
+      [...state.lessons.values()]
+        .filter((lesson) => lesson.courseId === course.id)
+        .map((lesson) => includeLessonRelations(lesson, include.lessons.include)),
       include.lessons.orderBy,
     )
-    if (include.lessons.include?.words) {
-      for (const lesson of lessonRows) {
-        lesson.words = sortRows(
-          [...state.lessonWords.values()]
-            .filter((row) => row.lessonId === lesson.id)
-            .map((row) => ({
-              ...structuredClone(row),
-              ...(include.lessons.include.words.include?.word ? { word: structuredClone(wordsById.get(row.wordId)) } : {}),
-              ...(include.lessons.include.words.include?.meaning ? { meaning: structuredClone(meaningsById.get(row.meaningId)) } : {}),
-            })),
-          include.lessons.include.words.orderBy,
-        )
-      }
-    }
     return { ...structuredClone(course), lessons: lessonRows }
   }
 
@@ -97,6 +108,19 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
     wordGroup: {
       async findMany() { return structuredClone(state.wordGroups) },
     },
+    word: {
+      async findUnique({ where }) {
+        const row = state.words.get(where.id)
+        return row ? structuredClone(row) : null
+      },
+      async update({ where, data }) {
+        const current = state.words.get(where.id)
+        if (!current) throw new Error(`word not found: ${where.id}`)
+        const row = { ...current, ...structuredClone(data) }
+        state.words.set(row.id, row)
+        return structuredClone(row)
+      },
+    },
     storyCourse: {
       async findFirst({ where, orderBy } = {}) {
         const rows = sortRows([...state.courses.values()].filter((row) => matchesWhere(row, where)), orderBy)
@@ -106,7 +130,9 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
         return sortRows([...state.courses.values()].filter((row) => matchesWhere(row, where)).map((row) => structuredClone(row)), orderBy)
       },
       async findUnique({ where, include } = {}) {
-        const course = state.courses.get(where.id)
+        const course = where.id
+          ? state.courses.get(where.id)
+          : [...state.courses.values()].find((row) => matchesWhere(row, where))
         return includeCourseRelations(course, include)
       },
       async aggregate() {
@@ -139,17 +165,20 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
       },
     },
     storyLesson: {
-      async findMany({ where, orderBy } = {}) {
-        return sortRows([...state.lessons.values()].filter((row) => matchesWhere(row, where)).map((row) => structuredClone(row)), orderBy)
+      async findMany({ where, orderBy, include } = {}) {
+        return sortRows(
+          [...state.lessons.values()].filter((row) => matchesWhere(row, where)).map((row) => includeLessonRelations(row, include)),
+          orderBy,
+        )
       },
       async findUnique({ where }) {
         const key = where.courseId_order
         const row = [...state.lessons.values()].find((lesson) => lesson.courseId === key.courseId && lesson.order === key.order)
         return row ? structuredClone(row) : null
       },
-      async findFirst({ where } = {}) {
+      async findFirst({ where, include } = {}) {
         const row = [...state.lessons.values()].find((lesson) => matchesWhere(lesson, where))
-        return row ? structuredClone(row) : null
+        return includeLessonRelations(row, include)
       },
       async upsert({ where, create, update }) {
         const key = where.courseId_order

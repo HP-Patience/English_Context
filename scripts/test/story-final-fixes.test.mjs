@@ -45,7 +45,7 @@ function makeSummaries(count) {
   }))
 }
 
-function makeLesson({ order, start, end, word, gloss = `释义-${word}`, continuityNotes = `handoff-${order}` }) {
+function makeLesson({ order, start, end, word, gloss = `释义-${word}`, phonetic = '/ˈælfə/', continuityNotes = `handoff-${order}` }) {
   return {
     title: `Lesson ${order}`,
     order,
@@ -57,7 +57,7 @@ function makeLesson({ order, start, end, word, gloss = `释义-${word}`, continu
       sceneTitle: `scene-${order}`,
       segments: [
         { type: 'text', value: 'context' },
-        { type: 'targetWord', word, definitionCn: gloss, wordOrder: 1 },
+        { type: 'targetWord', word, definitionCn: gloss, phonetic, wordOrder: 1 },
       ],
     }],
   }
@@ -261,18 +261,20 @@ function makePublicationPrisma() {
     courses: new Map(),
     lessons: new Map(),
     lessonWords: new Map(),
+    words: new Map(),
     nextCourse: 1,
     nextLesson: 1,
   }
 
   const cloneState = () => structuredClone({
-    courses: [...state.courses], lessons: [...state.lessons], lessonWords: [...state.lessonWords],
+    courses: [...state.courses], lessons: [...state.lessons], lessonWords: [...state.lessonWords], words: [...state.words],
     nextCourse: state.nextCourse, nextLesson: state.nextLesson,
   })
   const restore = (snapshot) => {
     state.courses = new Map(snapshot.courses)
     state.lessons = new Map(snapshot.lessons)
     state.lessonWords = new Map(snapshot.lessonWords)
+    state.words = new Map(snapshot.words)
     state.nextCourse = snapshot.nextCourse
     state.nextLesson = snapshot.nextLesson
   }
@@ -286,6 +288,14 @@ function makePublicationPrisma() {
     async $transaction(callback) {
       const snapshot = cloneState()
       try { return await callback(client) } catch (error) { restore(snapshot); throw error }
+    },
+    word: {
+      async findUnique({ where }) { return state.words.get(where.id) ?? null },
+      async update({ where, data }) {
+        const row = { ...state.words.get(where.id), ...data }
+        state.words.set(where.id, row)
+        return row
+      },
     },
     storyCourse: {
       async findFirst({ where, orderBy } = {}) {
@@ -416,7 +426,8 @@ test('draft course publication is atomic, archives prior ready course, and prese
 
   const draft = await createOrResumeDraftCourse({ prisma, fingerprints })
   assert.equal(draft.status, DRAFT_COURSE_STATUS)
-  const wordMap = new Map([['alpha', { id: 'word-alpha', text: 'alpha' }]])
+  prisma.state.words.set('word-alpha', { id: 'word-alpha', text: 'alpha', phonetic: null })
+  const wordMap = new Map([['alpha', { id: 'word-alpha', text: 'alpha', phonetic: null }]])
   const meaningMap = new Map([['alpha', { id: 'meaning-alpha', wordId: 'word-alpha', definitionCn: '释义-alpha' }]])
   await persistDraftLesson({ prisma, courseId: draft.id, lessonDocument: makeLesson({ order: 1, start: 1, end: 1, word: 'alpha' }), wordMap, meaningMap })
 

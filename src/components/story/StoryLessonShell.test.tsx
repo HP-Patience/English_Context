@@ -32,7 +32,7 @@ const lesson: StoryLessonDetail = {
         sceneTitle: '雨夜重生',
         segments: [
           { type: 'text', value: '<img src=x onerror="alert(1)">雨声压住山寨的喧嚣，方源仍然 ' },
-          { type: 'targetWord', word: 'resolve', definitionCn: '决意', wordOrder: 1 },
+          { type: 'targetWord', word: 'resolve', definitionCn: '决意', phonetic: '/rɪˈzɒlv/', wordOrder: 1 },
           { type: 'text', value: ' 地望向窗外。' },
         ],
       },
@@ -40,7 +40,7 @@ const lesson: StoryLessonDetail = {
         sceneTitle: '学堂试探',
         segments: [
           { type: 'text', value: '翌日，他以平静掩住真正的 ' },
-          { type: 'targetWord', word: 'scheme', definitionCn: '谋划', wordOrder: 2 },
+          { type: 'targetWord', word: 'scheme', definitionCn: '谋划', phonetic: '/skiːm/', wordOrder: 2 },
           { type: 'text', value: '。' },
         ],
       },
