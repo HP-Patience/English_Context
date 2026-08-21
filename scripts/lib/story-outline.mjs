@@ -380,7 +380,17 @@ async function generateParsedJsonWithRetries({ prompt, schemaName, generateJson,
       'Regenerate the full JSON from scratch. Follow every schema and language requirement exactly, especially Simplified Chinese (简体中文) narrative fields. Return only valid JSON.',
     ].join('\n')
 
-    const response = await generateJson(retryPrompt, schemaName)
+    let response
+    try {
+      response = await generateJson(retryPrompt, schemaName)
+    } catch (error) {
+      lastError = error
+      if (attempt === attempts || !isTransientLlmError(error)) {
+        throw error
+      }
+      continue
+    }
+
     try {
       return parse(response)
     } catch (error) {
@@ -392,6 +402,17 @@ async function generateParsedJsonWithRetries({ prompt, schemaName, generateJson,
   }
 
   throw lastError ?? new Error(`${schemaName} generation failed`)
+}
+
+
+function isTransientLlmError(error) {
+  const status = Number(error?.status ?? error?.code)
+  if (Number.isInteger(status) && (status === 408 || status === 409 || status === 425 || status === 429 || status >= 500)) {
+    return true
+  }
+
+  const message = error?.message ?? String(error)
+  return /(?:408|409|425|429|5\d\d|524).*status code|timeout|timed out|rate limit|temporar(?:y|ily)|service unavailable|gateway/i.test(message)
 }
 
 function normalizeChaptersStrict(chapters) {
