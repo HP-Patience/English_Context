@@ -96,3 +96,61 @@ scripts/
   generate-meanings.js     # AI 释义+例句生成
   import-new.js            # 从 txt 导入词库
 ```
+
+## 故事词汇课离线生成流水线
+
+> 这条流水线用于把本地小说源文件离线加工成可入库的故事词汇课。它不是运行时功能：真实生成只应由操作者在本机/受控环境中手动执行，不会在应用请求链路中调用 LLM，也不会依赖线上原始小说文件。
+
+### 本地原始文件与缓存
+
+- 原始小说文件固定放在仓库外层工作区根目录：`F:\english_context\蛊真人.txt`。
+- `蛊真人.txt` 是 local-only 文件，不能提交到 Git；仓库 `.gitignore` 已忽略 `/蛊真人.txt`。
+- 生成缓存写入 `scripts/.story-cache/`，包括章节索引、outline checkpoint、lesson checkpoint、生成报告和验证报告；该目录也已被 `.gitignore` 忽略。
+- 章节索引只保存元数据，不保存正文；outline/lesson checkpoint 用于断点续跑。
+
+### 环境变量名称（不要把值写进文档或提交）
+
+复制 `.env.example` 到 `.env` 后，在本地填写需要的值：
+
+- `DATABASE_URL`：`story:generate` 和 `story:validate` 使用的数据库连接。请指向本地或专门的离线生成库，不要指向生产库。
+- `STORY_LLM_API_KEY` / `OPENAI_API_KEY` / `LLM_API_KEY`：LLM API key，按优先级选择第一个有值的变量。
+- `STORY_LLM_BASE_URL` / `OPENAI_BASE_URL` / `LLM_BASE_URL`：可选，自定义 LLM endpoint。
+- `STORY_LLM_MODEL` / `OPENAI_MODEL` / `LLM_MODEL`：可选，未设置时使用脚本默认模型。
+
+已导出的 shell 环境变量优先于 `.env` / `.env.local`；`.env.local` 不应提交。
+
+### 执行顺序
+
+```bash
+# 1. 解析本地 GB18030 小说源，生成 metadata-only 章节索引
+npm run story:parse
+
+# 2. 使用离线 LLM 调用构建连续剧情 outline，并写入可续跑 checkpoint
+npm run story:outline
+
+# 3. 使用离线 LLM 调用生成课程并持久化 ready lesson（需要离线数据库）
+npm run story:generate
+
+# 4. 校验 ready lesson 数量、每课最多 100 个目标词、全词表精确覆盖、重复/遗漏、关联行一致性
+npm run story:validate
+```
+
+常用覆盖参数（调试/夹具时使用，避免碰生产路径）：
+
+```bash
+node scripts/parse-novel.mjs --source path/to/fixture.txt --output path/to/cache/novel-index.json
+node scripts/build-story-outline.mjs --source path/to/fixture.txt --index path/to/cache/novel-index.json --output path/to/cache/story-outline.json
+node scripts/generate-story-lessons.mjs --index path/to/cache/novel-index.json --outline path/to/cache/story-outline.json --checkpoint-dir path/to/cache/lessons --report path/to/cache/story-generation-report.json
+node scripts/validate-story-lessons.mjs --report path/to/cache/story-validation-report.json
+```
+
+### 断点续跑与校验
+
+- `story:outline` 会复用 `scripts/.story-cache/outline/chapter-summaries.json` 和 `story-outline.checkpoint.json`；如果 checkpoint 结构不合法，脚本会失败而不是静默降级。
+- `story:generate` 会复用 `scripts/.story-cache/lessons/lesson-####.json`，并从数据库中第一个非 `ready` lesson 开始继续，保持课程连续性。
+- `story:validate` 应在真实生成后运行；只有报告 `ok: true` 才能认为本次离线生成可交付。
+- 可运行离线 smoke test 验证夹具链路（不读 12.7 MB 原始小说、不连生产 DB、不需要真实凭证）：
+
+```bash
+npm run test:story -- scripts/test/story-pipeline-smoke.mjs
+```
