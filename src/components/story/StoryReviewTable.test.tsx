@@ -98,6 +98,7 @@ describe('StoryReviewTable', () => {
       round: 2,
       roundCompleted: 2,
       nextReviewAt: '2026-08-23T08:00:00.000Z',
+      result,
       grade: 4,
       userWordMeaningMastery: 42,
       userWordMastery: 40,

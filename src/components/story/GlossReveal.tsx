@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type KeyboardEvent } from 'react'
+import { useState } from 'react'
 
 type GlossRevealProps = {
   gloss: string
@@ -29,12 +29,6 @@ export function GlossReveal({ gloss, hidden, onTogglePinned }: GlossRevealProps)
     onTogglePinned?.(next)
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key !== 'Enter' && event.key !== ' ') return
-    event.preventDefault()
-    togglePinned()
-  }
-
   return (
     <button
       type="button"
@@ -44,7 +38,6 @@ export function GlossReveal({ gloss, hidden, onTogglePinned }: GlossRevealProps)
       onBlur={() => setIsFocused(false)}
       onClick={togglePinned}
       onFocus={() => setIsFocused(true)}
-      onKeyDown={handleKeyDown}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className="inline-flex min-h-10 min-w-24 items-center justify-center rounded-lg border border-dashed border-amber-700/50 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 transition hover:border-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700 dark:border-amber-600/60 dark:bg-amber-950/40 dark:text-amber-100"

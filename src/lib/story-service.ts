@@ -3,6 +3,7 @@ import { completeFirstPass, getNextStep, initialProgress } from './story-progres
 import type { StoryFirstPassStep, StoryLessonStep, StoryProgressState, StoryProgressStatus } from './story-progress'
 import { parseStoryContent } from './story-types'
 import type { StoryLessonDocument } from './story-types'
+import type { StoryReviewSubmissionResult } from './story-review'
 
 const READY_COURSE_SLOT = 'ready'
 const READY_STATUS = 'ready'
@@ -87,6 +88,19 @@ export type UserStoryProgressDto = {
   completedAt: string | null
 }
 
+export type StoryLessonReviewState = {
+  words: Array<{
+    lessonWordId: string
+    roundCompleted: number
+    nextReviewAt: string | null
+  }>
+  attempts: Array<{
+    lessonWordId: string
+    round: number
+    result: StoryReviewSubmissionResult
+  }>
+}
+
 export type StoryLessonDetail = {
   id: string
   order: number
@@ -97,6 +111,7 @@ export type StoryLessonDetail = {
   lessonWords: StoryLessonWordDto[]
   progress: UserStoryProgressDto
   dueReviewCount: number
+  reviewState: StoryLessonReviewState
 }
 
 type ReadyCourseRow = {
@@ -123,6 +138,14 @@ type WordProgressRow = {
   nextReviewAt: Date | string | null
 }
 
+type ReviewAttemptRow = {
+  userId: string
+  lessonWordId: string
+  round: number
+  result: string
+  createdAt: Date | string
+}
+
 type LessonWordRow = {
   id: string
   sortOrder: number
@@ -136,6 +159,7 @@ type LessonWordRow = {
     example?: string | null
   }
   userProgress?: WordProgressRow[]
+  reviewAttempts?: ReviewAttemptRow[]
 }
 
 type LessonRow = {
@@ -189,7 +213,7 @@ export async function getStoryLesson({
 
   const row = await client.storyLesson.findFirst({
     where: { id: lessonId, courseId: course.id, status: READY_STATUS },
-    include: lessonInclude(userId),
+    include: lessonInclude(userId, true),
   })
   if (!row) return null
 
@@ -206,6 +230,7 @@ export async function getStoryLesson({
     lessonWords: orderedLessonWords(lesson).map(toLessonWordDto),
     progress,
     dueReviewCount: countDueReviews(lesson, progress, userId, now),
+    reviewState: buildLessonReviewState(lesson, progress, userId),
   }
 }
 
@@ -321,7 +346,7 @@ async function findReadyCourse(prisma: InternalPrismaClient): Promise<ReadyCours
   return course
 }
 
-function lessonInclude(userId: string) {
+function lessonInclude(userId: string, includeReviewAttempts = false) {
   return {
     userProgress: { where: { userId }, take: 1 },
     words: {
@@ -330,6 +355,12 @@ function lessonInclude(userId: string) {
         word: true,
         meaning: true,
         userProgress: { where: { userId } },
+        ...(includeReviewAttempts ? {
+          reviewAttempts: {
+            where: { userId },
+            orderBy: { round: 'asc' },
+          },
+        } : {}),
       },
     },
   }
@@ -411,6 +442,52 @@ function completedStepsFromRow(row: ProgressRow): StoryFirstPassStep[] {
   if (row.step2CompletedAt) steps.push(2)
   if (row.step3CompletedAt) steps.push(3)
   return steps
+}
+
+function buildLessonReviewState(
+  lesson: LessonRow,
+  progress: UserStoryProgressDto,
+  userId: string,
+): StoryLessonReviewState {
+  const words = orderedLessonWords(lesson)
+  const reviewUnlocked = progress.completedStep >= 3
+
+  return {
+    words: words.map((word) => {
+      const wordProgress = reviewUnlocked
+        ? (word.userProgress ?? []).find((row) => row.userId === userId)
+        : undefined
+      const roundCompleted = normalizeReviewRoundCompleted(wordProgress?.reviewRoundCompleted)
+      return {
+        lessonWordId: word.id,
+        roundCompleted,
+        nextReviewAt: roundCompleted >= 5 ? null : toIso(wordProgress?.nextReviewAt ?? null),
+      }
+    }),
+    attempts: reviewUnlocked
+      ? words.flatMap((word) => (word.reviewAttempts ?? []).flatMap((attempt) => {
+          if (attempt.userId !== userId || !isReviewRound(attempt.round) || !isStoryReviewResult(attempt.result)) return []
+          return [{
+            lessonWordId: word.id,
+            round: attempt.round,
+            result: attempt.result,
+          }]
+        }))
+      : [],
+  }
+}
+
+function normalizeReviewRoundCompleted(value: number | undefined): number {
+  if (!Number.isInteger(value) || value === undefined) return 0
+  return Math.min(5, Math.max(0, value))
+}
+
+function isReviewRound(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 5
+}
+
+function isStoryReviewResult(value: string): value is StoryReviewSubmissionResult {
+  return value === 'remembered' || value === 'vague' || value === 'forgotten'
 }
 
 function countDueReviews(lesson: LessonRow, progress: UserStoryProgressDto, userId: string, now: Date): number {

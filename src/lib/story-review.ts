@@ -29,6 +29,7 @@ export type StoryReviewResult = {
   lessonWordId: string
   round: number
   roundCompleted: number
+  result: StoryReviewSubmissionResult
   nextReviewAt: Date | null
   grade: 0 | 2 | 4
   userWordMeaningMastery: number
@@ -274,6 +275,7 @@ async function submitStoryReviewOnce({
           userId,
           lessonWord,
           progress: currentProgress,
+          result,
           grade,
         })
       }
@@ -364,6 +366,7 @@ async function submitStoryReviewOnce({
       lessonWordId,
       round,
       roundCompleted,
+      result,
       nextReviewAt,
       grade,
       userWordMeaningMastery,
@@ -410,7 +413,7 @@ async function reloadCommittedStoryReviewResult({
     )
   }
 
-  return duplicateReviewResult({ tx: client, userId, lessonWord, progress, grade })
+  return duplicateReviewResult({ tx: client, userId, lessonWord, progress, result, grade })
 }
 
 async function findReadyLessonWordForReview(
@@ -542,12 +545,14 @@ async function duplicateReviewResult({
   userId,
   lessonWord,
   progress,
+  result,
   grade,
 }: {
   tx: InternalPrismaClient
   userId: string
   lessonWord: LessonWordRow
   progress: UserStoryWordProgressRow | null
+  result: StoryReviewSubmissionResult
   grade: 0 | 2 | 4
 }): Promise<StoryReviewResult> {
   if (!progress) throw new Error('Cannot build a duplicate story review result without progress')
@@ -569,6 +574,7 @@ async function duplicateReviewResult({
     lessonWordId: lessonWord.id,
     round: progress.reviewRoundCompleted,
     roundCompleted: progress.reviewRoundCompleted,
+    result,
     nextReviewAt: progress.reviewRoundCompleted >= MAX_STORY_REVIEW_ROUND ? null : toDateOrNull(progress.nextReviewAt),
     grade,
     userWordMeaningMastery: meaning.mastery,

@@ -86,14 +86,21 @@ const lesson: StoryLessonDetail = {
     completedAt: null,
   },
   dueReviewCount: 2,
+  reviewState: {
+    words: [
+      { lessonWordId: 'lesson-word-1', roundCompleted: 0, nextReviewAt: null },
+      { lessonWordId: 'lesson-word-2', roundCompleted: 0, nextReviewAt: null },
+    ],
+    attempts: [],
+  },
 }
 
-function progressResponse(step: 1 | 2 | 3) {
+function progressResponse(step: 1 | 2 | 3): { progress: StoryLessonDetail['progress'] } {
   return {
     progress: {
       ...lesson.progress,
       status: step === 3 ? 'first_passed' : 'learning',
-      currentStep: step === 3 ? 4 : step + 1,
+      currentStep: step === 1 ? 2 : step === 2 ? 3 : 4,
       completedStep: step,
       step1CompletedAt: step >= 1 ? '2026-08-21T12:00:00.000Z' : null,
       step2CompletedAt: step >= 2 ? '2026-08-21T12:01:00.000Z' : null,
@@ -101,6 +108,47 @@ function progressResponse(step: 1 | 2 | 3) {
       completedAt: step === 3 ? '2026-08-21T12:02:00.000Z' : null,
     },
   }
+}
+
+const firstPassedLesson: StoryLessonDetail = {
+  ...lesson,
+  progress: progressResponse(3).progress,
+  dueReviewCount: 1,
+  reviewState: {
+    words: [
+      { lessonWordId: 'lesson-word-1', roundCompleted: 2, nextReviewAt: '2026-08-24T08:00:00.000Z' },
+      { lessonWordId: 'lesson-word-2', roundCompleted: 0, nextReviewAt: null },
+    ],
+    attempts: [
+      { lessonWordId: 'lesson-word-1', round: 1, result: 'vague' },
+      { lessonWordId: 'lesson-word-1', round: 2, result: 'remembered' },
+    ],
+  },
+}
+
+const lessonReviewQueue = {
+  lessons: [{
+    lessonId: 'lesson-1',
+    lessonOrder: 1,
+    lessonTitle: '青茅山醒来',
+    dueCount: 1,
+    words: [{
+      lessonWordId: 'lesson-word-2',
+      lessonId: 'lesson-1',
+      lessonOrder: 1,
+      lessonTitle: '青茅山醒来',
+      sortOrder: 2,
+      wordId: 'word-2',
+      meaningId: 'meaning-2',
+      word: 'scheme',
+      glossCn: '谋划',
+      definitionCn: '计谋；计划',
+      dueRound: 1,
+      roundCompleted: 0,
+      nextReviewAt: null,
+    }],
+  }],
+  dueCount: 1,
 }
 
 describe('StoryLessonShell', () => {
@@ -209,6 +257,84 @@ describe('StoryLessonShell', () => {
     expect(screen.getByText('He resolved to change his fate.')).toBeInTheDocument()
     expect(screen.getByText('/rɪˈzɒlv/')).toBeInTheDocument()
     expect(screen.getByText('音标暂无')).toBeInTheDocument()
+  })
+
+  it('restores persisted exact-round results and a non-due schedule after remount while the due queue controls only actions', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => lessonReviewQueue })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const firstRender = render(
+      <StoryLessonShell lesson={firstPassedLesson} progress={firstPassedLesson.progress} dueWords={1} nextLessonId="lesson-2" />,
+    )
+
+    let resolveRow = screen.getByRole('row', { name: /resolve/ })
+    let resolveCells = within(resolveRow).getAllByRole('cell')
+    expect(resolveCells[1]).toHaveTextContent('模糊')
+    expect(resolveCells[2]).toHaveTextContent('记得')
+    expect(resolveRow).toHaveTextContent('2026-08-24')
+
+    fireEvent.click(screen.getByRole('button', { name: '载入到期强化词' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/story/review?lessonId=lesson-1'))
+    expect(within(resolveRow).getByRole('button', { name: 'resolve 第3轮未到期' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'scheme 第1轮：记得' })).toBeEnabled()
+
+    firstRender.unmount()
+    render(<StoryLessonShell lesson={firstPassedLesson} progress={firstPassedLesson.progress} dueWords={1} nextLessonId="lesson-2" />)
+
+    resolveRow = screen.getByRole('row', { name: /resolve/ })
+    resolveCells = within(resolveRow).getAllByRole('cell')
+    expect(resolveCells[1]).toHaveTextContent('模糊')
+    expect(resolveCells[2]).toHaveTextContent('记得')
+    expect(resolveRow).toHaveTextContent('2026-08-24')
+    fireEvent.click(screen.getByRole('button', { name: '载入到期强化词' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(within(resolveRow).getByRole('button', { name: 'resolve 第3轮未到期' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'scheme 第1轮：忘记' })).toBeEnabled()
+  })
+
+  it.each([
+    ['a missing review', {}],
+    ['a mismatched lesson word', { review: { lessonWordId: 'lesson-word-other', round: 1, roundCompleted: 1, result: 'remembered', nextReviewAt: '2026-08-22T08:00:00.000Z', grade: 4, userWordMeaningMastery: 60, userWordMastery: 60 } }],
+    ['an out-of-range round', { review: { lessonWordId: 'lesson-word-1', round: 6, roundCompleted: 6, result: 'remembered', nextReviewAt: '2026-08-22T08:00:00.000Z', grade: 4, userWordMeaningMastery: 60, userWordMastery: 60 } }],
+  ])('rejects %s response without changing due count or row actionability', async (_case, malformedResponse) => {
+    const dueFirstRound = {
+      ...lessonReviewQueue,
+      lessons: [{
+        ...lessonReviewQueue.lessons[0],
+        words: [{
+          ...lessonReviewQueue.lessons[0].words[0],
+          lessonWordId: 'lesson-word-1',
+          sortOrder: 1,
+          wordId: 'word-1',
+          meaningId: 'meaning-1',
+          word: 'resolve',
+          glossCn: '决意',
+          definitionCn: '下定决心',
+        }],
+      }],
+    }
+    const unstartedLesson = {
+      ...firstPassedLesson,
+      reviewState: {
+        words: firstPassedLesson.reviewState.words.map((word) => ({ ...word, roundCompleted: 0, nextReviewAt: null })),
+        attempts: [],
+      },
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => dueFirstRound })
+      .mockResolvedValueOnce({ ok: true, json: async () => malformedResponse })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<StoryLessonShell lesson={unstartedLesson} progress={unstartedLesson.progress} dueWords={1} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '载入到期强化词' }))
+    const action = await screen.findByRole('button', { name: 'resolve 第1轮：记得' })
+    fireEvent.click(action)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('未能保存 resolve 的第1轮复习')
+    expect(screen.getByText(/本篇当前有 1 个词到期/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'resolve 第1轮：记得' })).toBeEnabled()
+    const resolveRow = screen.getByRole('row', { name: /resolve/ })
+    expect(within(resolveRow).getAllByRole('cell')[1].querySelector('span')).toBeNull()
   })
 
   it('completes Step3 without Step4, then immediately offers the next lesson and due reinforcement', async () => {

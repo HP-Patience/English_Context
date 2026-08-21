@@ -2,6 +2,7 @@
 
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { GlossReveal } from './GlossReveal'
@@ -62,30 +63,49 @@ describe('GlossReveal', () => {
     expect(control).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it.each(['Enter', ' '])('toggles the pinned state with %s', (key) => {
+  it.each([
+    ['Enter', '{Enter}'],
+    ['Space', ' '],
+  ])('uses native %s activation for exactly one pin toggle per gesture', async (_label, keys) => {
+    const user = userEvent.setup()
     const onTogglePinned = vi.fn()
     render(<GlossReveal gloss="决意" hidden onTogglePinned={onTogglePinned} />)
     const control = screen.getByRole('button', { name: '显示并固定释义' })
 
-    fireEvent.keyDown(control, { key })
+    control.focus()
+    await user.keyboard(keys)
 
-    expect(screen.getByText('决意')).toBeInTheDocument()
     expect(control).toHaveAttribute('aria-pressed', 'true')
-    expect(onTogglePinned).toHaveBeenCalledWith(true)
+    expect(onTogglePinned).toHaveBeenCalledTimes(1)
+    expect(onTogglePinned).toHaveBeenLastCalledWith(true)
+
+    await user.keyboard(keys)
+    control.blur()
+
+    expect(screen.queryByText('决意')).not.toBeInTheDocument()
+    expect(control).toHaveAttribute('aria-pressed', 'false')
+    expect(onTogglePinned).toHaveBeenCalledTimes(2)
+    expect(onTogglePinned).toHaveBeenLastCalledWith(false)
   })
 
-  it('does not reveal for a touch gesture until the resulting click toggles it', () => {
-    render(<GlossReveal gloss="决意" hidden />)
+  it('uses each touch pointer gesture as exactly one direct pin toggle', async () => {
+    const user = userEvent.setup()
+    const onTogglePinned = vi.fn()
+    render(<GlossReveal gloss="决意" hidden onTogglePinned={onTogglePinned} />)
     const control = screen.getByRole('button', { name: '显示并固定释义' })
 
-    fireEvent.touchStart(control)
-    expect(screen.queryByText('决意')).not.toBeInTheDocument()
+    await user.pointer({ keys: '[TouchA]', target: control })
 
-    fireEvent.click(control)
     expect(screen.getByText('决意')).toBeInTheDocument()
     expect(control).toHaveAttribute('aria-pressed', 'true')
+    expect(onTogglePinned).toHaveBeenCalledTimes(1)
+    expect(onTogglePinned).toHaveBeenLastCalledWith(true)
 
-    fireEvent.click(control)
+    await user.pointer({ keys: '[TouchA]', target: control })
+
     expect(screen.queryByText('决意')).not.toBeInTheDocument()
+    expect(control).toHaveAttribute('aria-pressed', 'false')
+    expect(onTogglePinned).toHaveBeenCalledTimes(2)
+    expect(onTogglePinned).toHaveBeenLastCalledWith(false)
   })
 })

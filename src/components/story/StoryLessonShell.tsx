@@ -3,10 +3,10 @@
 import Link from 'next/link'
 import { useCallback, useMemo, useState } from 'react'
 
+import { parseStoryReviewApiResponse } from '@/lib/story-api-types'
 import type {
   PublicStoryLessonDetail,
   StoryProgressApiResponse,
-  StoryReviewApiResponse,
   StoryReviewQueueApiResponse,
 } from '@/lib/story-api-types'
 import type { UserStoryProgressDto } from '@/lib/story-service'
@@ -28,7 +28,7 @@ type FirstPassView = 1 | 2 | 3
 
 export type StoryLessonView = Pick<
   PublicStoryLessonDetail,
-  'id' | 'order' | 'title' | 'sourceChapterStart' | 'sourceChapterEnd' | 'content' | 'lessonWords'
+  'id' | 'order' | 'title' | 'sourceChapterStart' | 'sourceChapterEnd' | 'content' | 'lessonWords' | 'reviewState'
 >
 
 type StoryLessonShellProps = {
@@ -73,20 +73,29 @@ function toReviewRound(value: number): StoryReviewRound | null {
 }
 
 function buildReviewWords(lesson: StoryLessonView): StoryReviewTableWord[] {
-  return lesson.lessonWords.map((word) => ({
-    lessonWordId: word.id,
-    word: word.word.text,
-    gloss: word.glossCn,
-    phonetic: word.word.phonetic,
-    partOfSpeech: word.meaning.partOfSpeech,
-    dueRound: null,
-    roundCompleted: 0,
-    nextReviewAt: null,
-    isDue: false,
-  }))
+  const stateByLessonWordId = new Map(lesson.reviewState.words.map((word) => [word.lessonWordId, word]))
+  return lesson.lessonWords.map((word) => {
+    const persisted = stateByLessonWordId.get(word.id)
+    return {
+      lessonWordId: word.id,
+      word: word.word.text,
+      gloss: word.glossCn,
+      phonetic: word.word.phonetic,
+      partOfSpeech: word.meaning.partOfSpeech,
+      dueRound: null,
+      roundCompleted: persisted?.roundCompleted ?? 0,
+      nextReviewAt: persisted?.nextReviewAt ?? null,
+      isDue: false,
+    }
+  })
 }
 
-const noReviewAttempts: StoryReviewAttemptView[] = []
+function buildReviewAttempts(lesson: StoryLessonView): StoryReviewAttemptView[] {
+  return lesson.reviewState.attempts.flatMap((attempt) => {
+    const round = toReviewRound(attempt.round)
+    return round === null ? [] : [{ ...attempt, round }]
+  })
+}
 
 const stepHeading: Record<FirstPassView, string> = {
   1: '第一步 · 入境识词',
@@ -109,6 +118,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
   const [query, setQuery] = useState('')
   const [scene, setScene] = useState('')
   const [reviewWords, setReviewWords] = useState<StoryReviewTableWord[]>(() => buildReviewWords(lesson))
+  const [reviewAttempts] = useState<StoryReviewAttemptView[]>(() => buildReviewAttempts(lesson))
   const [reviewQueueLoaded, setReviewQueueLoaded] = useState(false)
   const [reviewQueueLoading, setReviewQueueLoading] = useState(false)
   const [reviewQueueError, setReviewQueueError] = useState<string | null>(null)
@@ -131,14 +141,13 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
       const dueByLessonWordId = new Map((lessonQueue?.words ?? []).map((word) => [word.lessonWordId, word]))
       setReviewWords((current) => current.map((word) => {
         const dueWord = dueByLessonWordId.get(word.lessonWordId)
-        if (!dueWord) return { ...word, isDue: false }
+        if (!dueWord) return { ...word, dueRound: null, isDue: false }
         const dueRound = toReviewRound(dueWord.dueRound)
+        const isExpectedRound = dueRound !== null && dueRound === word.roundCompleted + 1
         return {
           ...word,
-          dueRound,
-          roundCompleted: dueWord.roundCompleted,
-          nextReviewAt: dueWord.nextReviewAt,
-          isDue: dueRound !== null,
+          dueRound: isExpectedRound ? dueRound : null,
+          isDue: isExpectedRound,
         }
       }))
       setCurrentDueWords(lessonQueue?.dueCount ?? 0)
@@ -151,6 +160,10 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
   }, [lesson.id])
 
   async function submitReview(submission: StoryReviewSubmission) {
+    const currentWord = reviewWords.find((word) => word.lessonWordId === submission.lessonWordId)
+    if (!currentWord?.isDue || currentWord.dueRound === null) throw new Error('review row is not actionable')
+
+    const expectedRound = currentWord.dueRound
     const response = await fetch('/api/story/review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -158,9 +171,25 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
     })
     if (!response.ok) throw new Error('review request failed')
 
-    const payload = await response.json() as StoryReviewApiResponse
+    const payload: unknown = await response.json()
+    const review = parseStoryReviewApiResponse(payload, {
+      lessonWordId: submission.lessonWordId,
+      round: expectedRound,
+      result: submission.result,
+    })
+    if (!review) throw new Error('invalid review response')
+
+    setReviewWords((current) => current.map((word) => word.lessonWordId === review.lessonWordId
+      ? {
+          ...word,
+          dueRound: null,
+          roundCompleted: review.roundCompleted,
+          nextReviewAt: review.nextReviewAt,
+          isDue: false,
+        }
+      : word))
     setCurrentDueWords((current) => Math.max(0, current - 1))
-    return payload.review
+    return review
   }
 
   async function completeStep(step: StoryFirstPassStep) {
@@ -360,7 +389,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
                 {reviewQueueLoading ? '正在载入到期词…' : '载入到期强化词'}
               </button>
             ) : null}
-            <StoryReviewTable words={reviewWords} attempts={noReviewAttempts} onSubmit={submitReview} />
+            <StoryReviewTable words={reviewWords} attempts={reviewAttempts} onSubmit={submitReview} />
           </div>
         )}
       </section>

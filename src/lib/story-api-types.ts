@@ -109,6 +109,54 @@ export function parseStoryReviewPayload(value: unknown): {
   return { lessonWordId: value.lessonWordId.trim(), result: value.result }
 }
 
+export function parseStoryReviewApiResponse(
+  value: unknown,
+  expected: {
+    lessonWordId: string
+    round: number
+    result: StoryReviewSubmissionResult
+  },
+): StoryReviewState | null {
+  if (!isPlainObject(value) || !isPlainObject(value.review)) return null
+
+  const review = value.review
+  if (review.lessonWordId !== expected.lessonWordId) return null
+  if (!isReviewRound(review.round) || !isReviewRound(review.roundCompleted)) return null
+  if (review.round !== expected.round || review.roundCompleted !== expected.round) return null
+  if (!isStoryReviewResult(review.result) || review.result !== expected.result) return null
+  if (review.grade !== 0 && review.grade !== 2 && review.grade !== 4) return null
+  if (!isMastery(review.userWordMeaningMastery) || !isMastery(review.userWordMastery)) return null
+  if (!isValidReviewDate(review.nextReviewAt, review.round)) return null
+
+  return {
+    lessonWordId: review.lessonWordId,
+    round: review.round,
+    roundCompleted: review.roundCompleted,
+    result: review.result,
+    nextReviewAt: review.nextReviewAt,
+    grade: review.grade,
+    userWordMeaningMastery: review.userWordMeaningMastery,
+    userWordMastery: review.userWordMastery,
+  }
+}
+
+function isReviewRound(value: unknown): value is number {
+  return Number.isInteger(value) && typeof value === 'number' && value >= 1 && value <= 5
+}
+
+function isStoryReviewResult(value: unknown): value is StoryReviewSubmissionResult {
+  return value === 'remembered' || value === 'vague' || value === 'forgotten'
+}
+
+function isMastery(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
+}
+
+function isValidReviewDate(value: unknown, round: number): value is string | null {
+  if (round === 5) return value === null
+  return typeof value === 'string' && value.length > 0 && Number.isFinite(Date.parse(value))
+}
+
 export function parseStoryWordsQuery(searchParams: URLSearchParams): StoryWordsQuery | null {
   const query = normalizeOptionalString(searchParams.get('query'))
   const scene = normalizeOptionalString(searchParams.get('scene'))

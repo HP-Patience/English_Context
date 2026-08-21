@@ -36,6 +36,7 @@ import { GET as getReviewQueue, POST as postReview } from '../app/api/story/revi
 import {
   classifyStoryApiError,
   parseStoryProgressPayload,
+  parseStoryReviewApiResponse,
   parseStoryReviewPayload,
   parseStoryWordsQuery,
 } from './story-api-types'
@@ -107,6 +108,13 @@ const detail = {
   }],
   progress: { ...progress, lessonId: 'lesson-1', status: 'first_passed', currentStep: 4, completedStep: 3, step2CompletedAt: '2026-08-21T02:00:00.000Z', step3CompletedAt: '2026-08-21T03:00:00.000Z', completedAt: '2026-08-21T03:00:00.000Z' },
   dueReviewCount: 2,
+  reviewState: {
+    words: [{ lessonWordId: 'lesson-word-1', roundCompleted: 2, nextReviewAt: '2026-08-24T08:00:00.000Z' }],
+    attempts: [
+      { lessonWordId: 'lesson-word-1', round: 1, result: 'vague' },
+      { lessonWordId: 'lesson-word-1', round: 2, result: 'remembered' },
+    ],
+  },
 }
 
 const dueWords = [
@@ -171,6 +179,7 @@ beforeEach(() => {
     round: 2,
     roundCompleted: 2,
     nextReviewAt: new Date('2026-08-23T00:00:00.000Z'),
+    result: 'vague',
     grade: 2,
     userWordMeaningMastery: 65,
     userWordMastery: 60,
@@ -183,6 +192,32 @@ describe('story API payload parsers', () => {
     expect(parseStoryProgressPayload({ step: 4 })).toBeNull()
     expect(parseStoryReviewPayload({ lessonWordId: ' lesson-word-1 ', result: 'vague' })).toEqual({ lessonWordId: 'lesson-word-1', result: 'vague' })
     expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', result: 'fuzzy' })).toBeNull()
+  })
+
+  it('accepts only a complete POST review response matching the requested due round', () => {
+    const response = {
+      review: {
+        lessonWordId: 'lesson-word-1',
+        round: 2,
+        roundCompleted: 2,
+        result: 'vague',
+        nextReviewAt: '2026-08-24T08:00:00.000Z',
+        grade: 2,
+        userWordMeaningMastery: 65,
+        userWordMastery: 60,
+      },
+    }
+    const expected = { lessonWordId: 'lesson-word-1', round: 2, result: 'vague' } as const
+
+    expect(parseStoryReviewApiResponse(response, expected)).toEqual(response.review)
+    expect(parseStoryReviewApiResponse({}, expected)).toBeNull()
+    expect(parseStoryReviewApiResponse({ review: { ...response.review, lessonWordId: 'other-word' } }, expected)).toBeNull()
+    expect(parseStoryReviewApiResponse({ review: { ...response.review, round: 6, roundCompleted: 6 } }, expected)).toBeNull()
+    expect(parseStoryReviewApiResponse({ review: { ...response.review, round: 1, roundCompleted: 1 } }, expected)).toBeNull()
+    expect(parseStoryReviewApiResponse({ review: { ...response.review, result: 'fuzzy' } }, expected)).toBeNull()
+    expect(parseStoryReviewApiResponse({ review: { ...response.review, nextReviewAt: 'not-a-date' } }, expected)).toBeNull()
+    expect(parseStoryReviewApiResponse({ review: { ...response.review, nextReviewAt: null } }, expected)).toBeNull()
+    expect(parseStoryReviewApiResponse({ review: { ...response.review, round: 5, roundCompleted: 5, nextReviewAt: null } }, { ...expected, round: 5 })).toEqual({ ...response.review, round: 5, roundCompleted: 5, nextReviewAt: null })
   })
 
   it('normalizes supported word filters and rejects unsafe pagination', () => {
@@ -234,7 +269,7 @@ describe('GET /api/story/lessons', () => {
 })
 
 describe('GET /api/story/lessons/[id]', () => {
-  it('awaits dynamic params and returns one ready lesson', async () => {
+  it('returns one ready lesson with persisted Step4 state while stripping generator metadata', async () => {
     mocks.getStoryLesson.mockResolvedValue(detail)
 
     const response = await getLesson(new NextRequest('http://localhost/api/story/lessons/lesson-1'), routeContext('lesson-1'))
@@ -372,6 +407,7 @@ describe('POST /api/story/review', () => {
         round: 2,
         roundCompleted: 2,
         nextReviewAt: '2026-08-23T00:00:00.000Z',
+        result: 'vague',
         grade: 2,
         userWordMeaningMastery: 65,
         userWordMastery: 60,
@@ -386,6 +422,7 @@ describe('POST /api/story/review', () => {
       round: 1,
       roundCompleted: 1,
       nextReviewAt: new Date('2026-08-22T00:00:00.000Z'),
+      result: 'remembered',
       grade: 4,
       userWordMeaningMastery: 63,
       userWordMastery: 63,

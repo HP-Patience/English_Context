@@ -66,6 +66,13 @@ type WordProgressRow = {
   reviewRoundCompleted: number
   nextReviewAt: Date | null
 }
+type ReviewAttemptRow = {
+  userId: string
+  lessonWordId: string
+  round: number
+  result: string
+  createdAt: Date
+}
 type LessonWordRow = {
   id: string
   lessonId: string
@@ -76,6 +83,7 @@ type LessonWordRow = {
   word: { id: string; text: string; phonetic: string | null }
   meaning: { id: string; partOfSpeech: string; definition: string; definitionCn: string | null; example: string | null }
   userProgress?: WordProgressRow[]
+  reviewAttempts?: ReviewAttemptRow[]
 }
 type LessonRow = {
   id: string
@@ -99,6 +107,7 @@ type ServiceFakePrisma = {
     lessons: LessonRow[]
     progress: ProgressRow[]
     wordProgress: WordProgressRow[]
+    reviewAttempts: ReviewAttemptRow[]
     nextProgress: number
   }
   $transaction<T>(callback: (tx: ServiceFakePrisma) => Promise<T>): Promise<T>
@@ -179,6 +188,7 @@ function createServicePrisma({
   lessons = [makeLesson()],
   progress = [] as ProgressRow[],
   wordProgress = [] as WordProgressRow[],
+  reviewAttempts = [] as ReviewAttemptRow[],
   now = new Date('2026-08-21T00:00:00.000Z'),
 } = {}) {
   const state = {
@@ -186,6 +196,7 @@ function createServicePrisma({
     lessons: clone(lessons),
     progress: clone(progress),
     wordProgress: clone(wordProgress),
+    reviewAttempts: clone(reviewAttempts),
     nextProgress: 1,
   }
   const calls: string[] = []
@@ -196,12 +207,19 @@ function createServicePrisma({
       row.userProgress = state.progress.filter((item) => item.lessonId === row.id && item.userId === 'user-1').map(clone)
     }
     if (args.include?.words) {
+      const wordInclude = (args.include.words as { include?: Record<string, unknown> }).include
       row.words = row.words
         .map((word) => ({
           ...clone(word),
           userProgress: state.wordProgress
             .filter((item) => item.lessonWordId === word.id && item.userId === 'user-1')
             .map(clone),
+          ...(wordInclude?.reviewAttempts ? {
+            reviewAttempts: state.reviewAttempts
+              .filter((item) => item.lessonWordId === word.id && item.userId === 'user-1')
+              .sort((left, right) => left.round - right.round)
+              .map(clone),
+          } : {}),
         }))
         .sort((left, right) => left.sortOrder - right.sortOrder)
     }
@@ -381,6 +399,86 @@ describe('getStoryLesson', () => {
     const detail = await getStoryLesson({ prisma, userId: 'local-user', lessonId: persisted.lessonId })
 
     expect(detail?.lessonWords.map((item) => item.word.phonetic)).toEqual(['/ˈælfə/', '/ˈbeɪtə/'])
+  })
+
+  it('does not expose persisted Step4 state before Step3 completion', async () => {
+    const prisma = createServicePrisma({
+      progress: [{
+        userId: 'user-1',
+        lessonId: 'lesson-ready-1',
+        currentStep: 3,
+        status: 'learning',
+        step1CompletedAt: new Date('2026-08-20T01:00:00.000Z'),
+        step2CompletedAt: new Date('2026-08-20T02:00:00.000Z'),
+        step3CompletedAt: null,
+        completedAt: null,
+      }],
+      wordProgress: [{
+        userId: 'user-1',
+        lessonWordId: 'lesson-ready-1-word-1',
+        reviewRoundCompleted: 2,
+        nextReviewAt: new Date('2026-08-24T08:00:00.000Z'),
+      }],
+      reviewAttempts: [{
+        userId: 'user-1',
+        lessonWordId: 'lesson-ready-1-word-1',
+        round: 1,
+        result: 'remembered',
+        createdAt: new Date('2026-08-20T08:00:00.000Z'),
+      }],
+    })
+
+    const detail = await getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-ready-1', now: prisma.now })
+
+    expect(detail?.reviewState).toEqual({
+      words: [
+        { lessonWordId: 'lesson-ready-1-word-1', roundCompleted: 0, nextReviewAt: null },
+        { lessonWordId: 'lesson-ready-1-word-2', roundCompleted: 0, nextReviewAt: null },
+      ],
+      attempts: [],
+    })
+    expect(detail?.dueReviewCount).toBe(0)
+  })
+
+  it('returns complete persisted Step4 state independently from the currently due queue', async () => {
+    const nextReviewAt = new Date('2026-08-24T08:00:00.000Z')
+    const prisma = createServicePrisma({
+      progress: [{
+        userId: 'user-1',
+        lessonId: 'lesson-ready-1',
+        currentStep: 4,
+        status: 'reviewing',
+        step1CompletedAt: new Date('2026-08-20T01:00:00.000Z'),
+        step2CompletedAt: new Date('2026-08-20T02:00:00.000Z'),
+        step3CompletedAt: new Date('2026-08-20T03:00:00.000Z'),
+        completedAt: new Date('2026-08-20T03:00:00.000Z'),
+      }],
+      wordProgress: [{
+        userId: 'user-1',
+        lessonWordId: 'lesson-ready-1-word-1',
+        reviewRoundCompleted: 2,
+        nextReviewAt,
+      }],
+      reviewAttempts: [
+        { userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 2, result: 'remembered', createdAt: new Date('2026-08-21T08:00:00.000Z') },
+        { userId: 'other-user', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'forgotten', createdAt: new Date('2026-08-20T07:00:00.000Z') },
+        { userId: 'user-1', lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague', createdAt: new Date('2026-08-20T08:00:00.000Z') },
+      ],
+    })
+
+    const detail = await getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-ready-1', now: prisma.now })
+
+    expect(detail?.reviewState).toEqual({
+      words: [
+        { lessonWordId: 'lesson-ready-1-word-1', roundCompleted: 2, nextReviewAt: '2026-08-24T08:00:00.000Z' },
+        { lessonWordId: 'lesson-ready-1-word-2', roundCompleted: 0, nextReviewAt: null },
+      ],
+      attempts: [
+        { lessonWordId: 'lesson-ready-1-word-1', round: 1, result: 'vague' },
+        { lessonWordId: 'lesson-ready-1-word-1', round: 2, result: 'remembered' },
+      ],
+    })
+    expect(detail?.dueReviewCount).toBe(1)
   })
 
   it('returns parsed content and ordered lesson words only after ready-course visibility filtering', async () => {

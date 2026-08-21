@@ -93,7 +93,7 @@ export function StoryReviewTable({ words, attempts, onSubmit }: StoryReviewTable
       }))
       setSubmittedAttempts((current) => [
         ...current.filter((attempt) => !(attempt.lessonWordId === word.lessonWordId && attempt.round === review.round)),
-        { lessonWordId: word.lessonWordId, round: review.round as StoryReviewRound, result },
+        { lessonWordId: word.lessonWordId, round: review.round as StoryReviewRound, result: review.result },
       ])
       setStatus(`${word.word} 的第${review.round}轮复习已保存。`)
     } catch {
