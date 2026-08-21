@@ -99,3 +99,52 @@ exit 0
 
 - `dueReviewCount` treats first-passed lesson words with no `UserStoryWordProgress` row as due for round 1. This matches the upcoming review-service shape, but Task 4 should keep the same convention when implementing `getDueStoryWords`.
 - This task uses fake-Prisma contract tests only; live database behavior remains covered by Prisma validation/generation in the data-pipeline tasks and should be exercised by the later runtime smoke test.
+
+## Review fix — focused runtime args
+
+Review finding: `test:runtime` used `vitest run src/lib`, so `npm run test:runtime -- src/lib/story-service.test.ts` appended the focused file after the broad `src/lib` target and still ran all runtime tests.
+
+Fix:
+
+- Added `scripts/test/runtime-tests.mjs`, a small Node wrapper analogous to `test:story`.
+- `npm run test:runtime` now defaults to `src/lib`.
+- `npm run test:runtime -- <file>` now passes only the requested file(s) to Vitest.
+
+Review-fix RED evidence:
+
+```text
+npm run test:runtime -- src/lib/story-service.test.ts
+vitest run src/lib src/lib/story-service.test.ts
+Test Files 2 passed
+Tests 11 passed
+```
+
+Review-fix GREEN/validation evidence:
+
+```text
+npm run test:runtime
+Test Files 2 passed
+Tests 11 passed
+```
+
+```text
+npm run test:runtime -- src/lib/story-service.test.ts
+Test Files 1 passed
+Tests 4 passed
+```
+
+```text
+npm run test:runtime -- src/lib/story-progress.test.ts
+Test Files 1 passed
+Tests 7 passed
+```
+
+```text
+npx tsc --noEmit
+exit 0
+```
+
+```text
+git diff --check
+exit 0
+```
