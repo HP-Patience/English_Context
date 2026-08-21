@@ -58,6 +58,36 @@ test('outline prompts explicitly require Simplified Chinese narrative fields', (
   assert.match(outlinePrompt, /plotSummary.*characters.*events.*continuityStart.*continuityEnd/s)
 })
 
+test('chapter summary generation retries once after a non-Chinese response', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-language-retry-summary-'))
+  const checkpointPath = join(tempDir, 'chapter-summaries.json')
+  let calls = 0
+
+  try {
+    const summaries = await buildChapterSummaries({
+      chapters: makeChapters(1, { includeText: true }),
+      generateJson: async () => {
+        calls += 1
+        if (calls === 1) {
+          return {
+            summary: 'Fang Yuan returns and begins a ruthless plan.',
+            characters: ['Fang Yuan'],
+            events: ['He tests the situation.'],
+          }
+        }
+        return { summary: '方源回到青茅山并开始谋划。', characters: ['方源'], events: ['试探局势'] }
+      },
+      checkpointPath,
+      chapterBatchSize: 1,
+    })
+
+    assert.equal(calls, 2)
+    assert.equal(summaries[0].summary, '方源回到青茅山并开始谋划。')
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
+
 test('English chapter summary responses are rejected before checkpointing', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-language-summary-'))
   const checkpointPath = join(tempDir, 'chapter-summaries.json')
@@ -79,6 +109,39 @@ test('English chapter summary responses are rejected before checkpointing', asyn
       /Simplified Chinese|Chinese|中文|language/i,
     )
     assert.equal(existsSync(checkpointPath), false)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test('story outline generation retries once after a non-Chinese lesson response', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-language-retry-final-'))
+  const checkpointPath = join(tempDir, 'story-outline.json')
+  let calls = 0
+
+  try {
+    const outline = await buildStoryOutline({
+      chapterSummaries: makeSummaries(61),
+      vocabularyCount: 6100,
+      generateJson: async () => {
+        calls += 1
+        if (calls === 1) {
+          return { lessons: makeLessons(61).map((lesson, index) => ({
+            ...lesson,
+            plotSummary: `Lesson ${index + 1} follows Fang Yuan through conflict.`,
+            characters: ['Fang Yuan'],
+            events: ['He advances the plan.'],
+            continuityStart: 'The lesson starts from the previous conflict.',
+            continuityEnd: 'The next lesson continues the main line.',
+          })) }
+        }
+        return { lessons: makeLessons(61) }
+      },
+      checkpointPath,
+    })
+
+    assert.equal(calls, 2)
+    assert.equal(outline.lessons[0].plotSummary, '第1课主线')
   } finally {
     await rm(tempDir, { recursive: true, force: true })
   }

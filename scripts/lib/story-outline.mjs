@@ -10,6 +10,7 @@ export const TARGET_MAX_LESSON_COUNT = 100
 export const MAX_LESSON_COUNT = 150
 export const MIN_TARGET_WORD_CAPACITY = 40
 export const MAX_TARGET_WORD_CAPACITY = 100
+export const DEFAULT_LLM_GENERATION_ATTEMPTS = 3
 
 /**
  * @typedef {Object} ChapterSummary
@@ -98,8 +99,15 @@ export async function buildChapterSummaries({
     let summary = summariesByRange.get(key)
     if (!summary) {
       const prompt = createChapterSummaryPrompt({ batch, batchIndex, batchCount: batches.length })
-      const response = await generateJson(prompt, 'chapter-summary')
-      summary = { ...parseGeneratedChapterSummaryStrict(response, { batch, batchIndex }), inputFingerprint: batchFingerprints.get(key) }
+      summary = {
+        ...await generateParsedJsonWithRetries({
+          prompt,
+          schemaName: 'chapter-summary',
+          generateJson,
+          parse: (response) => parseGeneratedChapterSummaryStrict(response, { batch, batchIndex }),
+        }),
+        inputFingerprint: batchFingerprints.get(key),
+      }
       summariesByRange.set(key, summary)
       await writeJsonAtomic(checkpointPath, {
         version: 2,
@@ -151,10 +159,14 @@ export async function buildStoryOutline({
   }
 
   const prompt = createStoryOutlinePrompt({ chapterSummaries: normalizedSummaries, vocabularyCount })
-  const response = await generateJson(prompt, 'story-outline')
-  const parsed = allowDeterministicFallback && !findLessonsArray(response)
-    ? createDeterministicStoryOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
-    : parseStoryOutlineStrict(response, { vocabularyCount })
+  const parsed = await generateParsedJsonWithRetries({
+    prompt,
+    schemaName: 'story-outline',
+    generateJson,
+    parse: (response) => (allowDeterministicFallback && !findLessonsArray(response)
+      ? createDeterministicStoryOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
+      : parseStoryOutlineStrict(response, { vocabularyCount })),
+  })
   const outline = {
     ...parsed,
     version: 2,
@@ -355,6 +367,31 @@ export function createDeterministicStoryOutline({ chapterSummaries, vocabularyCo
   }
   validateStoryOutline(outline, parsedSummaries)
   return outline
+}
+
+
+async function generateParsedJsonWithRetries({ prompt, schemaName, generateJson, parse, attempts = DEFAULT_LLM_GENERATION_ATTEMPTS }) {
+  let lastError = null
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const retryPrompt = attempt === 1 ? prompt : [
+      prompt,
+      '',
+      `Previous ${schemaName} response was rejected: ${lastError?.message ?? String(lastError)}.`,
+      'Regenerate the full JSON from scratch. Follow every schema and language requirement exactly, especially Simplified Chinese (简体中文) narrative fields. Return only valid JSON.',
+    ].join('\n')
+
+    const response = await generateJson(retryPrompt, schemaName)
+    try {
+      return parse(response)
+    } catch (error) {
+      lastError = error
+      if (attempt === attempts) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError ?? new Error(`${schemaName} generation failed`)
 }
 
 function normalizeChaptersStrict(chapters) {
