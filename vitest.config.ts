@@ -12,6 +12,7 @@ module.exports = async () => {
     },
     test: {
       environment: 'node',
+      include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)', 'scripts/test/story-runtime-smoke.mjs'],
     },
   })
 }

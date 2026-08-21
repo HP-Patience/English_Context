@@ -12,8 +12,8 @@
 
 ## 技术栈
 
-- Next.js (App Router)
-- Prisma + PostgreSQL (本地/Neon)
+- Next.js 16.2.9 (App Router)
+- Prisma 5.22 + PostgreSQL (本地/Neon)
 - Tailwind CSS
 - DeepSeek / OpenAI API
 
@@ -21,7 +21,7 @@
 
 ### 前置依赖
 
-- **Node.js 20+**
+- **Node.js 20.9+**
 - **PostgreSQL 16+** — [下载安装](https://www.postgresql.org/download/windows/)
 
 ### 首次启动
@@ -60,6 +60,50 @@ node scripts/import-new.js
 
 # AI 生成释义和例句（需要 OPENAI_API_KEY）
 node scripts/generate-meanings.js
+```
+
+## 故事学习运行时
+
+### 页面与学习流程
+
+- `/story`：只列出唯一发布槽位（`StoryCourse.readySlot = "ready"`）中的 `ready` 课程，显示当前篇、首次学习进度和到期 Step4 数量。
+- `/story/[lessonId]`：结构化故事四步学习页。Step1 显示语境释义，Step2 先隐藏释义供回想，Step3 显示完整词册；完成 Step3 后下一篇立即可用。
+- Step4 只处理当前到期词，记录精确的 `remembered` / `vague` / `forgotten` 结果和第 1～5 轮列，并同步现有 SM-2 数据。Step4 未完成不会阻塞下一篇。
+- 原有 `/learn` 与 `/review` 路由保持可用，故事模式与普通模式共享 `Word`、`Meaning`、`UserWord`、`UserWordMeaning` 数据。
+
+### 运行要求与本地发布数据
+
+运行时需要 Node.js 20.9+、可连接的 PostgreSQL、已执行的 Prisma schema，以及一个完整发布的 ready course。故事数据准备顺序是：
+
+1. 先导入普通词库和义项，确保 lesson word 能关联现有 `Word` / `Meaning`。
+2. 使用下方离线流水线执行 `story:parse` → `story:outline` → `story:generate`。`story:generate` 会创建或续跑 draft course，并把课程、lesson 和 lesson-word 行写入 `DATABASE_URL` 指向的**本地或专用离线数据库**。
+3. 执行 `story:validate`。只有完整校验通过时，事务才会把 draft 原子发布到唯一 `ready` 槽位，并归档旧 ready course；这一步就是运行时可见数据的发布步骤。
+4. 使用同一个安全数据库连接启动 `npm run dev`，访问 `/story`。本地用户由 `LOCAL_USER_ID`（默认 `local-user`）确定。
+
+不要用生产 `DATABASE_URL` 运行生成、夹具或 smoke。当前仓库没有把真实 PostgreSQL seed 作为测试前置条件；runtime smoke 使用共享的确定性内存 Prisma fixture，因此能证明 route → service → 持久化重载契约，但**不能证明真实 PostgreSQL 的 Serializable transaction、约束或连接行为**。部署前仍应在一次性 PostgreSQL 环境执行发布和浏览器验收。
+
+### 运行时隐私边界
+
+- 请求时只读取数据库中已发布的结构化 paragraph、目标词和用户进度；不会读取 `蛊真人.txt`，不会调用 OpenAI/LLM，也不需要任何 LLM API key。
+- 原始小说不应存在于部署产物、`public/`、Git 或浏览器响应中。公开 lesson DTO 也不会返回生成阶段的 `sourceSummary` / `continuityNotes`。
+- 原始正文只属于离线 parse/outline/generate 阶段；`story:outline` 会把正文发送到操作者批准的 endpoint，具体风险见下方“数据传输、版权、隐私与本地持久化”。
+
+### 运行时验证
+
+```bash
+# 确定性 route/service/persistence smoke（不读小说、不调用 LLM、不连接真实 DB）
+npm run test:runtime -- scripts/test/story-runtime-smoke.mjs
+
+# 全部 runtime/Vitest（包含上面的 smoke）
+npm run test:runtime
+
+# 全部离线故事流水线测试
+npm run test:story
+
+# 类型、lint 与生产构建
+npx tsc --noEmit
+npm run lint
+npm run build
 ```
 
 ## 数据同步
@@ -130,7 +174,7 @@ scripts/
 - `StoryCourse.readySlot` 的唯一约束配合事务/application checks 保证最多一个 ready publication。验证失败或生成中断时，现有 ready course 保持不变，draft 可继续生成。
 - 已发布版本不可变；旧版本的 lesson ID、lesson-word ID 和用户进度仍可继续使用。后续 runtime 工作应只查询 `readySlot = "ready"` 的 course。
 
-### 执行顺序
+### 执行顺序（离线生成、写入 draft、校验发布）
 
 ```bash
 # 1. 解析本地 GB18030 小说，写 metadata-only 索引、输入指纹和编号异常诊断
