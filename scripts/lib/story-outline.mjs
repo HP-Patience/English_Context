@@ -458,8 +458,8 @@ function parseGeneratedChapterSummaryStrict(response, { batch, batchIndex }) {
   }
 
   const summary = requireNonEmptyString(candidate.summary, 'summary', errors)
-  const characters = requireStringArray(candidate.characters, 'characters', errors)
-  const events = requireStringArray(candidate.events, 'events', errors)
+  const characters = requireLenientStringArray(candidate.characters, 'characters', errors)
+  const events = requireLenientStringArray(candidate.events, 'events', errors)
   const continuityStart = optionalNonEmptyString(candidate.continuityStart, 'continuityStart', errors)
   const continuityEnd = optionalNonEmptyString(candidate.continuityEnd, 'continuityEnd', errors)
 
@@ -645,6 +645,20 @@ function optionalNonEmptyString(value, field, errors) {
     return undefined
   }
   return value.trim()
+}
+
+function requireLenientStringArray(value, field, errors) {
+  if (!Array.isArray(value) || value.length === 0) {
+    errors.push(`${field} must be a non-empty array of non-empty strings`)
+    return undefined
+  }
+
+  const normalized = uniqueNonEmpty(value)
+  if (normalized.length === 0) {
+    errors.push(`${field} must contain at least one non-empty string`)
+    return undefined
+  }
+  return normalized
 }
 
 function requireStringArray(value, field, errors) {

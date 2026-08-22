@@ -82,6 +82,33 @@ test('chapter summary generation retries after a transient 5xx LLM error', async
   }
 })
 
+test('chapter summary generation strips blank array items before checkpointing', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-blank-array-items-'))
+  const checkpointPath = join(tempDir, 'chapter-summaries.json')
+
+  try {
+    const summaries = await buildChapterSummaries({
+      chapters: makeChapters(1, { includeText: true }),
+      generateJson: async () => ({
+        summary: '方源设局试探局势。',
+        characters: ['方源', '   ', '白凝冰'],
+        events: ['试探局势', ''],
+      }),
+      checkpointPath,
+      chapterBatchSize: 1,
+    })
+
+    assert.deepEqual(summaries[0].characters, ['方源', '白凝冰'])
+    assert.deepEqual(summaries[0].events, ['试探局势'])
+
+    const checkpoint = JSON.parse(await readFile(checkpointPath, 'utf8'))
+    assert.deepEqual(checkpoint.summaries[0].characters, ['方源', '白凝冰'])
+    assert.deepEqual(checkpoint.summaries[0].events, ['试探局势'])
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
+
 test('chapter summary generation retries once after a non-Chinese response', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-language-retry-summary-'))
   const checkpointPath = join(tempDir, 'chapter-summaries.json')
