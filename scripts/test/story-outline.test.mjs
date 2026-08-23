@@ -82,6 +82,36 @@ test('chapter summary generation retries after a transient 5xx LLM error', async
   }
 })
 
+test('chapter summary generation falls back deterministically after repeated transient failures', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-deterministic-fallback-'))
+  const checkpointPath = join(tempDir, 'chapter-summaries.json')
+  let calls = 0
+
+  try {
+    const summaries = await buildChapterSummaries({
+      chapters: makeChapters(2, { includeText: true }),
+      generateJson: async () => {
+        calls += 1
+        throw new Error('524 status code (no body)')
+      },
+      checkpointPath,
+      chapterBatchSize: 2,
+      allowDeterministicFallback: true,
+    })
+
+    assert.equal(calls, 3)
+    assert.equal(summaries.length, 1)
+    assert.match(summaries[0].summary, /第1节：事件1/)
+    assert.deepEqual(summaries[0].characters, ['方源'])
+    assert.ok(summaries[0].events.length > 0)
+
+    const checkpoint = JSON.parse(await readFile(checkpointPath, 'utf8'))
+    assert.match(checkpoint.summaries[0].summary, /第1节：事件1/)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
+
 test('chapter summary generation strips blank array items before checkpointing', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-blank-array-items-'))
   const checkpointPath = join(tempDir, 'chapter-summaries.json')
@@ -342,6 +372,35 @@ test('story outline validates lesson count, chronology, and word capacity before
 
     const saved = JSON.parse(await readFile(checkpointPath, 'utf8'))
     assert.equal(saved.lessons.length, 61)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test('story outline falls back deterministically after repeated transient failures', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'story-outline-deterministic-final-'))
+  const checkpointPath = join(tempDir, 'story-outline.json')
+  let calls = 0
+
+  try {
+    const outline = await buildStoryOutline({
+      chapterSummaries: makeSummaries(61),
+      vocabularyCount: 6100,
+      generateJson: async () => {
+        calls += 1
+        throw new Error('524 status code (no body)')
+      },
+      checkpointPath,
+      allowDeterministicFallback: true,
+    })
+
+    assert.equal(calls, 3)
+    assert.ok(outline.lessons.length >= 61)
+    assert.ok(outline.lessons.length <= 150)
+    assert.ok(outline.lessons.every((lesson) => lesson.plotSummary))
+
+    const saved = JSON.parse(await readFile(checkpointPath, 'utf8'))
+    assert.equal(saved.lessons.length, outline.lessons.length)
   } finally {
     await rm(tempDir, { recursive: true, force: true })
   }

@@ -58,7 +58,7 @@ export async function main(args = process.argv.slice(2), dependencies = {}) {
     apiKey: getFirstEnv(['STORY_LLM_API_KEY', 'OPENAI_API_KEY', 'LLM_API_KEY'], env),
     baseURL: getFirstEnv(['STORY_LLM_BASE_URL', 'OPENAI_BASE_URL', 'LLM_BASE_URL'], env),
     model: getFirstEnv(['STORY_LLM_MODEL', 'OPENAI_MODEL', 'LLM_MODEL'], env) ?? DEFAULT_MODEL,
-    transport: getFirstEnv(['STORY_LLM_TRANSPORT'], env) ?? 'auto',
+    transport: getFirstEnv(['STORY_LLM_TRANSPORT'], env) ?? 'responses',
   }).generateJson
 
   const chapterSummaries = await (dependencies.buildChapterSummaries ?? buildChapterSummaries)({
@@ -66,6 +66,7 @@ export async function main(args = process.argv.slice(2), dependencies = {}) {
     generateJson,
     checkpointPath: chapterCheckpointPath,
     sourceFingerprint,
+    allowDeterministicFallback: true,
   })
 
   const outline = await (dependencies.buildStoryOutline ?? buildStoryOutline)({
@@ -289,6 +290,7 @@ Environment:
   STORY_LLM_API_KEY / OPENAI_API_KEY / LLM_API_KEY
   STORY_LLM_BASE_URL / OPENAI_BASE_URL / LLM_BASE_URL
   STORY_LLM_MODEL / OPENAI_MODEL / LLM_MODEL (default: ${DEFAULT_MODEL})
+  STORY_LLM_TRANSPORT (default: responses)
 
 Exported shell environment values take precedence over .env and .env.local.`
 }

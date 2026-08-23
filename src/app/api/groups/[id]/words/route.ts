@@ -23,6 +23,19 @@ export async function GET(
       word: {
         include: {
           meanings: {
+            // Keep the list preview aligned with the word detail page: ignore
+            // orphaned/bad meanings that have neither an example nor a usable
+            // generated sentence. Those rows can exist after sentence cleanup.
+            where: {
+              OR: [
+                { example: { not: null } },
+                {
+                  generatedSentences: {
+                    some: { source: { not: 'synonym_test' } },
+                  },
+                },
+              ],
+            },
             orderBy: { id: 'asc' },
             take: 1,
           },
@@ -34,18 +47,19 @@ export async function GET(
     },
   })
 
-  const words = items.map((item) => {
+  const words = items.flatMap((item) => {
     const firstMeaning = item.word.meanings[0]
+    if (!firstMeaning) return []
     const uw = item.word.userWords[0]
-    return {
+    return [{
       id: item.word.id,
       text: item.word.text,
-      pos: firstMeaning?.partOfSpeech ?? '',
-      definitionCn: firstMeaning?.definitionCn ?? '',
+      pos: firstMeaning.partOfSpeech,
+      definitionCn: firstMeaning.definitionCn ?? '',
       mastery: uw?.mastery ?? 0,
       status: uw?.status ?? 'learning',
       bookmarked: uw?.bookmarked ?? false,
-    }
+    }]
   })
 
   return NextResponse.json({ group, words })

@@ -393,7 +393,7 @@ describe('getStoryLesson', () => {
       fingerprints: { sourceFingerprint: 'source', summaryFingerprint: 'summary', outlineFingerprint: 'outline', assignmentFingerprint: 'assignment' },
     })
     const { wordMap, meaningMap } = buildWordAndMeaningMaps(wordGroups)
-    const artifact = JSON.parse(makeContent())
+    const artifact = JSON.parse(makeContent({ title: '已发布课程' }))
     const persisted = await persistDraftLesson({ prisma, courseId: course.id, lessonDocument: artifact, wordMap, meaningMap })
 
     await publishDraftCourse({

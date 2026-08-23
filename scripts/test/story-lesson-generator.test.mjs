@@ -1,5 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { assignWordsToOutline, createLessonPrompt, generateLesson, generateLessonsFromAssignments, validateCorpus } from '../lib/story-lesson-generator.mjs'
 
@@ -44,7 +47,7 @@ function documentFor(outlineLesson, targetWords) {
     paragraphs: [{
       sceneTitle: '场景',
       segments: targetWords.flatMap((word, index) => [
-        { type: 'text', value: `文本${index + 1}` },
+        { type: 'text', value: `这一段继续推动具体情节${index + 1}` },
         { type: 'targetWord', word: word.text, definitionCn: word.meaning.definitionCn, phonetic: '/wɜːd/', wordOrder: index + 1 },
       ]),
     }],
@@ -121,6 +124,15 @@ test('generated lesson prompt includes continuity, chapter range, full word list
   assert.match(prompt, /contextual Chinese gloss/i)
   assert.match(prompt, /canonical IPA/i)
   assert.match(prompt, /phonetic/i)
+  assert.match(prompt, /story text must be concrete scene narration/i)
+  assert.match(prompt, /preserve the supplied outline plot exactly/i)
+  assert.match(prompt, /do not change the main events/i)
+  assert.match(prompt, /FORMAT ONE-SHOT ONLY/i)
+  assert.match(prompt, /重生初醒/)
+  assert.match(prompt, /targetWord.*react/s)
+  assert.match(prompt, /do not copy these sample words/i)
+  assert.match(prompt, /template filler/i)
+  assert.match(prompt, /do not write sentences about the reader/i)
   assert.match(prompt, /no target word omitted/i)
   assert.match(prompt, /word1/)
   assert.match(prompt, /释义2/)
@@ -296,4 +308,63 @@ test('generation resume skips only lessons before the first non-ready lesson', a
   assert.deepEqual(generatedOrders, [2, 3])
   assert.deepEqual(persistedOrders, [2, 3])
   assert.deepEqual(lessons.map((lesson) => lesson.order), [1, 2, 3])
+})
+
+
+test('lesson generation writes live progress snapshots and final completed state', async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), 'story-progress-'))
+  const progressPath = join(tempRoot, 'story-generation-progress.json')
+  const assignmentWords = words(2)
+  const outlineLessons = outline(2, 100).lessons
+  const assignments = outlineLessons.map((outlineLesson, index) => ({
+    lessonOrder: outlineLesson.order,
+    outlineLesson,
+    words: [assignmentWords[index]],
+  }))
+  let tick = 0
+  const now = () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++))
+  const duringSnapshots = []
+
+  try {
+    const lessons = await generateLessonsFromAssignments({
+      assignments,
+      progressPath,
+      progressMetadata: { courseId: 'course-progress', courseVersion: 7 },
+      now,
+      generateJson: async (prompt) => {
+        const snapshot = JSON.parse(await readFile(progressPath, 'utf8'))
+        duringSnapshots.push(snapshot)
+        const order = prompt.includes('source chapter range: 1-1') ? 1 : 2
+        return documentFor(outlineLessons[order - 1], [assignmentWords[order - 1]])
+      },
+      persistLesson: async () => {},
+    })
+
+    assert.deepEqual(lessons.map((lesson) => lesson.order), [1, 2])
+    assert.ok(duringSnapshots.length >= 2)
+    assert.equal(duringSnapshots[0].status, 'running')
+    assert.equal(duringSnapshots[0].totalLessons, 2)
+    assert.equal(duringSnapshots[0].completedLessons, 0)
+    assert.equal(duringSnapshots[0].currentLessonOrder, 1)
+    assert.equal(duringSnapshots[0].courseId, 'course-progress')
+    assert.equal(duringSnapshots[0].courseVersion, 7)
+    assert.equal(typeof duringSnapshots[0].elapsedMs, 'number')
+
+    const finalSnapshot = JSON.parse(await readFile(progressPath, 'utf8'))
+    assert.equal(finalSnapshot.status, 'completed')
+    assert.equal(finalSnapshot.totalLessons, 2)
+    assert.equal(finalSnapshot.completedLessons, 2)
+    assert.equal(finalSnapshot.currentLessonOrder, null)
+    assert.equal(finalSnapshot.currentLessonTitle, null)
+    assert.equal(finalSnapshot.percent, 100)
+    assert.equal(finalSnapshot.lastCompletedLessonOrder, 2)
+    assert.equal(finalSnapshot.lastCompletedLessonTitle, '第2课故事')
+    assert.equal(finalSnapshot.courseId, 'course-progress')
+    assert.equal(finalSnapshot.courseVersion, 7)
+    assert.equal(finalSnapshot.finishedAt, finalSnapshot.updatedAt)
+    assert.equal(finalSnapshot.etaMs, null)
+    assert.match(finalSnapshot.startedAt, /^2026-01-01T00:00:00\.000Z$/)
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true })
+  }
 })

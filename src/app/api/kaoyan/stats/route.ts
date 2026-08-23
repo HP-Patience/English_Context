@@ -3,6 +3,11 @@ import { prisma, getLocalUserId } from '@/lib/prisma'
 import { calculateStreak } from '@/lib/streak'
 
 // Simple in-memory cache — stats change only when user learns/reviews
+
+type DailyGoalResult = Awaited<ReturnType<typeof fetchDailyGoal>>
+type HomeResult = Awaited<ReturnType<typeof fetchStats>> & {
+  dailyGoal: DailyGoalResult | null
+}
 const cache = new Map<string, { data: unknown; expiresAt: number }>()
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key)
@@ -18,13 +23,19 @@ async function fetchStats(userId: string) {
     { totalWords: number; learnedCount: number; dueCount: number }[]
   >`
     SELECT
-      (SELECT COUNT(*)::int FROM "UserWord" WHERE "userId" = ${userId}) AS "totalWords",
-      (SELECT COUNT(*)::int FROM "UserWord" WHERE "userId" = ${userId} AND mastery > 0) AS "learnedCount",
+      (SELECT COUNT(*)::int FROM "UserWord" uw
+       WHERE uw."userId" = ${userId}
+         AND EXISTS (SELECT 1 FROM "Meaning" m WHERE m."wordId" = uw."wordId")) AS "totalWords",
+      (SELECT COUNT(*)::int FROM "UserWord" uw
+       WHERE uw."userId" = ${userId}
+         AND uw.mastery > 0
+         AND EXISTS (SELECT 1 FROM "Meaning" m WHERE m."wordId" = uw."wordId")) AS "learnedCount",
       (SELECT COUNT(*)::int FROM "UserWordMeaning" uwm
        JOIN "UserWord" uw ON uw.id = uwm."userWordId"
        WHERE uw."userId" = ${userId}
          AND uwm."nextReviewAt" <= NOW()
-         AND uwm.interval > 0) AS "dueCount"
+         AND uwm.interval > 0
+         AND EXISTS (SELECT 1 FROM "Meaning" m WHERE m."id" = uwm."meaningId")) AS "dueCount"
   `
 
   // 1 round trip: group-level progress with names, sorted
@@ -41,6 +52,7 @@ async function fetchStats(userId: string) {
     JOIN "Word" w ON w.id = wgi."wordId"
     JOIN "WordGroup" wg ON wg.id = wgi."wordGroupId"
     LEFT JOIN "UserWord" uw ON uw."wordId" = w.id AND uw."userId" = ${userId}
+    WHERE EXISTS (SELECT 1 FROM "Meaning" m WHERE m."wordId" = w.id)
     GROUP BY wg.id, wg.name, wg."sortOrder"
     ORDER BY wg."sortOrder" ASC
   `
@@ -92,7 +104,7 @@ export async function GET() {
   const userId = await getLocalUserId()
   const cacheKey = `homepage:${userId}`
 
-  const cached = getCached<any>(cacheKey)
+  const cached = getCached<HomeResult>(cacheKey)
   if (cached) {
     return NextResponse.json(cached, {
       headers: { 'Cache-Control': 'public, max-age=60' },

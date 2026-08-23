@@ -4,6 +4,7 @@ import { connection } from 'next/server'
 
 import { StoryCourseList } from '@/components/story/StoryCourseList'
 import { StoryCourseProgress } from '@/components/story/StoryCourseProgress'
+import { StoryGenerationProgressWidget } from '@/components/story/StoryGenerationProgressWidget'
 import { getLocalUserId, prisma } from '@/lib/prisma'
 import { listStoryLessons } from '@/lib/story-service'
 
@@ -64,6 +65,10 @@ export default async function StoryPage() {
           reinforced={reinforced}
           dueCount={dueCount}
         />
+      </div>
+
+      <div className="mt-6">
+        <StoryGenerationProgressWidget />
       </div>
 
       <section aria-labelledby="story-lessons-title" className="mt-9">

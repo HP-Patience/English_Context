@@ -21,6 +21,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/client": "^5.22.0",
     "@serwist/next": "^9.5.11",
+    "cmu-pronouncing-dictionary-cjs": "^3.0.0",
     "next": "16.2.9",
     "openai": "^6.42.0",
     "prisma": "^5.22.0",

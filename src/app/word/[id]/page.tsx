@@ -48,13 +48,12 @@ export default function WordDetailPage() {
 
   const [word, setWord] = useState<WordDetail | null>(null)
   const [userWord, setUserWord] = useState<UserWordInfo | null>(null)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
+  const loading = !word && !error
 
   useEffect(() => {
     if (!id) return
-    setLoading(true)
     fetch(`/api/words/${id}`)
       .then((r) => {
         if (!r.ok) throw new Error('未找到单词')
@@ -69,7 +68,6 @@ export default function WordDetailPage() {
         }
       })
       .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
   }, [id])
 
   async function toggleBookmark() {
@@ -153,7 +151,11 @@ export default function WordDetailPage() {
       {/* Meanings */}
       <div className="mb-6 space-y-4">
         <h2 className="text-sm font-medium text-stone-500 dark:text-stone-400">释义</h2>
-        {word.meanings.map((m) => {
+        {word.meanings.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-stone-200 bg-white px-5 py-8 text-center text-sm text-stone-400 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500">
+            该单词的坏释义已清理，当前暂无可显示内容。
+          </div>
+        ) : word.meanings.map((m) => {
           const uwm = m.userWordMeanings[0]
           return (
             <div

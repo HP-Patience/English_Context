@@ -51,6 +51,11 @@ function addRequiredStringError(errors, value, path) {
   }
 }
 
+function countChineseCharacters(value) {
+  if (typeof value !== 'string') return 0
+  return (value.match(/[㐀-鿿]/gu) ?? []).length
+}
+
 function addSimplifiedChineseTextError(errors, value, path) {
   if (typeof value !== 'string') {
     return
@@ -70,6 +75,48 @@ function addSimplifiedChineseTextError(errors, value, path) {
 
   if (latinCount >= 20 && latinCount > cjkCount * 2) {
     errors.push(`${path} must be predominantly Simplified Chinese (简体中文), not English`)
+  }
+}
+
+const STORY_META_COMMENTARY_PHRASES = [
+  '本课围绕',
+  '主线推进',
+  '前半段推进',
+  '后半段收束',
+  '承接前半段',
+  '把故事的重心',
+  '强化了冲突感',
+  '让读者更清楚角色的判断',
+  '把前后情节自然接上',
+  '让人物的选择更有层次',
+  '推进故事主线',
+  '留下明显伏笔',
+  '故事已经推进到新的转折点',
+  '为下一课留下明显伏笔',
+  '感悟',
+  '点评',
+  '分析',
+]
+
+function addStoryNarrativeQualityError(errors, value, path) {
+  if (typeof value !== 'string') {
+    return
+  }
+
+  const text = value.trim()
+  if (!text) {
+    return
+  }
+
+  const hits = STORY_META_COMMENTARY_PHRASES.filter((phrase) => text.includes(phrase))
+  if (hits.length > 0) {
+    errors.push(`${path} must be story narration, not meta commentary or template language (${hits[0]})`)
+    return
+  }
+
+  const templateOpeners = ['这一处', '这一层', '这一句', '这一点']
+  if (templateOpeners.some((phrase) => text.includes(phrase)) && /(?:故事的重心|冲突感|角色的判断|前后情节|人物的选择|故事主线|明显伏笔|局势变化)/.test(text)) {
+    errors.push(`${path} must be story narration, not template commentary`)
   }
 }
 
@@ -103,6 +150,7 @@ export function validateLessonDocument(value, context = {}) {
 
   addRequiredStringError(errors, value.title, 'title')
   addSimplifiedChineseTextError(errors, value.title, 'title')
+  addStoryNarrativeQualityError(errors, value.title, 'title')
 
   if (!Number.isInteger(value.order) || value.order < 1) {
     errors.push('order must be a positive integer')
@@ -114,6 +162,8 @@ export function validateLessonDocument(value, context = {}) {
   addRequiredStringError(errors, value.continuityNotes, 'continuityNotes')
   addSimplifiedChineseTextError(errors, value.sourceSummary, 'sourceSummary')
   addSimplifiedChineseTextError(errors, value.continuityNotes, 'continuityNotes')
+  addStoryNarrativeQualityError(errors, value.sourceSummary, 'sourceSummary')
+  addStoryNarrativeQualityError(errors, value.continuityNotes, 'continuityNotes')
 
   if (!Array.isArray(value.paragraphs) || value.paragraphs.length === 0) {
     errors.push('paragraphs must be a non-empty array')
@@ -128,11 +178,15 @@ export function validateLessonDocument(value, context = {}) {
 
       addRequiredStringError(errors, paragraph.sceneTitle, `${paragraphPath}.sceneTitle`)
       addSimplifiedChineseTextError(errors, paragraph.sceneTitle, `${paragraphPath}.sceneTitle`)
+      addStoryNarrativeQualityError(errors, paragraph.sceneTitle, `${paragraphPath}.sceneTitle`)
 
       if (!Array.isArray(paragraph.segments) || paragraph.segments.length === 0) {
         errors.push(`${paragraphPath}.segments must be a non-empty array`)
         continue
       }
+
+      let previousTargetWordPath = null
+      let textSincePreviousTargetWord = ''
 
       for (const [segmentIndex, segment] of paragraph.segments.entries()) {
         const segmentPath = `${paragraphPath}.segments[${segmentIndex}]`
@@ -145,10 +199,22 @@ export function validateLessonDocument(value, context = {}) {
         if (segment.type === 'text') {
           addRequiredStringError(errors, segment.value, `${segmentPath}.value`)
           addSimplifiedChineseTextError(errors, segment.value, `${segmentPath}.value`)
+          addStoryNarrativeQualityError(errors, segment.value, `${segmentPath}.value`)
+          if (previousTargetWordPath !== null && typeof segment.value === 'string') {
+            textSincePreviousTargetWord += segment.value
+          }
           continue
         }
 
         if (segment.type === 'targetWord') {
+          if (previousTargetWordPath !== null) {
+            const separatingChineseCharacters = countChineseCharacters(textSincePreviousTargetWord)
+            if (separatingChineseCharacters < 6) {
+              errors.push(`${segmentPath} must be naturally embedded in the story; write at least 6 Chinese narrative characters between target words after ${previousTargetWordPath}`)
+            }
+          }
+          previousTargetWordPath = segmentPath
+          textSincePreviousTargetWord = ''
           targetWordCount += 1
           addRequiredStringError(errors, segment.word, `${segmentPath}.word`)
           addRequiredStringError(errors, segment.definitionCn, `${segmentPath}.definitionCn`)

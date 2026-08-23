@@ -19,8 +19,8 @@ if (!process.env.OPENAI_API_KEY) {
   throw new Error('OPENAI_API_KEY environment variable is required')
 }
 
-const BATCH_SIZE = 15
-const CONCURRENCY = 5
+const BATCH_SIZE = Number(process.env.MEANING_BATCH_SIZE || 15)
+const CONCURRENCY = Number(process.env.MEANING_CONCURRENCY || 5)
 
 function buildPrompt(words) {
   return `You are generating English vocabulary data for Chinese students (考研).
@@ -55,6 +55,9 @@ async function run() {
     startFrom = JSON.parse(fs.readFileSync(progressPath, 'utf-8')).lastBatch || 0
     console.log(`Resuming from batch ${startFrom}`)
   }
+  if (startFrom >= totalBatches) {
+    startFrom = 0
+  }
 
   let totalMeanings = 0
 
@@ -83,7 +86,7 @@ async function processBatch(batchNum, totalBatches, batchWords) {
     const res = await openai.chat.completions.create({
       model: process.env.LLM_MODEL || 'deepseek-v4-flash',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
+      temperature: 0.2,
       max_tokens: 16384,
     })
 
@@ -120,7 +123,6 @@ async function processBatch(batchNum, totalBatches, batchWords) {
       if (!word) continue
 
       const uw = await prisma.userWord.findFirst({ where: { userId: LOCAL_USER_ID, wordId: word.id } })
-      if (!uw) continue
 
       const meaning = await prisma.meaning.create({
         data: {
@@ -128,15 +130,19 @@ async function processBatch(batchNum, totalBatches, batchWords) {
           partOfSpeech: entry.partOfSpeech || 'unknown',
           definition: entry.definitionCn,
           definitionCn: entry.definitionCn,
+          example: entry.sentence || null,
         },
       })
-      const uwm = await prisma.userWordMeaning.create({
-        data: { userWordId: uw.id, meaningId: meaning.id, easeFactor: 2.5, interval: 0, nextReviewAt: new Date(), mastery: 0 },
-      })
-      if (entry.sentence) {
-        await prisma.generatedSentence.create({
-          data: { userWordMeaningId: uwm.id, meaningId: meaning.id, sentenceText: entry.sentence, sentenceCn: entry.sentenceCn || null, contextTopic: 'general', interestTuned: false, source: 'batch-ai' },
+
+      if (uw) {
+        const uwm = await prisma.userWordMeaning.create({
+          data: { userWordId: uw.id, meaningId: meaning.id, easeFactor: 2.5, interval: 0, nextReviewAt: new Date(), mastery: 0 },
         })
+        if (entry.sentence) {
+          await prisma.generatedSentence.create({
+            data: { userWordMeaningId: uwm.id, meaningId: meaning.id, sentenceText: entry.sentence, sentenceCn: entry.sentenceCn || null, contextTopic: 'general', interestTuned: false, source: 'batch-ai' },
+          })
+        }
       }
       created++
     }

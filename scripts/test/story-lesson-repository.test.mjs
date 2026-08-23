@@ -25,7 +25,7 @@ function makeLessonDocument() {
       segments: [
         { type: 'text', value: '先学习 ' },
         { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', phonetic: '/ˈælfə/', wordOrder: 1 },
-        { type: 'text', value: ' 和 ' },
+        { type: 'text', value: ' 穿过石门继续赶路，随后遇见 ' },
         { type: 'targetWord', word: 'beta', definitionCn: '贝塔', phonetic: '/ˈbeɪtə/', wordOrder: 2 },
       ],
     }],
@@ -128,7 +128,7 @@ test('duplicate target segments are rejected by repository before draft-ready pe
   const { prisma, course } = await makeDraftPrisma()
   const lessonDocument = makeLessonDocument()
   lessonDocument.paragraphs[0].segments.push(
-    { type: 'text', value: ' 重复 ' },
+    { type: 'text', value: ' 众人继续向山谷深处前行，随后再次看见 ' },
     { type: 'targetWord', word: 'alpha', definitionCn: '阿尔法', phonetic: '/ˈælfə/', wordOrder: 3 },
   )
   const { wordMap, meaningMap } = makeMaps()

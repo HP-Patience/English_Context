@@ -65,3 +65,10 @@ next-env.d.ts
 # story source and generated cache
 /蛊真人.txt
 /scripts/.story-cache/
+
+# local task/debug artifacts
+/inspect-inputs.txt
+/lesson-details.txt
+/tmp_lesson3_info.txt
+/task6-desktop.png
+/task6-mobile.png

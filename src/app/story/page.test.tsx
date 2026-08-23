@@ -43,6 +43,9 @@ vi.mock('@/lib/story-service', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/story-service')>()
   return { ...original, listStoryLessons: mocks.listStoryLessons }
 })
+vi.mock('@/components/story/StoryGenerationProgressWidget', () => ({
+  StoryGenerationProgressWidget: () => <section aria-label="故事生成进度组件">故事生成炉</section>,
+}))
 
 import StoryPage from './page'
 
@@ -58,6 +61,8 @@ describe('/story server page', () => {
     })
     expect(screen.getByRole('heading', { level: 1, name: '蛊界词途' })).toBeInTheDocument()
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: '修习卷宗' })).toBeInTheDocument()
+    expect(screen.getByLabelText('故事生成进度组件')).toHaveTextContent('故事生成炉')
     expect(screen.getByText('1 篇')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '继续第 2 步' })).toHaveAttribute('href', '/story/lesson-2')
   })

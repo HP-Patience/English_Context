@@ -61,7 +61,7 @@ export function assignWordsToOutline({ wordGroups, outline, maxWordsPerLesson = 
 /**
  * Generate, structurally validate, and target-set validate a single lesson document.
  *
- * @param {{ outlineLesson: object, words: object[], previousLesson?: object|null, nextLesson?: object|null, generateJson: (prompt: string, schemaName?: string) => Promise<unknown>, maxWordsPerLesson?: number }} options
+ * @param {{ outlineLesson: object, words: object[], previousLesson?: object|null, nextLesson?: object|null, generateJson: (prompt: string, schemaName?: string) => Promise<unknown>, maxWordsPerLesson?: number, promptOverride?: string }} options
  * @returns {Promise<object>}
  */
 export async function generateLesson({
@@ -71,6 +71,7 @@ export async function generateLesson({
   nextLesson = null,
   generateJson,
   maxWordsPerLesson = DEFAULT_MAX_WORDS_PER_LESSON,
+  promptOverride,
 }) {
   if (!isPlainObject(outlineLesson)) {
     throw new TypeError('generateLesson requires outlineLesson')
@@ -83,7 +84,9 @@ export async function generateLesson({
   }
 
   const normalizedWords = normalizeAssignedWords(words)
-  const prompt = createLessonPrompt({ outlineLesson, words: normalizedWords, previousLesson, nextLesson })
+  const prompt = typeof promptOverride === 'string' && promptOverride.trim()
+    ? promptOverride
+    : createLessonPrompt({ outlineLesson, words: normalizedWords, previousLesson, nextLesson })
   const response = await generateJson(prompt, 'story-lesson')
   const validation = validateLessonDocument(response, { maxTargetWords: Math.min(normalizeMaxWordsPerLesson(maxWordsPerLesson), DEFAULT_MAX_WORDS_PER_LESSON) })
 
@@ -114,7 +117,19 @@ export function createLessonPrompt({ outlineLesson, words, previousLesson = null
     `- next lesson continuity start: ${nextLesson?.continuityStart ?? nextLesson?.sourceSummary ?? '无；这是最后一课。'}`,
     '- the complete target-word list is provided below and every item is mandatory.',
     '- write title, sourceSummary, continuityNotes, sceneTitle, and all text segments as Simplified Chinese (简体中文) narrative text; only targetWord.word and phonetic stay as the required English/IPA values.',
+    '- the story text must be concrete scene narration, not commentary, moralizing, lesson notes, or structural explanation.',
+    '- preserve the supplied outline plot exactly: do not change the main events, character relationships, chapter order, outcome, setting, or causality.',
+    '- you may add only small connective actions, inner thoughts, sensory details, and transition sentences needed to embed target words naturally; these details must not create new plot points.',
+    '- do not introduce modern objects, organizations, technologies, diseases, institutions, or worldbuilding that are not implied by the outline; if an abstract/modern target word is hard to fit, use it as metaphor, judgment, label, or inner comparison without changing the story world.',
+    '- do not use template filler such as “这一处…”, “这一句…”, “这一点…”, “这一层…”, or “后半段收束”.',
+    '- do not write sentences about the reader, the structure of the lesson, or how the passage functions; write the plot itself.',
     '- include one contextual Chinese gloss for every target word using the provided glossary.',
+    '- targetWord segments are inline annotations inside the Chinese story, not flashcard chips or a vocabulary list.',
+    '- NEVER place two targetWord segments next to each other. Between any two targetWord segments in the same paragraph, write at least 8 Simplified Chinese story characters that continue the plot.',
+    '- Do not dump target words in clusters at the beginning or end of a sentence. Each targetWord must be attached to a concrete narrated action, object, judgment, conflict, or consequence.',
+    '- Good segment rhythm example: text “他决定先” + targetWord “advance” + text “一步试探寨中长老的反应，又用更” + targetWord “advanced” + text “的前世经验压住心里的波澜。”',
+    '- Bad segment rhythm example: targetWord “advance” + targetWord “advanced” + targetWord “agent” + text “前世五百年的记忆还在。”',
+    '- FORMAT ONE-SHOT ONLY; do not copy these sample words unless they are in the provided target list: {"sceneTitle":"重生初醒","segments":[{"type":"text","value":"方源醒来时没有立刻"},{"type":"targetWord","word":"react","definitionCn":"反应","phonetic":"/riˈækt/","wordOrder":1},{"type":"text","value":"，他先压住呼吸，确认木屋、竹床和窗外山影都是真实存在的"},{"type":"targetWord","word":"actual","definitionCn":"实际的，真实的","phonetic":"/ˈæktʃuəl/","wordOrder":2},{"type":"text","value":"处境。前世记忆像暗线一样回到脑中，他决定先向前"},{"type":"targetWord","word":"advance","definitionCn":"前进","phonetic":"/ədˈvæns/","wordOrder":3},{"type":"text","value":"一步，借少年身份遮住锋芒，再用更老辣的"},{"type":"targetWord","word":"advanced","definitionCn":"先进的","phonetic":"/ədˈvænst/","wordOrder":4},{"type":"text","value":"经验判断族人的每一次试探。"}]}',
     '- enrich every targetWord segment with one required non-empty phonetic value in canonical IPA; never use a placeholder or omit it.',
     '- no target word omitted; every target word must appear in at least one targetWord segment exactly as listed.',
     '- do not add targetWord segments for words outside the target list.',
@@ -191,6 +206,10 @@ export async function generateLessonsFromAssignments({
   existingLessonsByOrder = new Map(),
   persistLesson,
   maxWordsPerLesson = DEFAULT_MAX_WORDS_PER_LESSON,
+  progressPath,
+  progressMetadata = {},
+  writeProgressJson = writeJsonAtomic,
+  now = () => new Date(),
 }) {
   if (!Array.isArray(assignments)) {
     throw new TypeError('generateLessonsFromAssignments requires assignments')
@@ -206,54 +225,196 @@ export async function generateLessonsFromAssignments({
   const firstNonReadyIndex = assignments.findIndex((assignment) => existingLessonsByOrder.get(assignment.lessonOrder)?.status !== 'ready')
   const regenerateFromIndex = firstNonReadyIndex === -1 ? assignments.length : firstNonReadyIndex
   const generated = []
+  const progress = createLessonGenerationProgressTracker({
+    progressPath,
+    totalLessons: assignments.length,
+    assignments,
+    metadata: progressMetadata,
+    writeJson: writeProgressJson,
+    now,
+  })
 
-  for (const [index, assignment] of assignments.entries()) {
-    const existing = existingLessonsByOrder.get(assignment.lessonOrder)
-    if (index < regenerateFromIndex) {
+  try {
+    for (let index = 0; index < regenerateFromIndex; index += 1) {
+      const existing = existingLessonsByOrder.get(assignments[index].lessonOrder)
       generated.push(parseLessonContent(existing))
-      continue
     }
 
-    const previousLesson = generated[index - 1] ?? null
-    const nextLesson = assignments[index + 1]?.outlineLesson ?? null
-    const checkpointPath = checkpointDir ? `${checkpointDir}/lesson-${String(assignment.lessonOrder).padStart(4, '0')}.json` : null
-    const inputFingerprint = createLessonInputFingerprint(assignment)
-    const priorContinuityFingerprint = createPriorContinuityFingerprint(previousLesson)
-    let lessonDocument = checkpointPath ? await readValidatedLessonCheckpoint({
-      path: checkpointPath,
-      outlineLesson: assignment.outlineLesson,
-      words: assignment.words,
-      maxWordsPerLesson,
-      inputFingerprint,
-      priorContinuityFingerprint,
-    }) : null
+    await progress.write({
+      status: regenerateFromIndex >= assignments.length ? 'completed' : 'running',
+      completedLessons: generated.length,
+      currentAssignment: assignments[regenerateFromIndex] ?? null,
+      lastCompletedLesson: generated[generated.length - 1] ?? null,
+      finished: regenerateFromIndex >= assignments.length,
+    })
 
-    if (!lessonDocument) {
-      lessonDocument = await generateLesson({
+    for (let index = regenerateFromIndex; index < assignments.length; index += 1) {
+      const assignment = assignments[index]
+      await progress.write({
+        status: 'running',
+        completedLessons: generated.length,
+        currentAssignment: assignment,
+        lastCompletedLesson: generated[generated.length - 1] ?? null,
+      })
+
+      const previousLesson = generated[index - 1] ?? null
+      const nextLesson = assignments[index + 1]?.outlineLesson ?? null
+      const checkpointPath = checkpointDir ? `${checkpointDir}/lesson-${String(assignment.lessonOrder).padStart(4, '0')}.json` : null
+      const inputFingerprint = createLessonInputFingerprint(assignment)
+      const priorContinuityFingerprint = createPriorContinuityFingerprint(previousLesson)
+      let lessonDocument = checkpointPath ? await readValidatedLessonCheckpoint({
+        path: checkpointPath,
         outlineLesson: assignment.outlineLesson,
         words: assignment.words,
-        previousLesson,
-        nextLesson,
-        generateJson,
         maxWordsPerLesson,
-      })
-      if (checkpointPath) {
-        await writeJsonAtomic(checkpointPath, {
-          version: 2,
-          inputFingerprint,
-          priorContinuityFingerprint,
-          lesson: lessonDocument,
-        })
-      }
-    }
+        inputFingerprint,
+        priorContinuityFingerprint,
+      }) : null
 
-    if (persistLesson) {
-      await persistLesson(lessonDocument, assignment)
+      if (!lessonDocument) {
+        lessonDocument = await generateLesson({
+          outlineLesson: assignment.outlineLesson,
+          words: assignment.words,
+          previousLesson,
+          nextLesson,
+          generateJson,
+          maxWordsPerLesson,
+        })
+        if (checkpointPath) {
+          await writeJsonAtomic(checkpointPath, {
+            version: 2,
+            inputFingerprint,
+            priorContinuityFingerprint,
+            lesson: lessonDocument,
+          })
+        }
+      }
+
+      if (persistLesson) {
+        await persistLesson(lessonDocument, assignment)
+      }
+      generated.push(lessonDocument)
+      await progress.write({
+        status: index + 1 >= assignments.length ? 'completed' : 'running',
+        completedLessons: generated.length,
+        currentAssignment: assignments[index + 1] ?? null,
+        lastCompletedLesson: lessonDocument,
+        finished: index + 1 >= assignments.length,
+      })
     }
-    generated.push(lessonDocument)
+  } catch (error) {
+    await progress.write({
+      status: 'failed',
+      completedLessons: generated.length,
+      currentAssignment: assignments[generated.length] ?? assignments[regenerateFromIndex] ?? null,
+      lastCompletedLesson: generated[generated.length - 1] ?? null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      finished: true,
+    })
+    throw error
   }
 
   return generated
+}
+
+
+export function createLessonGenerationProgressTracker({
+  progressPath,
+  totalLessons,
+  assignments = [],
+  metadata = {},
+  writeJson = writeJsonAtomic,
+  now = () => new Date(),
+} = {}) {
+  const started = toDate(now())
+  const startedMs = started.getTime()
+  const startedAt = started.toISOString()
+
+  return {
+    async write({
+      status = 'running',
+      completedLessons = 0,
+      currentAssignment = null,
+      lastCompletedLesson = null,
+      errorMessage,
+      finished = false,
+    } = {}) {
+      if (!progressPath) return null
+      const updated = toDate(now())
+      const elapsedMs = Math.max(0, updated.getTime() - startedMs)
+      const normalizedTotalLessons = Math.max(0, Number.isInteger(totalLessons) ? totalLessons : assignments.length)
+      const normalizedCompletedLessons = clampInteger(completedLessons, 0, normalizedTotalLessons)
+      const snapshot = {
+        version: 1,
+        status,
+        startedAt,
+        updatedAt: updated.toISOString(),
+        finishedAt: finished ? updated.toISOString() : null,
+        totalLessons: normalizedTotalLessons,
+        completedLessons: normalizedCompletedLessons,
+        currentLessonOrder: currentAssignment?.lessonOrder ?? currentAssignment?.outlineLesson?.order ?? null,
+        currentLessonTitle: currentAssignment ? getProgressAssignmentTitle(currentAssignment) : null,
+        percent: computeProgressPercent(normalizedCompletedLessons, normalizedTotalLessons),
+        elapsedMs,
+        lastCompletedLessonOrder: lastCompletedLesson?.order ?? null,
+        lastCompletedLessonTitle: lastCompletedLesson?.title ?? null,
+        courseId: metadata.courseId ?? null,
+        courseVersion: metadata.courseVersion ?? null,
+        etaMs: computeEtaMs({ status, elapsedMs, completedLessons: normalizedCompletedLessons, totalLessons: normalizedTotalLessons }),
+      }
+      if (errorMessage) snapshot.errorMessage = errorMessage
+      await writeJson(progressPath, snapshot)
+      return snapshot
+    },
+  }
+}
+
+export function createProgressSnapshot({
+  status = 'running',
+  startedAt,
+  updatedAt,
+  finishedAt = null,
+  totalLessons = 0,
+  completedLessons = 0,
+  currentLessonOrder = null,
+  currentLessonTitle = null,
+  elapsedMs = 0,
+  lastCompletedLessonOrder = null,
+  lastCompletedLessonTitle = null,
+  courseId = null,
+  courseVersion = null,
+  etaMs,
+  errorMessage,
+} = {}) {
+  const normalizedTotalLessons = Math.max(0, Number.isInteger(totalLessons) ? totalLessons : 0)
+  const normalizedCompletedLessons = clampInteger(completedLessons, 0, normalizedTotalLessons)
+  const snapshot = {
+    version: 1,
+    status,
+    startedAt: startedAt ?? new Date().toISOString(),
+    updatedAt: updatedAt ?? new Date().toISOString(),
+    finishedAt,
+    totalLessons: normalizedTotalLessons,
+    completedLessons: normalizedCompletedLessons,
+    currentLessonOrder,
+    currentLessonTitle,
+    percent: computeProgressPercent(normalizedCompletedLessons, normalizedTotalLessons),
+    elapsedMs: Math.max(0, Number.isFinite(elapsedMs) ? Math.round(elapsedMs) : 0),
+    lastCompletedLessonOrder,
+    lastCompletedLessonTitle,
+    courseId,
+    courseVersion,
+    etaMs: etaMs === undefined ? computeEtaMs({ status, elapsedMs, completedLessons: normalizedCompletedLessons, totalLessons: normalizedTotalLessons }) : etaMs,
+  }
+  if (errorMessage) snapshot.errorMessage = errorMessage
+  return snapshot
+}
+
+export async function writeProgressSnapshot(path, snapshot, writeJson = writeJsonAtomic) {
+  if (!path) return null
+  const normalized = createProgressSnapshot(snapshot)
+  await writeJson(path, normalized)
+  return normalized
 }
 
 
@@ -572,6 +733,40 @@ function parseChineseInteger(text) {
     number = 0
   }
   return total + section + number
+}
+
+
+function getProgressAssignmentTitle(assignment) {
+  const outlineLesson = assignment?.outlineLesson ?? {}
+  if (isNonEmptyString(outlineLesson.title)) return outlineLesson.title.trim()
+  if (isNonEmptyString(outlineLesson.lessonTitle)) return outlineLesson.lessonTitle.trim()
+  if (isNonEmptyString(outlineLesson.plotSummary)) return outlineLesson.plotSummary.trim().slice(0, 80)
+  const order = assignment?.lessonOrder ?? outlineLesson.order
+  return order === undefined || order === null ? null : `第${order}课`
+}
+
+function computeProgressPercent(completedLessons, totalLessons) {
+  if (!totalLessons) return 0
+  return Math.min(100, Math.max(0, Math.round((completedLessons / totalLessons) * 10000) / 100))
+}
+
+function computeEtaMs({ status, elapsedMs, completedLessons, totalLessons }) {
+  if (status !== 'running') return null
+  if (!completedLessons || completedLessons >= totalLessons) return null
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return null
+  return Math.max(0, Math.round((elapsedMs / completedLessons) * (totalLessons - completedLessons)))
+}
+
+function clampInteger(value, min, max) {
+  const integer = Number.isInteger(value) ? value : Math.trunc(Number(value) || 0)
+  return Math.min(max, Math.max(min, integer))
+}
+
+function toDate(value) {
+  if (value instanceof Date) return new Date(value.getTime())
+  if (typeof value === 'number') return new Date(value)
+  if (typeof value === 'string') return new Date(value)
+  return new Date()
 }
 
 function isPlainObject(value) {

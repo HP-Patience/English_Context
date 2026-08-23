@@ -29,6 +29,7 @@ test('offline command smoke resumes interruption and atomically swaps the publis
   const outlinePath = join(cacheDir, 'story-outline.json')
   const lessonCheckpointDir = join(cacheDir, 'lessons')
   const generationReportPath = join(cacheDir, 'story-generation-report.json')
+  const generationProgressPath = join(cacheDir, 'story-generation-progress.json')
   const validationReportPath = join(cacheDir, 'story-validation-report.json')
   const logs = []
   const log = (message) => logs.push(String(message))
@@ -102,6 +103,11 @@ test('offline command smoke resumes interruption and atomically swaps the publis
       /fixture generation interruption/,
     )
 
+    const interruptionProgress = await readJson(generationProgressPath)
+    assert.equal(interruptionProgress.status, 'failed')
+    assert.equal(interruptionProgress.completedLessons, 9)
+    assert.equal(interruptionProgress.currentLessonOrder, 10)
+
     const draftAfterInterruption = [...prisma.state.courses.values()].find((course) => course.status === 'draft')
     assert.ok(draftAfterInterruption)
     assert.equal([...prisma.state.lessons.values()].filter((lesson) => lesson.courseId === draftAfterInterruption.id && lesson.status === 'ready').length, 9)
@@ -135,6 +141,13 @@ test('offline command smoke resumes interruption and atomically swaps the publis
     assert.equal(resumedOrder, CHAPTER_COUNT)
     assert.equal(generationReport.courseId, draftAfterInterruption.id)
     assert.equal(generationReport.wordCount, WORD_COUNT)
+    const completedProgress = await readJson(generationProgressPath)
+    assert.equal(completedProgress.status, 'completed')
+    assert.equal(completedProgress.courseId, draftAfterInterruption.id)
+    assert.equal(completedProgress.courseVersion, draftAfterInterruption.version)
+    assert.equal(completedProgress.totalLessons, CHAPTER_COUNT)
+    assert.equal(completedProgress.completedLessons, CHAPTER_COUNT)
+    assert.equal(completedProgress.percent, 100)
     assert.equal([...prisma.state.words.values()].every((word) => word.phonetic === '/ˈfɪkstʃər wɜːd/'), true)
 
     const validationReport = await validateLessonsCommand(validateArgs(), {
@@ -178,6 +191,7 @@ test('offline command smoke resumes interruption and atomically swaps the publis
       '--outline', outlinePath,
       '--checkpoint-dir', lessonCheckpointDir,
       '--report', generationReportPath,
+      '--progress', generationProgressPath,
       '--expected-word-count', String(WORD_COUNT),
       '--max-words-per-lesson', String(MAX_WORDS_PER_LESSON),
     ]
@@ -206,11 +220,11 @@ function createOutlineCommandFake() {
     if (schemaName === 'chapter-summary') {
       const [, start, end] = prompt.match(/source chapters (\d+)-(\d+)/i)
       return {
-        summary: `Fixture summary for chapters ${start}-${end}.`,
-        characters: ['Fang Yuan'],
-        events: [`Fixture event ${start}-${end}`],
-        continuityStart: `Fixture chapter range ${start}-${end} starts.`,
-        continuityEnd: `Fixture chapter range ${start}-${end} ends.`,
+        summary: `方源在第${start}至${end}章继续推进布局，局势逐步展开。`,
+        characters: ['方源'],
+        events: [`第${start}至${end}章的关键冲突`],
+        continuityStart: `第${start}章开端承接前文局势。`,
+        continuityEnd: `第${end}章结束时留下新的转折。`,
       }
     }
     assert.equal(schemaName, 'story-outline')
@@ -219,11 +233,11 @@ function createOutlineCommandFake() {
         order: index + 1,
         sourceChapterStart: index + 1,
         sourceChapterEnd: index + 1,
-        plotSummary: `Fixture plot ${index + 1}.`,
-        characters: ['Fang Yuan'],
-        events: [`Fixture event ${index + 1}`],
-        continuityStart: index === 0 ? 'Fixture story starts.' : `Continue from lesson ${index}.`,
-        continuityEnd: index === CHAPTER_COUNT - 1 ? 'Fixture story closes.' : `Continue to lesson ${index + 2}.`,
+        plotSummary: `第${index + 1}课中，方源围绕眼前危机继续谋划，故事冲突稳步推进。`,
+        characters: ['方源'],
+        events: [`第${index + 1}课的关键事件`],
+        continuityStart: index === 0 ? '故事从方源重启命运开始。' : `承接第${index}课留下的局势。`,
+        continuityEnd: index === CHAPTER_COUNT - 1 ? '整条故事线完成收束。' : `为第${index + 2}课留下新的变化。`,
         targetWordCapacity: MAX_WORDS_PER_LESSON,
       })),
     }
@@ -266,19 +280,19 @@ function createFixtureWordGroups(wordCount) {
 
 function createFixtureLessonDocument(outlineLesson, words) {
   return {
-    title: `Fixture Story Lesson ${outlineLesson.order}`,
+    title: `第${outlineLesson.order}课故事`,
     order: outlineLesson.order,
     sourceChapterStart: String(outlineLesson.sourceChapterStart),
     sourceChapterEnd: String(outlineLesson.sourceChapterEnd),
     sourceSummary: outlineLesson.plotSummary,
     continuityNotes: outlineLesson.continuityEnd,
     paragraphs: [{
-      sceneTitle: `Fixture scene ${outlineLesson.order}`,
+      sceneTitle: `第${outlineLesson.order}课场景`,
       segments: [
-        { type: 'text', value: `Offline fixture scene for lesson ${outlineLesson.order}.` },
+        { type: 'text', value: `方源在第${outlineLesson.order}课的场景中冷静观察局势。` },
         ...words.flatMap((word, index) => [
           { type: 'targetWord', word: word.text, definitionCn: word.meaning.definitionCn, phonetic: '/ˈfɪkstʃər wɜːd/', wordOrder: index + 1 },
-          { type: 'text', value: `Context sentence ${index + 1}.` },
+          { type: 'text', value: `这个词被嵌入第${index + 1}处情节，帮助故事继续向前。` },
         ]),
       ],
     }],

@@ -29,5 +29,5 @@ export async function GET() {
     orderBy: { createdAt: 'desc' },
   })
 
-  return NextResponse.json({ bookmarks: words })
+  return NextResponse.json({ bookmarks: words.filter((entry) => entry.word.meanings.length > 0) })
 }

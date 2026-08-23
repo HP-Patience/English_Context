@@ -60,6 +60,7 @@ export async function buildChapterSummaries({
   checkpointPath,
   chapterBatchSize = DEFAULT_CHAPTER_BATCH_SIZE,
   sourceFingerprint,
+  allowDeterministicFallback = false,
 }) {
   if (!Array.isArray(chapters) || chapters.length === 0) throw new Error('buildChapterSummaries requires a non-empty chapters array')
   if (typeof generateJson !== 'function') throw new TypeError('buildChapterSummaries requires generateJson')
@@ -99,14 +100,24 @@ export async function buildChapterSummaries({
     let summary = summariesByRange.get(key)
     if (!summary) {
       const prompt = createChapterSummaryPrompt({ batch, batchIndex, batchCount: batches.length })
-      summary = {
-        ...await generateParsedJsonWithRetries({
-          prompt,
-          schemaName: 'chapter-summary',
-          generateJson,
-          parse: (response) => parseGeneratedChapterSummaryStrict(response, { batch, batchIndex }),
-        }),
-        inputFingerprint: batchFingerprints.get(key),
+      try {
+        summary = {
+          ...await generateParsedJsonWithRetries({
+            prompt,
+            schemaName: 'chapter-summary',
+            generateJson,
+            parse: (response) => parseGeneratedChapterSummaryStrict(response, { batch, batchIndex }),
+          }),
+          inputFingerprint: batchFingerprints.get(key),
+        }
+      } catch (error) {
+        if (!allowDeterministicFallback || !isTransientLlmError(error)) {
+          throw error
+        }
+        summary = {
+          ...createDeterministicChapterSummary(batch, batchIndex),
+          inputFingerprint: batchFingerprints.get(key),
+        }
       }
       summariesByRange.set(key, summary)
       await writeJsonAtomic(checkpointPath, {
@@ -159,14 +170,22 @@ export async function buildStoryOutline({
   }
 
   const prompt = createStoryOutlinePrompt({ chapterSummaries: normalizedSummaries, vocabularyCount })
-  const parsed = await generateParsedJsonWithRetries({
-    prompt,
-    schemaName: 'story-outline',
-    generateJson,
-    parse: (response) => (allowDeterministicFallback && !findLessonsArray(response)
-      ? createDeterministicStoryOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
-      : parseStoryOutlineStrict(response, { vocabularyCount })),
-  })
+  let parsed
+  try {
+    parsed = await generateParsedJsonWithRetries({
+      prompt,
+      schemaName: 'story-outline',
+      generateJson,
+      parse: (response) => (allowDeterministicFallback && !findLessonsArray(response)
+        ? createDeterministicStoryOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
+        : parseStoryOutlineStrict(response, { vocabularyCount })),
+    })
+  } catch (error) {
+    if (!allowDeterministicFallback || !isTransientLlmError(error)) {
+      throw error
+    }
+    parsed = createDeterministicStoryOutline({ chapterSummaries: normalizedSummaries, vocabularyCount })
+  }
   const outline = {
     ...parsed,
     version: 2,
@@ -199,6 +218,27 @@ export function createChapterSummaryPrompt({ batch, batchIndex, batchCount }) {
     'Chapter input JSON:',
     JSON.stringify(chaptersForPrompt),
   ].join('\n')
+}
+
+function createDeterministicChapterSummary(batch, batchIndex) {
+  const start = batch[0].order
+  const end = batch[batch.length - 1].order
+  const titles = uniqueNonEmpty(batch.map((chapter) => chapter.title))
+  const titlePreview = titles.slice(0, 3).join('、')
+  const summary = titlePreview
+    ? `本批章节围绕${titlePreview}${titles.length > 3 ? '等情节' : ''}展开，方源继续推进布局并应对局势变化。`
+    : `第${start}-${end}章主要推进方源的主线布局与局势变化。`
+
+  return {
+    order: batchIndex + 1,
+    sourceChapterStart: start,
+    sourceChapterEnd: end,
+    summary,
+    characters: ['方源'],
+    events: titles.length > 0 ? titles : [`第${start}-${end}章剧情推进`],
+    continuityStart: '承接前一批章节的局势变化。',
+    continuityEnd: '为下一批章节的冲突发展埋下伏笔。',
+  }
 }
 
 export function createStoryOutlinePrompt({ chapterSummaries, vocabularyCount }) {

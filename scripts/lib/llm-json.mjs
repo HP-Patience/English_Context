@@ -6,10 +6,10 @@ const JSON_INSTRUCTIONS = 'Return only valid JSON. Do not include markdown fence
  * The adapter never reads process.env by itself. Commands pass explicit config after
  * loading their own environment, while tests can inject a fake `client`.
  *
- * @param {{ apiKey?: string, baseURL?: string, model?: string, client?: unknown }} options
+ * @param {{ apiKey?: string, baseURL?: string, model?: string, client?: unknown, retryAttempts?: number, retryDelayMs?: number }} options
  * @returns {{ generateJson(prompt: string, schemaName?: string): Promise<unknown> }}
  */
-export function createLlmJsonClient({ apiKey, baseURL, model, client, transport = 'auto' } = {}) {
+export function createLlmJsonClient({ apiKey, baseURL, model, client, transport = 'auto', retryAttempts = 5, retryDelayMs = 1000 } = {}) {
   if (!['auto', 'chat-completions', 'responses'].includes(transport)) {
     throw new Error('LLM transport must be auto, chat-completions, or responses')
   }
@@ -26,7 +26,7 @@ export function createLlmJsonClient({ apiKey, baseURL, model, client, transport 
       resolvedClient = activeClient
 
       if (typeof activeClient.generateJson === 'function') {
-        return parseJsonLike(await activeClient.generateJson(prompt, schemaName), schemaName)
+        return retryTransientLlmCall(() => activeClient.generateJson(prompt, schemaName), schemaName, retryAttempts, retryDelayMs)
       }
 
       if (!configuredModel) {
@@ -37,27 +37,31 @@ export function createLlmJsonClient({ apiKey, baseURL, model, client, transport 
       const canUseResponses = typeof activeClient.responses?.create === 'function'
 
       if ((transport === 'auto' || transport === 'chat-completions') && canUseChat) {
-        const response = await activeClient.chat.completions.create({
-          model: configuredModel,
-          messages: [
-            { role: 'system', content: JSON_INSTRUCTIONS },
-            { role: 'user', content: prompt },
-          ],
-          response_format: { type: 'json_object' },
-        })
-        return parseJsonLike(response.choices?.[0]?.message?.content, schemaName)
+        return retryTransientLlmCall(async () => {
+          const response = await activeClient.chat.completions.create({
+            model: configuredModel,
+            messages: [
+              { role: 'system', content: JSON_INSTRUCTIONS },
+              { role: 'user', content: prompt },
+            ],
+            response_format: { type: 'json_object' },
+          })
+          return parseJsonLike(response.choices?.[0]?.message?.content, schemaName)
+        }, schemaName, retryAttempts, retryDelayMs)
       }
 
       if ((transport === 'auto' || transport === 'responses') && canUseResponses) {
-        const response = await activeClient.responses.create({
-          model: configuredModel,
-          input: [
-            { role: 'system', content: JSON_INSTRUCTIONS },
-            { role: 'user', content: prompt },
-          ],
-          text: { format: { type: 'json_object' } },
-        })
-        return parseJsonLike(extractResponseText(response), schemaName)
+        return retryTransientLlmCall(async () => {
+          const response = await activeClient.responses.create({
+            model: configuredModel,
+            input: [
+              { role: 'system', content: JSON_INSTRUCTIONS },
+              { role: 'user', content: prompt },
+            ],
+            text: { format: { type: 'json_object' } },
+          })
+          return parseJsonLike(extractResponseText(response), schemaName)
+        }, schemaName, retryAttempts, retryDelayMs)
       }
 
       throw new Error(`LLM client does not expose the requested ${transport} transport`)
@@ -72,6 +76,33 @@ async function createOpenAiClient({ apiKey, baseURL }) {
 
   const { default: OpenAI } = await import('openai')
   return new OpenAI({ apiKey, baseURL })
+}
+
+async function retryTransientLlmCall(operation, schemaName, attempts = 5, delayBaseMs = 1000) {
+  let lastError
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error
+      if (!isTransientLlmError(error) || attempt === attempts) {
+        throw error
+      }
+      const delayMs = Math.min(30000, delayBaseMs * attempt * attempt)
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+  throw lastError ?? new Error(`${schemaName} generation failed`)
+}
+
+function isTransientLlmError(error) {
+  const status = Number(error?.status ?? error?.statusCode ?? error?.code)
+  if (Number.isInteger(status) && (status === 408 || status === 409 || status === 425 || status === 429 || status >= 500)) {
+    return true
+  }
+
+  const message = error?.message ?? String(error)
+  return /(?:408|409|425|429|5\d\d|524).*status code|timeout|timed out|rate limit|temporar(?:y|ily)|service unavailable|gateway/i.test(message)
 }
 
 function extractResponseText(response) {

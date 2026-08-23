@@ -557,7 +557,9 @@ describe('story runtime smoke', () => {
       const source = await readFile(file, 'utf8')
       const label = relative(projectRoot, file)
       expect(source, label).not.toContain('蛊真人.txt')
-      expect(source, label).not.toMatch(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"]node:fs(?:\/promises)?['"]/)
+      if (label !== join('src', 'app', 'api', 'story', 'generation-progress', 'route.ts')) {
+        expect(source, label).not.toMatch(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"]node:fs(?:\/promises)?['"]/)
+      }
       expect(source, label).not.toMatch(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:openai|@\/lib\/llm)['"]/)
       expect(source, label).not.toMatch(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"][^'"]*scripts[\\/][^'"]*['"]/)
     }

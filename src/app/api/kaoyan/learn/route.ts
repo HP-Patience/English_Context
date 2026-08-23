@@ -38,9 +38,11 @@ export async function GET(req: NextRequest) {
     },
   })
 
+  const learnableItems = items.filter((item) => item.word.meanings.length > 0)
+
   if (round >= 1) {
     // Round N: show words where learnRound >= round, unrated first
-    const roundItems = items.filter(item => {
+    const roundItems = learnableItems.filter(item => {
       const uw = item.word.userWords[0]
       return uw && uw.learnRound >= round
     })
@@ -114,7 +116,7 @@ export async function GET(req: NextRequest) {
   let foundUwmId: string | null = null
   let responseData: Record<string, unknown> | null = null
 
-  for (const item of items) {
+  for (const item of learnableItems) {
     for (const meaning of item.word.meanings) {
       const uwm = meaning.userWordMeanings[0]
       if (uwm && uwm.mastery === 0 && uwm.interval === 0) {
@@ -149,8 +151,8 @@ export async function GET(req: NextRequest) {
   }
 
   // Check if all done in this group
-  const totalItems = items.length
-  const learnedItems = items.filter(item =>
+  const totalItems = learnableItems.length
+  const learnedItems = learnableItems.filter(item =>
     item.word.meanings.every(m =>
       m.userWordMeanings[0]?.mastery > 0
     )

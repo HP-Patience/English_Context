@@ -53,5 +53,5 @@ export async function GET(req: NextRequest) {
     ],
   })
 
-  return NextResponse.json({ results: words })
+  return NextResponse.json({ results: words.filter((word) => word.meanings.length > 0) })
 }
