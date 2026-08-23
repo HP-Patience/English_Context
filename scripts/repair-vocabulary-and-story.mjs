@@ -122,7 +122,13 @@ async function getReadyCourse(db) {
 }
 
 async function inspectCache(wordByOldDefinition) {
-  const files = (await readdir(CACHE_DIR)).filter((name) => /^lesson-\d{4}\.json$/.test(name)).sort()
+  let files
+  try {
+    files = (await readdir(CACHE_DIR)).filter((name) => /^lesson-\d{4}\.json$/.test(name)).sort()
+  } catch (error) {
+    if (error.code === 'ENOENT') return { directoryPresent: false, files: [], oldTargetCount: 0 }
+    throw error
+  }
   let oldTargetCount = 0
   for (const name of files) {
     const document = JSON.parse(await readFile(join(CACHE_DIR, name), 'utf8'))
@@ -131,7 +137,7 @@ async function inspectCache(wordByOldDefinition) {
       if (node.type === 'targetWord' && wordByOldDefinition.has(`${node.word}|${node.definitionCn}`)) oldTargetCount++
     })
   }
-  return { files, oldTargetCount }
+  return { directoryPresent: true, files, oldTargetCount }
 }
 
 async function buildPlan() {
@@ -359,6 +365,7 @@ main().catch((error) => {
   console.error(error)
   process.exitCode = 1
 }).finally(() => prisma.$disconnect())
+
 
 
 
