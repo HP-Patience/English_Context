@@ -15,13 +15,15 @@
     "story:outline": "node scripts/build-story-outline.mjs",
     "story:generate": "node scripts/generate-story-lessons.mjs",
     "story:validate": "node scripts/validate-story-lessons.mjs",
-    "test:runtime": "node scripts/test/runtime-tests.mjs"
+    "test:runtime": "node scripts/test/runtime-tests.mjs",
+    "auth:configure": "node scripts/configure-single-user-auth.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/client": "^5.22.0",
     "@serwist/next": "^9.5.11",
     "cmu-pronouncing-dictionary-cjs": "^3.0.0",
+    "jose": "^6.2.10",
     "next": "16.2.9",
     "openai": "^6.42.0",
     "prisma": "^5.22.0",

@@ -1,37 +1,67 @@
-import { defaultCache } from "@serwist/next/worker";
-import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { Serwist, CacheFirst, ExpirationPlugin, NetworkFirst } from "serwist";
+import type { PrecacheEntry, SerwistGlobalConfig } from 'serwist'
+import { CacheFirst, ExpirationPlugin, NetworkOnly, Serwist } from 'serwist'
 
-declare global {
-  interface WorkerGlobalScope extends SerwistGlobalConfig {
-    __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
-  }
+type ActivateEvent = {
+  waitUntil(promise: Promise<unknown>): void
 }
 
-declare const self: WorkerGlobalScope;
+interface AppWorkerGlobalScope extends SerwistGlobalConfig {
+  __SW_MANIFEST: (PrecacheEntry | string)[] | undefined
+  addEventListener(type: 'activate', listener: (event: ActivateEvent) => void): void
+}
+
+declare const self: AppWorkerGlobalScope
+
+const safePrecacheEntries = self.__SW_MANIFEST?.filter((entry) => {
+  const value = typeof entry === 'string' ? entry : entry.url
+  const pathname = value.startsWith('http://') || value.startsWith('https://')
+    ? new URL(value).pathname
+    : value.split(/[?#]/, 1)[0]
+  return pathname.startsWith('/_next/static/')
+    || /\.(?:js|css|woff2?|png|jpg|jpeg|svg|ico|webp)$/.test(pathname)
+    || pathname === '/manifest.json'
+})
+
+const sensitiveCacheNames = new Set([
+  'api-cache',
+  'apis',
+  'next-data',
+  'others',
+  'pages',
+  'pages-rsc',
+  'pages-rsc-prefetch',
+  'static-data-assets',
+])
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((names) => Promise.all(
+      names
+        .filter((name) => sensitiveCacheNames.has(name))
+        .map((name) => caches.delete(name)),
+    )),
+  )
+})
 
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  precacheEntries: safePrecacheEntries,
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
   runtimeCaching: [
     {
-      matcher: /^https?:\/\/.*\/api\/.*/i,
-      handler: new NetworkFirst({
-        cacheName: "api-cache",
-        plugins: [
-          new ExpirationPlugin({
-            maxEntries: 50,
-            maxAgeSeconds: 60 * 60 * 24,
-          }),
-        ],
-      }),
+      matcher: ({ sameOrigin, url: { pathname } }) => sameOrigin && pathname.startsWith('/api/'),
+      handler: new NetworkOnly(),
     },
     {
-      matcher: /\.(?:js|css|woff2?|png|jpg|svg|ico)$/i,
+      matcher: ({ request, sameOrigin }) => sameOrigin
+        && (request.mode === 'navigate' || request.headers.get('RSC') === '1'),
+      handler: new NetworkOnly(),
+    },
+    {
+      matcher: /\.(?:js|css|woff2?|png|jpg|jpeg|svg|ico|webp)$/i,
       handler: new CacheFirst({
-        cacheName: "static-assets",
+        cacheName: 'static-assets',
         plugins: [
           new ExpirationPlugin({
             maxEntries: 200,
@@ -40,8 +70,11 @@ const serwist = new Serwist({
         ],
       }),
     },
-    ...defaultCache,
+    {
+      matcher: /.*/i,
+      handler: new NetworkOnly(),
+    },
   ],
-});
+})
 
-serwist.addEventListeners();
+serwist.addEventListeners()

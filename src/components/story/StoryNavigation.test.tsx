@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/',
   useRouter: () => ({ prefetch: mocks.prefetch, push: mocks.push }),
 }))
 

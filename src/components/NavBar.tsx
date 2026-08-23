@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useState } from 'react'
+import LogoutButton from './LogoutButton'
 import ThemeToggle from './ThemeToggle'
 
 const mainLinks = [
@@ -13,7 +15,10 @@ const mainLinks = [
 ]
 
 export default function NavBar() {
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
+
+  if (pathname === '/login') return <ThemeToggle />
 
   return (
     <>
@@ -38,6 +43,7 @@ export default function NavBar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
           </svg>
         </Link>
+        <LogoutButton className="text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100" />
         <ThemeToggle />
       </nav>
 
@@ -87,6 +93,7 @@ export default function NavBar() {
                   </Link>
                 ))}
               </nav>
+              <LogoutButton className="w-full rounded-lg px-4 py-1.5 text-left text-sm text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100" />
             </div>
           </div>
         </>
