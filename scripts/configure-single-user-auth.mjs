@@ -37,7 +37,7 @@ const passwordHash = [
   SCRYPT_P,
   salt.toString('base64url'),
   key.toString('base64url'),
-].join('$')
+].join(':')
 
 const updates = new Map([
   ['APP_AUTH_USERNAME', username],
@@ -72,4 +72,4 @@ await rename(tempPath, envPath)
 await chmod(envPath, 0o600)
 
 console.log(`Single-user authentication configured for ${username}.`)
-console.log('Restart the application to activate the new credentials.')
+console.log('Rebuild and restart the application to activate the new credentials.')

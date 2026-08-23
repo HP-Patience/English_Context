@@ -29,11 +29,12 @@ export async function hashPassword(password: string, salt = randomBytes(16)) {
     SCRYPT_P,
     salt.toString('base64url'),
     key.toString('base64url'),
-  ].join('$')
+  ].join(':')
 }
 
 export async function verifyPassword(password: string, encodedHash: string) {
-  const [algorithm, n, r, p, saltValue, hashValue, ...extra] = encodedHash.split('$')
+  const delimiter = encodedHash.startsWith('scrypt:') ? ':' : '$'
+  const [algorithm, n, r, p, saltValue, hashValue, ...extra] = encodedHash.split(delimiter)
   if (
     algorithm !== 'scrypt'
     || Number(n) !== SCRYPT_N
