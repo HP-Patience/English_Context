@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useMemo, useState } from 'react'
 
+import SelectionSearch from '@/components/SelectionSearch'
 import { parseStoryReviewApiResponse } from '@/lib/story-api-types'
 import type {
   PublicStoryLessonDetail,
@@ -250,7 +251,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
         </div>
       </header>
 
-      <div className="sticky top-2 z-20 mt-4 shadow-lg shadow-stone-950/10">
+      <div className="mt-4 shadow-lg shadow-stone-950/10">
         <StoryStepNav
           currentStep={activeStep}
           completedStep={savedProgress.completedStep}
@@ -269,9 +270,15 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
           <p className="mt-2 text-sm leading-6 text-stone-600 dark:text-stone-300">{stepDescription[activeStep]}</p>
         </div>
 
-        {activeStep === 1 ? <StoryReader paragraphs={lesson.content.paragraphs} mode="learn" /> : null}
+        {activeStep === 1 ? (
+          <SelectionSearch>
+            <StoryReader paragraphs={lesson.content.paragraphs} mode="learn" />
+          </SelectionSearch>
+        ) : null}
         {activeStep === 2 ? (
-          <StoryRecall paragraphs={lesson.content.paragraphs} lessonWords={lesson.lessonWords} onRate={handleRate} />
+          <SelectionSearch>
+            <StoryRecall paragraphs={lesson.content.paragraphs} lessonWords={lesson.lessonWords} onRate={handleRate} />
+          </SelectionSearch>
         ) : null}
         {recallStatus && activeStep === 2 ? (
           <p role="status" className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
@@ -303,7 +310,9 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
                 </select>
               </label>
             </div>
-            <StoryWordList lessonWords={wordLedger} query={query} scene={scene} />
+            <SelectionSearch>
+              <StoryWordList lessonWords={wordLedger} query={query} scene={scene} />
+            </SelectionSearch>
           </div>
         ) : null}
       </section>

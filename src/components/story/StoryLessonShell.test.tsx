@@ -4,6 +4,10 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
+
 import type { StoryLessonDetail, StoryLessonWordListItem } from '@/lib/story-service'
 import type { StoryWordDisplay } from './StoryWordDetail'
 import { StoryLessonShell } from './StoryLessonShell'

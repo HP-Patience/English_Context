@@ -12,7 +12,7 @@ type StoryTargetProps = {
 
 function StoryTarget({ segment, mode }: StoryTargetProps) {
   return (
-    <span className="mx-0.5 inline-flex flex-wrap items-baseline gap-1 rounded-md bg-red-50 px-1.5 py-0.5 font-semibold text-red-950 ring-1 ring-inset ring-red-200 dark:bg-red-950/50 dark:text-red-100 dark:ring-red-900">
+    <span className="mx-0.5 inline-flex flex-wrap items-baseline gap-1 rounded-md bg-red-50 px-1 py-0.5 font-semibold leading-6 text-red-950 ring-1 ring-inset ring-red-200 dark:bg-red-950/50 dark:text-red-100 dark:ring-red-900">
       <span lang="en">{segment.word}</span>
       {mode === 'learn' ? (
         <span className="font-sans text-xs font-medium text-red-800 dark:text-red-300">
