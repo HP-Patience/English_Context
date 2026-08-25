@@ -3,8 +3,8 @@
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f4ef;
+  --foreground: #262421;
 }
 
 @theme inline {
@@ -12,4 +12,80 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+.story-theme {
+  --story-bg: #f7f4ef;
+  --story-surface: #fffdfa;
+  --story-ink: #262421;
+  --story-muted: #756f68;
+  --story-line: #d8d0c7;
+  --story-accent: #c65d3b;
+  --story-accent-soft: #f4ddd3;
+  --story-accent-line: #d99a86;
+}
+
+.dark .story-theme {
+  --story-bg: #171615;
+  --story-surface: #211f1d;
+  --story-ink: #f2eee8;
+  --story-muted: #aaa098;
+  --story-line: #4a433d;
+  --story-accent: #e07a57;
+  --story-accent-soft: #3a2019;
+  --story-accent-line: #8f4a38;
+}
+
+.story-theme .story-header,
+.story-theme .story-step-nav {
+  border-color: var(--story-line);
+  background: var(--story-surface);
+  color: var(--story-ink);
+}
+
+.story-theme .story-header {
+  background: var(--story-bg);
+}
+
+.story-theme .story-kicker,
+.story-theme .story-target-gloss {
+  color: var(--story-accent);
+}
+
+.story-theme .story-muted {
+  color: var(--story-muted);
+}
+
+.story-theme .story-scene {
+  border-color: var(--story-line);
+  color: var(--story-ink);
+}
+
+.story-theme .story-scene h3 {
+  color: var(--story-ink);
+}
+
+.story-theme .story-scene-dot {
+  border-color: var(--story-bg);
+  background: var(--story-accent);
+}
+
+.story-theme .story-target {
+  background: var(--story-accent-soft);
+  color: var(--story-ink);
+  box-shadow: inset 0 0 0 1px var(--story-accent-line);
+}
+
+.story-theme .story-step-active {
+  background: var(--story-accent-soft);
+  color: var(--story-ink);
+}
+
+.story-theme .story-step-inactive {
+  color: var(--story-muted);
+}
+
+.story-theme .story-step-inactive:hover {
+  background: var(--story-bg);
+  color: var(--story-ink);
 }

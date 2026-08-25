@@ -230,18 +230,18 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
   const nextUnlockedStep = Math.min(3, savedProgress.completedStep + 1) as FirstPassView
 
   return (
-    <article className="mx-auto max-w-3xl pb-14">
-      <header className="relative overflow-hidden rounded-3xl border border-stone-300 bg-stone-100 px-5 py-7 dark:border-stone-700 dark:bg-stone-900 sm:px-8 sm:py-9">
+    <article className="story-theme mx-auto max-w-3xl pb-14">
+      <header className="story-header relative overflow-hidden rounded-3xl border px-5 py-7 sm:px-8 sm:py-9">
         <div aria-hidden="true" className="absolute -right-4 -top-5 h-28 w-28 rotate-12 rounded-3xl border-2 border-red-900/15 dark:border-red-600/20" />
         <div className="relative flex items-start justify-between gap-5">
           <div className="min-w-0">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-red-900 dark:text-red-500">
+            <p className="story-kicker text-[0.68rem] font-semibold uppercase tracking-[0.28em]">
               Chronicle · Lesson {String(lesson.order).padStart(2, '0')}
             </p>
-            <h1 className="mt-3 font-serif text-3xl font-bold tracking-tight text-stone-950 dark:text-stone-50 sm:text-4xl">
+            <h1 className="mt-3 font-serif text-3xl font-bold tracking-tight sm:text-4xl">
               {lesson.title}
             </h1>
-            <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-300">
+            <p className="story-muted mt-3 text-sm leading-6">
               {lesson.sourceChapterStart} — {lesson.sourceChapterEnd} · {lesson.lessonWords.length} 个目标词
             </p>
           </div>
