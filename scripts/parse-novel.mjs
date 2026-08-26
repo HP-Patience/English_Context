@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { writeNovelIndex } from './lib/novel-parser.mjs'
 
 export const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
-export const DEFAULT_SOURCE_PATH = 'F:\\english_context\\蛊真人.txt'
+export const DEFAULT_SOURCE_PATH = resolve(PROJECT_ROOT, 'data/local/story/蛊真人.txt')
 export const DEFAULT_OUTPUT_PATH = resolve(PROJECT_ROOT, 'scripts/.story-cache/novel-index.json')
 export const DEFAULT_MAX_REPLACEMENT_DENSITY = 0.001
 

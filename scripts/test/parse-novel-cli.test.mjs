@@ -12,7 +12,7 @@ const scriptPath = resolve(projectRoot, 'scripts/parse-novel.mjs')
 const fixturePath = resolve(projectRoot, 'scripts/test/fixtures/novel-sample-gb18030.bin')
 
 test('defaults use the product source path and project-root cache path', () => {
-  assert.equal(DEFAULT_SOURCE_PATH, 'F:\\english_context\\蛊真人.txt')
+  assert.equal(DEFAULT_SOURCE_PATH, resolve(projectRoot, 'data/local/story/蛊真人.txt'))
   assert.equal(DEFAULT_OUTPUT_PATH, resolve(projectRoot, 'scripts/.story-cache/novel-index.json'))
 })
 

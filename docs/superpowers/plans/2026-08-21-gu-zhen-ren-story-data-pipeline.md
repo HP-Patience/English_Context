@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Use `F:\english_context\蛊真人.txt` as the source and decode it as GB18030.
+- Use `F:\english_context\data\local\story\蛊真人.txt` as the source and decode it as GB18030.
 - Generate a continuous retelling of the complete novel main line; do not map one source chapter to one lesson.
 - Target 80–100 lessons, allow 50–150, and never exceed 150; full 6098-word coverage requires at least 61 lessons.
 - Each lesson contains at most 100 target words, normally 60–80.
@@ -229,12 +229,12 @@ Expected: PASS.
 
 - [ ] **Step 5: Add the real-file command and ignore rules**
 
-`node scripts/parse-novel.mjs` must read `F:\english_context\蛊真人.txt`, write `scripts/.story-cache/novel-index.json`, print chapter count and byte/character counts, and exit nonzero when the source file is missing or contains replacement-character density above the configured threshold.
+`node scripts/parse-novel.mjs` must read `F:\english_context\data\local\story\蛊真人.txt`, write `scripts/.story-cache/novel-index.json`, print chapter count and byte/character counts, and exit nonzero when the source file is missing or contains replacement-character density above the configured threshold.
 
 Add these ignore rules without staging the novel itself:
 
 ```gitignore
-/蛊真人.txt
+/data/local/story/蛊真人.txt
 /scripts/.story-cache/
 ```
 

@@ -63,7 +63,7 @@ next-env.d.ts
 .gstack/
 
 # story source and generated cache
-/蛊真人.txt
+/data/local/story/
 /scripts/.story-cache/
 
 # local task/debug artifacts

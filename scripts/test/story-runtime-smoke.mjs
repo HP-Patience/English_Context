@@ -521,7 +521,7 @@ describe('story runtime smoke', () => {
   })
 
   it('installs import tripwires without loading the raw novel or offline generator', async () => {
-    await expect(import('../../蛊真人.txt')).rejects.toThrow('Story runtime attempted to import the raw novel path')
+    await expect(import('../../data/local/story/蛊真人.txt')).rejects.toThrow('Story runtime attempted to import the raw novel path')
     const offlineImportError = await import('../parse-novel.mjs').then(
       () => null,
       (error) => error,

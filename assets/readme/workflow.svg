@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
+  <title id="title">ContextVocab 故事课程数据流</title>
+  <desc id="desc">本地小说经过解析、大纲、课程生成和校验后写入数据库，由故事学习页面读取。</desc>
+  <rect width="1200" height="390" rx="28" fill="#211f1d"/>
+  <text x="64" y="68" fill="#f4ddd3" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="700" letter-spacing="3">OFFLINE PIPELINE / PUBLISH ONLY WHEN VALID</text>
+  <text x="64" y="119" fill="#fffdfa" font-family="Georgia, Songti SC, serif" font-size="39" font-weight="700">从原始章节到可学习课程</text>
+  <path d="M92 230h1010" stroke="#756f68" stroke-width="2"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif">
+    <g transform="translate(64 174)">
+      <rect width="210" height="112" rx="16" fill="#f7f4ef"/>
+      <text x="22" y="37" fill="#c65d3b" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">01</text>
+      <text x="22" y="70" fill="#262421" font-size="23" font-weight="700">解析章节</text>
+      <text x="22" y="96" fill="#756f68" font-size="16">GB18030 · 索引</text>
+    </g>
+    <g transform="translate(322 174)">
+      <rect width="210" height="112" rx="16" fill="#f7f4ef"/>
+      <text x="22" y="37" fill="#c65d3b" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">02</text>
+      <text x="22" y="70" fill="#262421" font-size="23" font-weight="700">规划主线</text>
+      <text x="22" y="96" fill="#756f68" font-size="16">人物 · 事件 · 时间线</text>
+    </g>
+    <g transform="translate(580 174)">
+      <rect width="210" height="112" rx="16" fill="#f7f4ef"/>
+      <text x="22" y="37" fill="#5898ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">03</text>
+      <text x="22" y="70" fill="#262421" font-size="23" font-weight="700">生成课程</text>
+      <text x="22" y="96" fill="#756f68" font-size="16">目标词 · 结构化 JSON</text>
+    </g>
+    <g transform="translate(838 174)">
+      <rect width="210" height="112" rx="16" fill="#c65d3b"/>
+      <text x="22" y="37" fill="#f7f4ef" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">04</text>
+      <text x="22" y="70" fill="#fffdfa" font-size="23" font-weight="700">校验发布</text>
+      <text x="22" y="96" fill="#f4ddd3" font-size="16">通过后切换 ready</text>
+    </g>
+  </g>
+  <g fill="#d8d0c7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">
+    <text x="64" y="345">DATABASE / PRISMA / POSTGRESQL</text>
+    <text x="814" y="345">/story  ·  /story/[lessonId]</text>
+  </g>
+</svg>

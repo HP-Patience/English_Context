@@ -10,7 +10,7 @@ Implemented with one validation concern: the focused smoke test, full story suit
 
 - Added `scripts/test/story-pipeline-smoke.mjs`.
   - Creates and deletes its own temporary cache/source directory.
-  - Generates a synthetic GB18030 fixture source instead of reading `F:\english_context\蛊真人.txt`.
+  - Generates a synthetic GB18030 fixture source instead of reading `F:\english_context\data\local\story\蛊真人.txt`.
   - Uses fake LLM callbacks and an in-memory/fake persistence shape instead of production DB, credentials, or real LLM calls.
   - Verifies parse -> outline -> generation -> validation.
   - Asserts parser output, outline output, and validation report artifacts exist and contain expected JSON keys.
@@ -64,7 +64,7 @@ Implemented with one validation concern: the focused smoke test, full story suit
 
 ## Pipeline hardening
 
-- Enforced exact production defaults: local source `F:\english_context\蛊真人.txt`, exactly 6098 vocabulary words, 61–150 lessons, and at most 100 words per lesson.
+- Enforced exact production defaults: local source `F:\english_context\data\local\story\蛊真人.txt`, exactly 6098 vocabulary words, 61–150 lessons, and at most 100 words per lesson.
 - Added stable SHA-256 fingerprints for raw source bytes, chapter metadata, every chapter-summary batch, the summary set, outline input, lesson assignment input, prior continuity, and course publication inputs.
 - Old, malformed, or input-mismatched checkpoints are rejected or regenerated instead of being silently reused.
 - Outline capacity is validated against `vocabularyCount` before its checkpoint is written.

@@ -9,7 +9,7 @@ import { cleanNovelText, decodeNovelBuffer, parseChapters } from './lib/novel-pa
 import { buildChapterSummaries, buildStoryOutline, writeJsonAtomic } from './lib/story-outline.mjs'
 
 export const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
-export const DEFAULT_SOURCE_PATH = 'F:\\english_context\\蛊真人.txt'
+export const DEFAULT_SOURCE_PATH = resolve(PROJECT_ROOT, 'data/local/story/蛊真人.txt')
 export const DEFAULT_INDEX_PATH = resolve(PROJECT_ROOT, 'scripts/.story-cache/novel-index.json')
 export const DEFAULT_OUTLINE_DIR = resolve(PROJECT_ROOT, 'scripts/.story-cache/outline')
 export const DEFAULT_CHAPTER_SUMMARY_CHECKPOINT_PATH = resolve(DEFAULT_OUTLINE_DIR, 'chapter-summaries.json')
