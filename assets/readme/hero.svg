@@ -2,7 +2,7 @@
   <title id="title">ContextVocab — 语境驱动的考研英语词汇学习</title>
   <desc id="desc">通过连续故事、目标词标记和间隔复习，把考研词汇放进可回想的语境中。</desc>
   <rect width="1200" height="390" rx="28" fill="#f7f4ef"/>
-  <path d="M740 0v390M0 326h1200" stroke="#d8d0c7" stroke-width="1"/>
+  <path d="M740 0v390" stroke="#d8d0c7" stroke-width="1"/>
   <path d="M64 54h110" stroke="#c65d3b" stroke-width="4"/>
   <text x="64" y="91" fill="#c65d3b" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700" letter-spacing="4">CONTEXT / VOCAB</text>
   <text x="64" y="166" fill="#262421" font-family="Georgia, Songti SC, serif" font-size="62" font-weight="700">ContextVocab</text>
