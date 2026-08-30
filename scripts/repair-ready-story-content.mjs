@@ -737,6 +737,12 @@ function repairLesson(lesson) {
     changed = rewriteTargetContext(document, 'volt', '门中震动如一记', '门中震动，测量阵盘上的读数以', '打入人心。', '伏特计，足以让人心惊。') || changed
   }
 
+  if (lesson.order === 1) {
+    changed = replaceTargetContextText(document, 'actual', 'before', '那一瞬间是真实的、无法回头的', '那一瞬间是') || changed
+    changed = replaceTargetContextText(document, 'actual', 'after', '结局。', '、无法回头的结局。') || changed
+    changed = replaceText(allSegments, '，让他在亲情面前也能迅速做出取舍。', ' system，让他在亲情面前也能迅速做出取舍。') || changed
+  }
+
   for (const spec of storyMeaningSpecs) {
     if (spec.lesson === lesson.order) changed = updateTargetDefinition(document, spec.word, spec.definitionCn) || changed
   }

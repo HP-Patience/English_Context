@@ -19,6 +19,8 @@
   <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-16.2.9-000000?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js 16.2.9"></a>
   <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-16%2B-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 16 or newer"></a>
 </p>
+
+
 ## 项目概览
 
 首页把故事课程、分类词库和今日复习放在同一个入口。学习者可以沿连续剧情推进，也可以按考研词频分组学习，随时回到到期复习。
