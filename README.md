@@ -66,6 +66,7 @@ ContextVocab 用三层内容解决孤立词卡中“认识这个词”和“会�
 <p align="center">
   <img src="./assets/readme/screen-review.png" width="516" alt="ContextVocab 复习页面：英文句子和清楚、模糊、忘记三种自评按钮">
 </p>
+
 ## 故事课程如何生成
 
 <p align="center">
