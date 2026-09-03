@@ -76,6 +76,7 @@ next-env.d.ts
 # local code index / MCP config
 /.codegraph/
 /.Codex/
+/.omo/
 
 # generated lesson exports written at the project root
 /lesson-????.json
