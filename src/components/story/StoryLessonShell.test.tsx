@@ -8,6 +8,12 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }))
 
+vi.mock('./CompletionDateHistory', () => ({
+  CompletionDateHistory: ({ endpoint, label }: { endpoint: string; label: string }) => (
+    <div data-endpoint={endpoint}>{label}</div>
+  ),
+}))
+
 import type { StoryLessonDetail, StoryLessonWordListItem } from '@/lib/story-service'
 import type { StoryWordDisplay } from './StoryWordDetail'
 import { StoryLessonShell } from './StoryLessonShell'
@@ -24,6 +30,11 @@ const lesson: StoryLessonDetail = {
   title: '青茅山醒来',
   sourceChapterStart: '第一章',
   sourceChapterEnd: '第三章',
+  completionSummary: {
+    lesson: { count: 0, latestDate: null },
+    step: { count: 0, latestDate: null },
+    paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 2 },
+  },
   content: {
     title: '青茅山醒来',
     order: 1,
@@ -90,6 +101,7 @@ const lesson: StoryLessonDetail = {
     completedAt: null,
   },
   dueReviewCount: 2,
+  bookmarkedParagraphIndexes: [0],
   reviewState: {
     words: [
       { lessonWordId: 'lesson-word-1', roundCompleted: 0, nextReviewAt: null },
@@ -179,7 +191,7 @@ describe('StoryLessonShell', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => progressResponse(3) }))
   })
 
-  it('starts with structured English targets and Chinese context glosses while later steps stay locked', () => {
+  it('starts with paragraph cards and keeps every learning view independently enterable', () => {
     const { container } = render(
       <StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} nextLessonId="lesson-2" />,
     )
@@ -189,10 +201,64 @@ describe('StoryLessonShell', () => {
     expect(screen.getByText('决意')).toBeInTheDocument()
     expect(screen.getByText('scheme')).toBeInTheDocument()
     expect(screen.getByText('谋划')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /第二步/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /第三步/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /第二步/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /第三步/ })).toBeEnabled()
+    expect(screen.getByText('第一步完成日期')).toHaveAttribute(
+      'data-endpoint',
+      '/api/story/lessons/lesson-1/steps/1/completions',
+    )
+    expect(screen.getAllByRole('article', { name: /故事段落/ })).toHaveLength(2)
     expect(screen.getByText(/<img src=x onerror="alert\(1\)">雨声压住/)).toBeInTheDocument()
     expect(container.querySelector('img')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /第二步/ }))
+    expect(screen.getByText('第二步完成日期')).toHaveAttribute(
+      'data-endpoint',
+      '/api/story/lessons/lesson-1/steps/2/completions',
+    )
+    fireEvent.click(screen.getByRole('button', { name: /第三步/ }))
+    expect(screen.getByText('第三步完成日期')).toHaveAttribute(
+      'data-endpoint',
+      '/api/story/lessons/lesson-1/steps/3/completions',
+    )
+  })
+
+  it('sends the storyCard payload and keeps confirmed bookmark state across Step 1 and Step 2', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ type: 'storyCard', bookmarked: true }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    render(<StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} />)
+
+    const secondCard = screen.getAllByRole('article', { name: /故事段落/ })[1]
+    const bookmark = within(secondCard).getByRole('button', { name: '收藏第 2 段' })
+    expect(bookmark).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(bookmark)
+
+    await waitFor(() => expect(bookmark).toHaveAttribute('aria-pressed', 'true'))
+    expect(fetchMock).toHaveBeenCalledWith('/api/bookmarks/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'storyCard', lessonId: 'lesson-1', paragraphIndex: 1, bookmarked: true }),
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /第二步/ }))
+    const recalledSecondCard = screen.getAllByRole('article', { name: /故事段落/ })[1]
+    expect(within(recalledSecondCard).getByRole('button', { name: '取消收藏第 2 段' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps the confirmed bookmark state and reports a failed toggle inline', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 500 })))
+    render(<StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} />)
+
+    const firstCard = screen.getAllByRole('article', { name: /故事段落/ })[0]
+    const bookmark = within(firstCard).getByRole('button', { name: '取消收藏第 1 段' })
+    fireEvent.click(bookmark)
+
+    expect(await within(firstCard).findByRole('alert')).toHaveTextContent('收藏状态未能保存')
+    expect(bookmark).toHaveAttribute('aria-pressed', 'true')
+    expect(bookmark).toHaveAttribute('title', '取消收藏第 1 段')
+    expect(bookmark).not.toHaveTextContent(/收藏|保存/)
   })
 
   it('persists Step1 before opening recall, keeps English visible, and hides glosses by default', async () => {
@@ -212,7 +278,10 @@ describe('StoryLessonShell', () => {
     expect(screen.getByRole('button', { name: '模糊' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '忘记' })).toBeDisabled()
 
-    fireEvent.click(screen.getByRole('button', { name: '显示 resolve 的释义' }))
+    const recallGloss = screen.getByRole('button', { name: '显示 resolve 的释义' })
+    expect(recallGloss).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(recallGloss)
+    expect(recallGloss).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('决意')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '记得' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '模糊' })).toBeEnabled()
@@ -235,7 +304,7 @@ describe('StoryLessonShell', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('当前步骤不会被跳过')
     expect(screen.getByRole('heading', { level: 2, name: '第一步 · 入境识词' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /第二步/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /第二步/ })).toBeEnabled()
     expect(fetch).toHaveBeenCalledWith('/api/story/lessons/lesson-1/progress', expect.objectContaining({
       body: JSON.stringify({ step: 1 }),
     }))
@@ -254,12 +323,12 @@ describe('StoryLessonShell', () => {
     expect(screen.getByRole('heading', { level: 2, name: '第二步 · 遮义回想' })).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(1)
   })
-  it('does not open Step3 until Step2 is persisted, then renders the complete scene-grouped word ledger', async () => {
+  it('keeps Step3 enterable while sequential persistence still renders the complete scene-grouped word ledger', async () => {
     render(<StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} nextLessonId="lesson-2" />)
 
     fireEvent.click(screen.getByRole('button', { name: '完成第一步，进入回忆' }))
     await screen.findByRole('heading', { level: 2, name: '第二步 · 遮义回想' })
-    expect(screen.getByRole('button', { name: /第三步/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /第三步/ })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: '完成第二步，查看词册' }))
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))

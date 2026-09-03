@@ -19,17 +19,15 @@ export function StoryStepNav({ currentStep, completedStep, onSelect }: StoryStep
     <nav aria-label="首次学习步骤" className="story-step-nav rounded-2xl border p-2">
       <ol className="grid grid-cols-3 gap-1">
         {steps.map(({ step, title, caption }) => {
-          const locked = step > Math.min(3, completedStep + 1)
           const active = currentStep === step
           const complete = completedStep >= step
           return (
             <li key={step}>
               <button
                 type="button"
-                disabled={locked}
                 aria-current={active ? 'step' : undefined}
                 onClick={() => onSelect(step)}
-                className={`min-h-14 w-full rounded-xl px-2 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 ${
+                className={`min-h-14 w-full rounded-xl px-2 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:px-4 ${
                    active ? 'story-step-active' : 'story-step-inactive'
                 }`}
               >
