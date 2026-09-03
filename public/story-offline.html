@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#1c1917">
+  <title>离线故事 - ContextVocab</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; background: #f7f4ef; color: #262421; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; }
+    header { border-bottom: 1px solid #d8d0c7; background: #fffdfa; }
+    header div, main { width: min(100% - 2rem, 52rem); margin-inline: auto; }
+    header div { padding-block: 1rem; display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+    h1, h2, h3 { font-family: Georgia, serif; }
+    h1 { margin: 0; font-size: 1.25rem; }
+    header span, #status, .range { color: #756f68; font-size: .875rem; }
+    main { padding-block: 2rem 4rem; }
+    nav { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1.5rem; }
+    button { min-height: 2.75rem; border: 1px solid #d8d0c7; border-radius: .75rem; padding: .6rem .9rem; background: #fffdfa; color: inherit; font: inherit; cursor: pointer; }
+    button[aria-current="page"] { border-color: #7f1d1d; background: #7f1d1d; color: white; }
+    button:focus-visible, a:focus-visible { outline: 2px solid #b91c1c; outline-offset: 2px; }
+    article { border-top: 1px solid #d8d0c7; padding-top: 1.5rem; }
+    .scene { border-left: 2px solid #d8d0c7; padding-left: 1.25rem; margin-block: 2rem; }
+    .scene h3 { margin: 0 0 .75rem; font-size: 1.1rem; }
+    .scene p { margin: 0; line-height: 2.15; }
+    .target { display: inline; min-height: auto; margin-inline: .12rem; border-color: #d99a86; padding: .1rem .35rem; background: #f4ddd3; color: #262421; font-weight: 700; }
+    .gloss { color: #9f3f25; font-size: .9em; font-weight: 500; }
+    .empty { border: 1px dashed #d8d0c7; border-radius: 1rem; padding: 2rem; text-align: center; }
+    @media (prefers-color-scheme: dark) {
+      :root { background: #171615; color: #f2eee8; }
+      header, button { background: #211f1d; border-color: #4a433d; }
+      header { border-color: #4a433d; }
+      header span, #status, .range { color: #aaa098; }
+      article, .scene { border-color: #4a433d; }
+      .target { background: #3a2019; border-color: #8f4a38; color: #f2eee8; }
+      .gloss { color: #e07a57; }
+    }
+  </style>
+</head>
+<body>
+  <header><div><h1>ContextVocab 离线故事</h1><span id="version"></span></div></header>
+  <main>
+    <p id="status" role="status">正在读取已准备的课程…</p>
+    <nav id="lessons" aria-label="离线故事篇章"></nav>
+    <article id="reader" aria-live="polite"></article>
+  </main>
+  <script>
+    const prefix = 'story-offline-course-v';
+    const readyKey = '/__story-offline__/ready';
+    const snapshotKey = '/__story-offline__/snapshot';
+    const statusNode = document.querySelector('#status');
+    const versionNode = document.querySelector('#version');
+    const lessonsNode = document.querySelector('#lessons');
+    const readerNode = document.querySelector('#reader');
+
+    function appendText(parent, text) {
+      parent.append(document.createTextNode(text));
+    }
+
+    function renderLesson(snapshot, lesson) {
+      readerNode.replaceChildren();
+      const heading = document.createElement('h2');
+      heading.textContent = `第 ${lesson.order} 篇 · ${lesson.title}`;
+      const range = document.createElement('p');
+      range.className = 'range';
+      range.textContent = `取材 ${lesson.sourceChapterStart}—${lesson.sourceChapterEnd}`;
+      readerNode.append(heading, range);
+      const mapping = new Map(lesson.targetWords.map((word) => [word.wordOrder, word]));
+      lesson.paragraphs.forEach((paragraph) => {
+        const section = document.createElement('section');
+        section.className = 'scene';
+        const sceneTitle = document.createElement('h3');
+        sceneTitle.textContent = paragraph.sceneTitle;
+        const body = document.createElement('p');
+        paragraph.segments.forEach((segment) => {
+          if (segment.type === 'text') {
+            appendText(body, segment.value);
+            return;
+          }
+          const target = mapping.get(segment.wordOrder);
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'target';
+          button.textContent = segment.word;
+          button.setAttribute('aria-label', `${segment.word}，显示释义`);
+          button.addEventListener('click', () => {
+            const existing = button.querySelector('.gloss');
+            if (existing) {
+              existing.remove();
+              button.setAttribute('aria-label', `${segment.word}，显示释义`);
+              return;
+            }
+            const gloss = document.createElement('span');
+            gloss.className = 'gloss';
+            gloss.textContent = ` · ${target?.glossCn ?? segment.definitionCn}`;
+            button.append(gloss);
+            button.setAttribute('aria-label', `${segment.word}，隐藏释义`);
+          });
+          body.append(button);
+        });
+        section.append(sceneTitle, body);
+        readerNode.append(section);
+      });
+      lessonsNode.querySelectorAll('button').forEach((button) => {
+        if (button.dataset.lessonId === lesson.id) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      });
+      history.replaceState(null, '', `/story-offline.html?lesson=${encodeURIComponent(lesson.id)}`);
+    }
+
+    async function loadSnapshot() {
+      const names = (await caches.keys())
+        .filter((name) => name.startsWith(prefix))
+        .sort((left, right) => Number(right.slice(prefix.length)) - Number(left.slice(prefix.length)));
+      for (const name of names) {
+        const cache = await caches.open(name);
+        const [ready, response] = await Promise.all([cache.match(readyKey), cache.match(snapshotKey)]);
+        if (ready && response) return response.json();
+      }
+      return null;
+    }
+
+    loadSnapshot().then((snapshot) => {
+      if (!snapshot || !Array.isArray(snapshot.lessons) || snapshot.lessons.length === 0) {
+        statusNode.textContent = '没有可用的离线故事。请联网打开故事课程并执行“准备离线阅读”。';
+        readerNode.className = 'empty';
+        return;
+      }
+      statusNode.textContent = `完整课程已离线保存，共 ${snapshot.lessons.length} 篇。`;
+      versionNode.textContent = `课程版本 ${snapshot.courseVersion}`;
+      snapshot.lessons.forEach((lesson) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.lessonId = lesson.id;
+        button.textContent = `第 ${lesson.order} 篇`;
+        button.addEventListener('click', () => renderLesson(snapshot, lesson));
+        lessonsNode.append(button);
+      });
+      const requestedId = new URL(location.href).searchParams.get('lesson')
+        ?? location.pathname.match(/^\/story\/([^/]+)$/)?.[1];
+      renderLesson(snapshot, snapshot.lessons.find((lesson) => lesson.id === requestedId) ?? snapshot.lessons[0]);
+    }).catch((error) => {
+      statusNode.textContent = `无法读取离线课程：${error instanceof Error ? error.message : '未知错误'}`;
+      readerNode.className = 'empty';
+    });
+  </script>
+</body>
+</html>
