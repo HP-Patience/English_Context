@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma, getLocalUserId } from '@/lib/prisma'
+import { listReadyStoryReferences } from '@/lib/story-references'
 
 export async function GET(
   _req: NextRequest,
@@ -37,6 +38,7 @@ export async function GET(
   if (!word) {
     return NextResponse.json({ error: 'Word not found' }, { status: 404 })
   }
+  const storyReferences = await listReadyStoryReferences({ prisma, wordId: id })
 
   // Strip meanings with no content (hallucinated batch-ai leftovers)
   word.meanings = word.meanings.filter((m) => {
@@ -47,5 +49,5 @@ export async function GET(
     return hasExample || hasSentences
   })
 
-  return NextResponse.json({ word })
+  return NextResponse.json({ word, storyReferences })
 }
