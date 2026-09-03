@@ -159,6 +159,42 @@ test('story review attempts are unique per user lesson word and round', () => {
   assertContains(block, '@@unique([userId, lessonWordId, round])')
 })
 
+test('dated story completion histories preserve independent client events', () => {
+  for (const [name, dimension] of [
+    ['UserStoryParagraphCompletion', ['paragraphIndex', 'Int\\b']],
+    ['UserStoryStepCompletion', ['step', 'Int\\b']],
+    ['UserStoryLessonCompletion', null],
+  ]) {
+    const block = modelBlock(name)
+    for (const [field, pattern] of [
+      ['id', 'String\\s+@id\\s+@default\\(cuid\\(\\)\\)'],
+      ['completionId', 'String\\b'],
+      ['userId', 'String\\b'],
+      ['lessonId', 'String\\b'],
+      ['completionDate', 'DateTime\\s+@db\\.Date'],
+      ['createdAt', 'DateTime\\s+@default\\(now\\(\\)\\)'],
+    ]) assertField(block, field, pattern)
+    if (dimension) assertField(block, dimension[0], dimension[1])
+    assertField(block, 'user', 'User\\s+@relation\\(fields: \\[userId\\], references: \\[id\\]\\)')
+    assertField(block, 'lesson', 'StoryLesson\\s+@relation\\(fields: \\[lessonId\\], references: \\[id\\]\\)')
+    assertContains(block, '@@unique([userId, completionId])')
+    assertContains(block, '@@index([lessonId, completionDate])')
+  }
+})
+
+test('story paragraph bookmarks have one stable row per user lesson card', () => {
+  const block = modelBlock('UserStoryParagraphBookmark')
+  for (const [field, pattern] of [
+    ['id', 'String\\s+@id\\s+@default\\(cuid\\(\\)\\)'],
+    ['userId', 'String\\b'],
+    ['lessonId', 'String\\b'],
+    ['paragraphIndex', 'Int\\b'],
+    ['createdAt', 'DateTime\\s+@default\\(now\\(\\)\\)'],
+  ]) assertField(block, field, pattern)
+  assertContains(block, '@@unique([userId, lessonId, paragraphIndex])')
+  assertContains(block, '@@index([lessonId, paragraphIndex])')
+})
+
 test('existing core models expose relations for story data', () => {
   assertField(modelBlock('WordGroup'), 'storyLessons', 'StoryLesson\\[\\]')
   assertField(modelBlock('Word'), 'storyLessonWords', 'StoryLessonWord\\[\\]')
@@ -168,4 +204,14 @@ test('existing core models expose relations for story data', () => {
   assertField(user, 'storyProgress', 'UserStoryProgress\\[\\]')
   assertField(user, 'storyWordProgress', 'UserStoryWordProgress\\[\\]')
   assertField(user, 'storyReviewAttempts', 'StoryReviewAttempt\\[\\]')
+  assertField(user, 'storyParagraphCompletions', 'UserStoryParagraphCompletion\\[\\]')
+  assertField(user, 'storyStepCompletions', 'UserStoryStepCompletion\\[\\]')
+  assertField(user, 'storyLessonCompletions', 'UserStoryLessonCompletion\\[\\]')
+  assertField(user, 'storyParagraphBookmarks', 'UserStoryParagraphBookmark\\[\\]')
+
+  const lesson = modelBlock('StoryLesson')
+  assertField(lesson, 'paragraphCompletions', 'UserStoryParagraphCompletion\\[\\]')
+  assertField(lesson, 'stepCompletions', 'UserStoryStepCompletion\\[\\]')
+  assertField(lesson, 'lessonCompletions', 'UserStoryLessonCompletion\\[\\]')
+  assertField(lesson, 'paragraphBookmarks', 'UserStoryParagraphBookmark\\[\\]')
 })

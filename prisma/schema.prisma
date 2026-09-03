@@ -22,6 +22,10 @@ model User {
   storyProgress       UserStoryProgress[]
   storyWordProgress   UserStoryWordProgress[]
   storyReviewAttempts StoryReviewAttempt[]
+  storyParagraphCompletions UserStoryParagraphCompletion[]
+  storyStepCompletions      UserStoryStepCompletion[]
+  storyLessonCompletions    UserStoryLessonCompletion[]
+  storyParagraphBookmarks   UserStoryParagraphBookmark[]
 }
 
 model Word {
@@ -115,6 +119,10 @@ model StoryLesson {
   wordGroup    WordGroup?          @relation(fields: [wordGroupId], references: [id])
   words        StoryLessonWord[]
   userProgress UserStoryProgress[]
+  paragraphCompletions UserStoryParagraphCompletion[]
+  stepCompletions      UserStoryStepCompletion[]
+  lessonCompletions    UserStoryLessonCompletion[]
+  paragraphBookmarks   UserStoryParagraphBookmark[]
 
   @@unique([courseId, order])
   @@index([courseId, status])
@@ -160,6 +168,70 @@ model UserStoryProgress {
 
   @@unique([userId, lessonId])
   @@index([lessonId])
+}
+
+model UserStoryParagraphCompletion {
+  id             String   @id @default(cuid())
+  completionId   String
+  userId         String
+  lessonId       String
+  paragraphIndex Int
+  completionDate DateTime @db.Date
+  createdAt      DateTime @default(now())
+
+  user   User        @relation(fields: [userId], references: [id])
+  lesson StoryLesson @relation(fields: [lessonId], references: [id])
+
+  @@unique([userId, completionId])
+  @@index([userId, lessonId, paragraphIndex])
+  @@index([lessonId, completionDate])
+}
+
+model UserStoryStepCompletion {
+  id             String   @id @default(cuid())
+  completionId   String
+  userId         String
+  lessonId       String
+  step           Int
+  completionDate DateTime @db.Date
+  createdAt      DateTime @default(now())
+
+  user   User        @relation(fields: [userId], references: [id])
+  lesson StoryLesson @relation(fields: [lessonId], references: [id])
+
+  @@unique([userId, completionId])
+  @@index([userId, lessonId, step])
+  @@index([lessonId, completionDate])
+}
+
+model UserStoryLessonCompletion {
+  id             String   @id @default(cuid())
+  completionId   String
+  userId         String
+  lessonId       String
+  completionDate DateTime @db.Date
+  createdAt      DateTime @default(now())
+
+  user   User        @relation(fields: [userId], references: [id])
+  lesson StoryLesson @relation(fields: [lessonId], references: [id])
+
+  @@unique([userId, completionId])
+  @@index([userId, lessonId])
+  @@index([lessonId, completionDate])
+}
+
+model UserStoryParagraphBookmark {
+  id             String   @id @default(cuid())
+  userId         String
+  lessonId       String
+  paragraphIndex Int
+  createdAt      DateTime @default(now())
+
+  user   User        @relation(fields: [userId], references: [id])
+  lesson StoryLesson @relation(fields: [lessonId], references: [id])
+
+  @@unique([userId, lessonId, paragraphIndex])
+  @@index([lessonId, paragraphIndex])
 }
 
 model UserStoryWordProgress {
