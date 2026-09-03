@@ -1,47 +1,82 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 
-type Pos = { x: number; y: number }
+type Pos = { readonly x: number; readonly y: number }
 
-export default function SelectionSearch({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+type ActiveSelection = {
+  readonly range: Range
+  readonly text: string
+}
+
+type SelectionSearchProps = {
+  readonly children: ReactNode
+  readonly className?: string
+}
+
+const interactiveSelector = [
+  'a[href]',
+  'button',
+  'input',
+  'textarea',
+  'select',
+  'option',
+  'label',
+  'summary',
+  '[contenteditable]:not([contenteditable="false"])',
+  '[role="button"]',
+  '[role="link"]',
+  '[tabindex]',
+].join(',')
+
+export default function SelectionSearch({ children, className = '' }: SelectionSearchProps) {
   const router = useRouter()
   const [selectedText, setSelectedText] = useState('')
   const [pos, setPos] = useState<Pos | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  function isSelectionInside() {
-    const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0) return false
-    return containerRef.current?.contains(sel.getRangeAt(0).commonAncestorContainer) ?? false
+  function getActiveSelection(container: HTMLDivElement): ActiveSelection | null {
+    const selection = window.getSelection()
+    if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) return null
+
+    const text = selection.toString().trim()
+    if (text.length === 0) return null
+
+    const range = selection.getRangeAt(0)
+    if (!container.contains(range.commonAncestorContainer)) return null
+
+    return { range, text }
   }
 
   function updateSelection() {
-    const sel = window.getSelection()
-    const text = sel?.toString().trim()
+    if (btnRef.current === document.activeElement) return
 
-    if (!text || !isSelectionInside()) {
+    const container = containerRef.current
+    const selection = container === null ? null : getActiveSelection(container)
+
+    if (selection === null) {
       setSelectedText('')
       setPos(null)
       return
     }
 
-    const range = sel!.getRangeAt(0)
-    const rect = range.getBoundingClientRect()
+    const rect = selection.range.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) {
       setSelectedText('')
       setPos(null)
       return
     }
 
-    setSelectedText(text)
+    setSelectedText(selection.text)
     setPos({ x: rect.left + rect.width / 2, y: rect.top })
   }
 
   function handleDismiss(e: MouseEvent | TouchEvent) {
-    const target = e.target as Node
+    const target = e.target
+    if (!(target instanceof Node)) return
     if (btnRef.current?.contains(target)) return
     if (containerRef.current?.contains(target)) return
     setSelectedText('')
@@ -58,6 +93,20 @@ export default function SelectionSearch({ children, className = '' }: { children
       setSelectedText('')
       setPos(null)
     }
+  }
+
+  function handleContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    const target = event.target
+    if (!(target instanceof Node)) return
+
+    const targetElement = target instanceof Element ? target : target.parentElement
+    if (targetElement?.closest(interactiveSelector)) return
+
+    const container = containerRef.current
+    const selection = container === null ? null : getActiveSelection(container)
+    if (selection === null || !selection.range.intersectsNode(target)) return
+
+    event.preventDefault()
   }
 
   useEffect(() => {
@@ -84,7 +133,7 @@ export default function SelectionSearch({ children, className = '' }: { children
   }
 
   return (
-    <div ref={containerRef} className={className}>
+    <div ref={containerRef} className={`selection-search ${className}`} onContextMenu={handleContextMenu}>
       {children}
       {selectedText && pos && (
         <button
