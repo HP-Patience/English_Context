@@ -80,10 +80,12 @@ describe('story first-pass progress', () => {
     expect(getNextStep(afterStep3)).toBe(4)
   })
 
-  it('rejects out-of-order first-pass completion', () => {
-    expect(() => completeFirstPass(initialProgress, 2)).toThrow(
-      /Cannot complete Step2 before Step1/,
-    )
+  it('allows each first-pass step to be completed without sequence locks', () => {
+    expect(completeFirstPass(initialProgress, 2)).toMatchObject({
+      status: 'learning',
+      completedSteps: [2],
+    })
+    expect(getNextStep(completeFirstPass(initialProgress, 3))).toBe(4)
   })
 
   it('unlocks the next lesson after Step3 without five Step4 rounds', () => {

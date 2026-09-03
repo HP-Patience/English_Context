@@ -1,5 +1,3 @@
-import { STORY_ERROR_CODES, StoryDomainError } from './story-errors'
-
 export type StoryFirstPassStep = 1 | 2 | 3
 export type StoryLessonStep = StoryFirstPassStep | 4
 
@@ -23,6 +21,10 @@ export const initialProgress: StoryProgressState = {
 }
 
 export function getNextStep(progress: StoryProgressState): StoryLessonStep {
+  if (progress.completedSteps.includes(3)) {
+    return 4
+  }
+
   if (!progress.completedSteps.includes(1)) {
     return 1
   }
@@ -31,11 +33,7 @@ export function getNextStep(progress: StoryProgressState): StoryLessonStep {
     return 2
   }
 
-  if (!progress.completedSteps.includes(3)) {
-    return 3
-  }
-
-  return 4
+  return 3
 }
 
 export function completeFirstPass(
@@ -46,21 +44,12 @@ export function completeFirstPass(
     return { ...progress, completedSteps: [...progress.completedSteps] }
   }
 
-  const nextStep = getNextStep(progress)
-
-  if (step !== nextStep) {
-    throw new StoryDomainError(
-      STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT,
-      `Cannot complete Step${step} before Step${nextStep}`,
-    )
-  }
-
   const completedSteps = [...progress.completedSteps, step]
 
   return {
     ...progress,
     completedSteps,
-    status: step === 3 ? 'first_passed' : 'learning',
+    status: completedSteps.includes(3) ? 'first_passed' : 'learning',
   }
 }
 
