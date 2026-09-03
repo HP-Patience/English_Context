@@ -41,12 +41,6 @@ export function StoryWordDetail({ lessonWord }: StoryWordDetailProps) {
             <dd className="mt-0.5 text-stone-600 dark:text-stone-300">本篇语境：{lessonWord.glossCn}</dd>
           ) : null}
         </div>
-        {lessonWord.storyUsage ? (
-          <div className="border-l-2 border-red-800/60 pl-3 dark:border-red-600/70">
-            <dt className="text-xs font-medium text-stone-400 dark:text-stone-500">篇中用法</dt>
-            <dd className="mt-1 text-stone-700 dark:text-stone-200">{lessonWord.storyUsage}</dd>
-          </div>
-        ) : null}
         {lessonWord.meaning.example ? (
           <div>
             <dt className="text-xs font-medium text-stone-400 dark:text-stone-500">例句</dt>
