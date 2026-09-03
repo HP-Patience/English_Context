@@ -73,6 +73,11 @@ type ReviewAttemptRow = {
   result: string
   createdAt: Date
 }
+type ParagraphBookmarkRow = {
+  userId: string
+  lessonId: string
+  paragraphIndex: number
+}
 type LessonWordRow = {
   id: string
   lessonId: string
@@ -96,6 +101,7 @@ type LessonRow = {
   status: string
   words: LessonWordRow[]
   userProgress?: ProgressRow[]
+  paragraphBookmarks?: ParagraphBookmarkRow[]
 }
 
 
@@ -108,6 +114,7 @@ type ServiceFakePrisma = {
     progress: ProgressRow[]
     wordProgress: WordProgressRow[]
     reviewAttempts: ReviewAttemptRow[]
+    paragraphBookmarks: ParagraphBookmarkRow[]
     nextProgress: number
   }
   $transaction<T>(callback: (tx: ServiceFakePrisma) => Promise<T>): Promise<T>
@@ -124,6 +131,9 @@ type ServiceFakePrisma = {
     findUnique(args: { where: { userId_lessonId: { userId: string; lessonId: string } } }): Promise<ProgressRow | null>
     upsert(args: { where: { userId_lessonId: { userId: string; lessonId: string } }; create: ProgressRow; update: Partial<ProgressRow> }): Promise<ProgressRow>
   }
+  userStoryLessonCompletion: { groupBy(args: unknown): Promise<readonly unknown[]> }
+  userStoryStepCompletion: { groupBy(args: unknown): Promise<readonly unknown[]> }
+  userStoryParagraphCompletion: { groupBy(args: unknown): Promise<readonly unknown[]> }
 }
 
 function makeLesson(overrides: Partial<LessonRow> = {}): LessonRow {
@@ -205,6 +215,7 @@ function createServicePrisma({
   progress = [] as ProgressRow[],
   wordProgress = [] as WordProgressRow[],
   reviewAttempts = [] as ReviewAttemptRow[],
+  paragraphBookmarks = [] as ParagraphBookmarkRow[],
   now = new Date('2026-08-21T00:00:00.000Z'),
 } = {}) {
   const state = {
@@ -213,11 +224,15 @@ function createServicePrisma({
     progress: clone(progress),
     wordProgress: clone(wordProgress),
     reviewAttempts: clone(reviewAttempts),
+    paragraphBookmarks: clone(paragraphBookmarks),
     nextProgress: 1,
   }
   const calls: string[] = []
 
   const attachRelations = (lesson: LessonRow, args: { include?: Record<string, unknown> } = {}) => {
+    if (args.include?.lessonCompletions || args.include?.stepCompletions || args.include?.paragraphCompletions) {
+      throw new Error('course summaries must not hydrate completion history rows')
+    }
     const row = clone(lesson)
     if (args.include?.userProgress) {
       row.userProgress = state.progress.filter((item) => item.lessonId === row.id && item.userId === 'user-1').map(clone)
@@ -238,6 +253,18 @@ function createServicePrisma({
           } : {}),
         }))
         .sort((left, right) => left.sortOrder - right.sortOrder)
+    }
+    if (args.include?.paragraphBookmarks) {
+      const bookmarkQuery = args.include.paragraphBookmarks as {
+        where?: { userId?: string }
+        select?: { paragraphIndex?: boolean }
+      }
+      if (bookmarkQuery.select?.paragraphIndex !== true) {
+        throw new Error('lesson detail must select only bookmark paragraph indexes')
+      }
+      row.paragraphBookmarks = state.paragraphBookmarks
+        .filter((item) => item.lessonId === row.id && item.userId === bookmarkQuery.where?.userId)
+        .map(clone)
     }
     return row
   }
@@ -302,6 +329,24 @@ function createServicePrisma({
         return clone(row)
       },
     },
+    userStoryLessonCompletion: {
+      async groupBy() {
+        calls.push('userStoryLessonCompletion.groupBy')
+        return []
+      },
+    },
+    userStoryStepCompletion: {
+      async groupBy() {
+        calls.push('userStoryStepCompletion.groupBy')
+        return []
+      },
+    },
+    userStoryParagraphCompletion: {
+      async groupBy() {
+        calls.push('userStoryParagraphCompletion.groupBy')
+        return []
+      },
+    },
   }
 
   return client
@@ -351,6 +396,11 @@ describe('listStoryLessons', () => {
       completedStep: 3,
       currentStep: 4,
       dueReviewCount: 1,
+      completionSummary: {
+        lesson: { count: 0, latestDate: null },
+        step: { count: 0, latestDate: null },
+        paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 2 },
+      },
     })
     expect(lessons[1]).toMatchObject({
       status: 'not_started',
@@ -360,10 +410,29 @@ describe('listStoryLessons', () => {
     })
     expect(prisma.calls).toContain('storyCourse.findUnique:{"readySlot":"ready"}')
     expect(prisma.calls).toContain('storyLesson.findMany:{"courseId":"course-ready","status":"ready"}')
+    expect(prisma.calls.filter((call) => call.endsWith('.groupBy'))).toEqual([
+      'userStoryLessonCompletion.groupBy',
+      'userStoryStepCompletion.groupBy',
+      'userStoryParagraphCompletion.groupBy',
+    ])
   })
 })
 
 describe('getStoryLesson', () => {
+  it('returns only the current user bookmark indexes from the lesson detail query', async () => {
+    const prisma = createServicePrisma({
+      paragraphBookmarks: [
+        { userId: 'user-1', lessonId: 'lesson-ready-1', paragraphIndex: 1 },
+        { userId: 'other-user', lessonId: 'lesson-ready-1', paragraphIndex: 0 },
+        { userId: 'user-1', lessonId: 'another-lesson', paragraphIndex: 0 },
+      ],
+    })
+
+    const detail = await getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-ready-1' })
+
+    expect(detail?.bookmarkedParagraphIndexes).toEqual([1])
+  })
+
   it('carries generated phonetics through draft persistence, publication, and the runtime DTO', async () => {
     const wordGroups = [{
       words: [
@@ -412,7 +481,13 @@ describe('getStoryLesson', () => {
       }),
     })
 
-    const detail = await getStoryLesson({ prisma, userId: 'local-user', lessonId: persisted.lessonId })
+    const runtimePrisma = {
+      ...prisma,
+      userStoryLessonCompletion: { async groupBy() { return [] } },
+      userStoryStepCompletion: { async groupBy() { return [] } },
+      userStoryParagraphCompletion: { async groupBy() { return [] } },
+    }
+    const detail = await getStoryLesson({ prisma: runtimePrisma, userId: 'local-user', lessonId: persisted.lessonId })
 
     expect(detail?.lessonWords.map((item) => item.word.phonetic)).toEqual(['/ˈælfə/', '/ˈbeɪtə/'])
   })
@@ -516,6 +591,11 @@ describe('getStoryLesson', () => {
       meaning: { id: 'meaning-alpha', definitionCn: '阿尔法' },
     })
     expect(detail?.progress).toMatchObject({ status: 'not_started', completedStep: 0, currentStep: 1 })
+    expect(detail?.completionSummary).toEqual({
+      lesson: { count: 0, latestDate: null },
+      step: { count: 0, latestDate: null },
+      paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 2 },
+    })
     await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-hidden', now: prisma.now })).resolves.toBeNull()
   })
 })
@@ -604,28 +684,25 @@ describe('saveFirstPassStep', () => {
     ).rejects.toMatchObject({ code: STORY_ERROR_CODES.LESSON_NOT_FOUND })
   })
 
-  it('rejects jumping from Step1 straight to Step3', async () => {
+  it('allows Step3 completion without requiring Step2 first', async () => {
     const prisma = createServicePrisma()
 
     await saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-ready-1', step: 1, now: new Date('2026-08-21T01:00:00.000Z') })
 
     await expect(
       saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-ready-1', step: 3, now: new Date('2026-08-21T02:00:00.000Z') }),
-    ).rejects.toMatchObject({
-      code: STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT,
-      message: expect.stringMatching(/Cannot complete Step3 before Step2/),
-    })
+    ).resolves.toMatchObject({ completedStep: 3, currentStep: 4 })
   })
 })
 
-describe('sequential story lesson unlocking', () => {
+describe('ready story lesson unlocking', () => {
   const lessons = [
     makeLesson({ id: 'lesson-1', order: 1 }),
     makeLesson({ id: 'lesson-2', order: 2 }),
     makeLesson({ id: 'lesson-3', order: 3 }),
   ]
 
-  it('opens lesson 1 and exposes truthful unlock state without allowing later lessons to skip their predecessor', async () => {
+  it('unlocks every ready lesson independently of predecessor progress', async () => {
     const prisma = createServicePrisma({ lessons, progress: [completedProgress('lesson-1', 'reviewing')] })
 
     const listed = await listStoryLessons({ prisma, userId: 'user-1' })
@@ -633,17 +710,11 @@ describe('sequential story lesson unlocking', () => {
     expect(listed.map((lesson) => ({ id: lesson.id, isUnlocked: lesson.isUnlocked }))).toEqual([
       { id: 'lesson-1', isUnlocked: true },
       { id: 'lesson-2', isUnlocked: true },
-      { id: 'lesson-3', isUnlocked: false },
+      { id: 'lesson-3', isUnlocked: true },
     ])
-    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).rejects.toMatchObject({
-      code: STORY_ERROR_CODES.LESSON_LOCKED,
-    })
-    await expect(listStoryLessonWords({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).rejects.toMatchObject({
-      code: STORY_ERROR_CODES.LESSON_LOCKED,
-    })
-    await expect(saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-3', step: 1 })).rejects.toMatchObject({
-      code: STORY_ERROR_CODES.LESSON_LOCKED,
-    })
+    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).resolves.toMatchObject({ id: 'lesson-3' })
+    await expect(listStoryLessonWords({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).resolves.toMatchObject({ lessonId: 'lesson-3' })
+    await expect(saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-3', step: 1 })).resolves.toMatchObject({ completedStep: 1 })
   })
 
   it('unlocks the next lesson immediately after Step3 regardless of Step4 status', async () => {
@@ -656,7 +727,7 @@ describe('sequential story lesson unlocking', () => {
 
     await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-2' })).resolves.toMatchObject({ id: 'lesson-2' })
     await expect(saveFirstPassStep({ prisma, userId: 'user-1', lessonId: 'lesson-2', step: 1 })).resolves.toMatchObject({ completedStep: 1 })
-    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).rejects.toMatchObject({ code: STORY_ERROR_CODES.LESSON_LOCKED })
+    await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).resolves.toMatchObject({ id: 'lesson-3' })
   })
 
   it('keeps an already Step3-completed legacy lesson accessible and ignores progress from another course or user', async () => {
@@ -674,6 +745,6 @@ describe('sequential story lesson unlocking', () => {
 
     await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-3' })).resolves.toMatchObject({ id: 'lesson-3' })
     const listed = await listStoryLessons({ prisma, userId: 'user-1' })
-    expect(listed.find((lesson) => lesson.id === 'lesson-2')?.isUnlocked).toBe(false)
+    expect(listed.find((lesson) => lesson.id === 'lesson-2')?.isUnlocked).toBe(true)
   })
 })

@@ -4,11 +4,14 @@ import type { StoryFirstPassStep, StoryLessonStep, StoryProgressState, StoryProg
 import { parseStoryContent } from './story-types'
 import type { StoryLessonDocument } from './story-types'
 import type { StoryReviewSubmissionResult } from './story-review'
+import type { StoryCompletionSummary } from './story-completion'
+import { loadStoryCompletionSummaries } from './story-completion-summary-query'
+import type { StoryCompletionSummaryPrisma } from './story-completion-summary-query'
 
 const READY_COURSE_SLOT = 'ready'
 const READY_STATUS = 'ready'
 
-type InternalPrismaClient = {
+type InternalPrismaClient = StoryCompletionSummaryPrisma & {
   $transaction<T>(callback: (tx: InternalPrismaClient) => Promise<T>, options?: unknown): Promise<T>
   storyCourse: {
     findUnique(args: unknown): Promise<unknown>
@@ -41,6 +44,7 @@ export type StoryLessonListItem = {
   currentStep: StoryLessonStep
   dueReviewCount: number
   isUnlocked: boolean
+  completionSummary: StoryCompletionSummary
 }
 
 export type StoryLessonWordDto = {
@@ -113,6 +117,8 @@ export type StoryLessonDetail = {
   progress: UserStoryProgressDto
   dueReviewCount: number
   reviewState: StoryLessonReviewState
+  completionSummary: StoryCompletionSummary
+  bookmarkedParagraphIndexes: readonly number[]
 }
 
 type ReadyCourseRow = {
@@ -147,6 +153,8 @@ type ReviewAttemptRow = {
   createdAt: Date | string
 }
 
+type ParagraphBookmarkRow = { paragraphIndex: number }
+
 type LessonWordRow = {
   id: string
   sortOrder: number
@@ -172,6 +180,7 @@ type LessonRow = {
   contentJson: string
   words?: LessonWordRow[]
   userProgress?: ProgressRow[]
+  paragraphBookmarks?: ParagraphBookmarkRow[]
 }
 
 export async function listStoryLessons({ prisma, userId, now = new Date() }: StoryServiceParams): Promise<StoryLessonListItem[]> {
@@ -184,8 +193,12 @@ export async function listStoryLessons({ prisma, userId, now = new Date() }: Sto
     orderBy: { order: 'asc' },
     include: lessonInclude(userId),
   })).map(asLessonRow)
+  const lessonCards = lessons.map((lesson) => ({
+    lessonId: lesson.id,
+    totalCards: parseStoryContent(lesson.contentJson).paragraphs.length,
+  }))
+  const completionSummaries = await loadStoryCompletionSummaries({ prisma: client, userId, lessons: lessonCards })
 
-  const unlockStates = storyLessonUnlockStates(lessons, userId)
   return lessons.map((lesson) => {
     const progress = progressDtoFromRow(firstProgress(lesson), userId, lesson.id)
     return {
@@ -199,7 +212,8 @@ export async function listStoryLessons({ prisma, userId, now = new Date() }: Sto
       completedStep: progress.completedStep,
       currentStep: progress.currentStep,
       dueReviewCount: countDueReviews(lesson, progress, userId, now),
-      isUnlocked: unlockStates.get(lesson.id) ?? false,
+      isUnlocked: true,
+      completionSummary: completionSummaries[lesson.id],
     }
   })
 }
@@ -214,9 +228,6 @@ export async function getStoryLesson({
   const course = await findReadyCourse(client)
   if (!course) return null
 
-  const unlockState = await readyLessonUnlockState(client, course.id, userId, lessonId)
-  if (unlockState === null) return null
-  if (!unlockState) throwLessonLocked(lessonId)
   const row = await client.storyLesson.findFirst({
     where: { id: lessonId, courseId: course.id, status: READY_STATUS },
     include: lessonInclude(userId, true),
@@ -225,6 +236,12 @@ export async function getStoryLesson({
 
   const lesson = asLessonRow(row)
   const progress = progressDtoFromRow(firstProgress(lesson), userId, lesson.id)
+  const content = parseStoryContent(lesson.contentJson)
+  const completionSummaries = await loadStoryCompletionSummaries({
+    prisma: client,
+    userId,
+    lessons: [{ lessonId: lesson.id, totalCards: content.paragraphs.length }],
+  })
 
   return {
     id: lesson.id,
@@ -232,11 +249,13 @@ export async function getStoryLesson({
     title: lesson.title,
     sourceChapterStart: lesson.sourceChapterStart,
     sourceChapterEnd: lesson.sourceChapterEnd,
-    content: parseStoryContent(lesson.contentJson),
+    content,
     lessonWords: orderedLessonWords(lesson).map(toLessonWordDto),
     progress,
     dueReviewCount: countDueReviews(lesson, progress, userId, now),
     reviewState: buildLessonReviewState(lesson, progress, userId),
+    completionSummary: completionSummaries[lesson.id],
+    bookmarkedParagraphIndexes: (lesson.paragraphBookmarks ?? []).map((bookmark) => bookmark.paragraphIndex),
   }
 }
 
@@ -309,14 +328,6 @@ export async function saveFirstPassStep({
       )
     }
 
-    const unlockState = await readyLessonUnlockState(tx, course.id, userId, lessonId)
-    if (unlockState === null) {
-      throw new StoryDomainError(
-        STORY_ERROR_CODES.LESSON_NOT_FOUND,
-        `Story lesson is not ready or does not exist: ${lessonId}`,
-      )
-    }
-    if (!unlockState) throwLessonLocked(lessonId)
     const lesson = await tx.storyLesson.findFirst({
       where: { id: lessonId, courseId: course.id, status: READY_STATUS },
     })
@@ -332,7 +343,7 @@ export async function saveFirstPassStep({
     }))
     const existingDto = progressDtoFromRow(existing, userId, lessonId)
 
-    if (existingDto.completedStep >= step) {
+    if (isFirstPassStepComplete(existing, step)) {
       return existingDto
     }
 
@@ -350,47 +361,6 @@ export async function saveFirstPassStep({
   }, { isolationLevel: 'Serializable' })
 }
 
-function storyLessonUnlockStates(lessons: LessonRow[], userId: string): Map<string, boolean> {
-  const ordered = [...lessons].sort((left, right) => left.order - right.order)
-  const states = new Map<string, boolean>()
-  for (let index = 0; index < ordered.length; index += 1) {
-    const lesson = ordered[index]
-    const progress = progressDtoFromRow(firstProgress(lesson), userId, lesson.id)
-    const previous = index > 0 ? ordered[index - 1] : null
-    const previousProgress = previous
-      ? progressDtoFromRow(firstProgress(previous), userId, previous.id)
-      : null
-    states.set(
-      lesson.id,
-      progress.completedStep >= 3 || lesson.order === 1 || previousProgress?.completedStep === 3,
-    )
-  }
-  return states
-}
-
-async function readyLessonUnlockState(
-  prisma: InternalPrismaClient,
-  readyCourseId: string,
-  userId: string,
-  lessonId: string,
-): Promise<boolean | null> {
-  const lessons = (await prisma.storyLesson.findMany({
-    where: { courseId: readyCourseId, status: READY_STATUS },
-    orderBy: { order: 'asc' },
-    include: { userProgress: { where: { userId }, take: 1 } },
-  })).map(asLessonRow)
-  const target = lessons.find((lesson) => lesson.id === lessonId)
-  if (!target) return null
-  return storyLessonUnlockStates(lessons, userId).get(lessonId) ?? false
-}
-
-function throwLessonLocked(lessonId: string): never {
-  throw new StoryDomainError(
-    STORY_ERROR_CODES.LESSON_LOCKED,
-    `Story lesson is locked: ${lessonId}`,
-  )
-}
-
 async function findReadyCourse(prisma: InternalPrismaClient): Promise<ReadyCourseRow | null> {
   const row = await prisma.storyCourse.findUnique({ where: { readySlot: READY_COURSE_SLOT } })
   if (!row) return null
@@ -401,16 +371,22 @@ async function findReadyCourse(prisma: InternalPrismaClient): Promise<ReadyCours
   return course
 }
 
-function lessonInclude(userId: string, includeReviewAttempts = false) {
+function lessonInclude(userId: string, includeDetailRelations = false) {
   return {
     userProgress: { where: { userId }, take: 1 },
+    ...(includeDetailRelations ? {
+      paragraphBookmarks: {
+        where: { userId },
+        select: { paragraphIndex: true },
+      },
+    } : {}),
     words: {
       orderBy: { sortOrder: 'asc' },
       include: {
         word: true,
         meaning: true,
         userProgress: { where: { userId } },
-        ...(includeReviewAttempts ? {
+        ...(includeDetailRelations ? {
           reviewAttempts: {
             where: { userId },
             orderBy: { round: 'asc' },
@@ -635,4 +611,11 @@ function asProgressRow(value: unknown): ProgressRow {
 
 function asProgressRowOrNull(value: unknown): ProgressRow | null {
   return value ? asProgressRow(value) : null
+}
+
+function isFirstPassStepComplete(row: ProgressRow | null, step: StoryFirstPassStep): boolean {
+  if (!row) return false
+  if (step === 1) return row.step1CompletedAt !== null
+  if (step === 2) return row.step2CompletedAt !== null
+  return row.step3CompletedAt !== null
 }
