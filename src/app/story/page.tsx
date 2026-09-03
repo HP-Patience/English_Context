@@ -4,6 +4,7 @@ import { connection } from 'next/server'
 
 import { StoryCourseList } from '@/components/story/StoryCourseList'
 import { StoryCourseProgress } from '@/components/story/StoryCourseProgress'
+import { StoryOfflinePreparation } from '@/components/story/StoryOfflinePreparation'
 import { getLocalUserId, prisma } from '@/lib/prisma'
 import { listStoryLessons } from '@/lib/story-service'
 
@@ -24,7 +25,7 @@ export default async function StoryPage() {
   const dueCount = orderedLessons.reduce((total, lesson) => total + lesson.dueReviewCount, 0)
 
   return (
-    <div className="mx-auto max-w-3xl pb-12">
+    <div className="story-theme mx-auto max-w-3xl pb-12">
       <header className="relative overflow-hidden rounded-3xl border border-stone-300 bg-stone-100 px-5 py-8 dark:border-stone-700 dark:bg-stone-900 sm:px-8 sm:py-10">
         <div aria-hidden="true" className="absolute right-5 top-5 grid h-14 w-14 place-items-center border-2 border-red-900/60 font-serif text-xs font-bold leading-tight text-red-900/70 dark:border-red-700/70 dark:text-red-500/80">
           词<br />途
@@ -64,6 +65,10 @@ export default async function StoryPage() {
           reinforced={reinforced}
           dueCount={dueCount}
         />
+      </div>
+
+      <div className="mt-4">
+        <StoryOfflinePreparation />
       </div>
 
       <section aria-labelledby="story-lessons-title" className="mt-9">

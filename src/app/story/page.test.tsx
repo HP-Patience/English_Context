@@ -20,6 +20,11 @@ const mocks = vi.hoisted(() => ({
       currentStep: 2,
       dueReviewCount: 2,
       isUnlocked: true,
+      completionSummary: {
+        lesson: { count: 1, latestDate: '2026-08-22' },
+        step: { count: 2, latestDate: '2026-08-22' },
+        paragraph: { count: 3, latestDate: '2026-08-22', completedCards: 2, totalCards: 4 },
+      },
     },
     {
       id: 'lesson-1',
@@ -33,6 +38,11 @@ const mocks = vi.hoisted(() => ({
       currentStep: 4,
       dueReviewCount: 0,
       isUnlocked: true,
+      completionSummary: {
+        lesson: { count: 0, latestDate: null },
+        step: { count: 0, latestDate: null },
+        paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 3 },
+      },
     },
   ]),
 }))
@@ -47,7 +57,7 @@ import StoryPage from './page'
 
 describe('/story server page', () => {
   it('loads the local user course through the service and renders aggregate progress', async () => {
-    render(await StoryPage())
+    const { container } = render(await StoryPage())
 
     expect(mocks.connection).toHaveBeenCalledOnce()
     expect(mocks.getLocalUserId).toHaveBeenCalledOnce()
@@ -60,5 +70,6 @@ describe('/story server page', () => {
     expect(screen.getByRole('heading', { level: 2, name: '修习卷宗' })).toBeInTheDocument()
     expect(screen.getByText('1 篇')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '继续第 2 步' })).toHaveAttribute('href', '/story/lesson-2')
+    expect(container.firstElementChild).toHaveClass('story-theme')
   })
 })
