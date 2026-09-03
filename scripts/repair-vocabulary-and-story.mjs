@@ -2,6 +2,10 @@ import { readFile, writeFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PrismaClient } from '@prisma/client'
+import {
+  buildHistoricalLessonMappings,
+  migrateClonedLessonHistory,
+} from './lib/repair-story-history.mjs'
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const CACHE_DIR = join(PROJECT_ROOT, 'scripts', '.story-cache', 'lessons')
@@ -222,6 +226,17 @@ async function executeRepair(plan) {
       }
     }
 
+    const publishedCourses = await tx.storyCourse.findMany({
+      where: { status: { in: ['archived', 'ready'] } },
+      include: {
+        lessons: {
+          where: { status: 'ready' },
+          orderBy: { order: 'asc' },
+        },
+      },
+      orderBy: { version: 'asc' },
+    })
+
     const version = (await tx.storyCourse.aggregate({ _max: { version: true } }))._max.version + 1
     const draft = await tx.storyCourse.create({
       data: {
@@ -240,8 +255,11 @@ async function executeRepair(plan) {
 
     const newLessonByOrder = new Map()
     const newLessonWordByOldId = new Map()
+    const lessonMappings = []
     for (const oldLesson of ready.lessons) {
       const source = await tx.storyLesson.findUnique({ where: { id: oldLesson.id }, select: { contentJson: true } })
+      const sourceContent = JSON.parse(source.contentJson)
+      if (!Array.isArray(sourceContent.paragraphs)) throw new Error(`Story lesson ${oldLesson.id} has no paragraphs`)
       const newLesson = await tx.storyLesson.create({
         data: {
           courseId: draft.id,
@@ -259,6 +277,12 @@ async function executeRepair(plan) {
         },
       })
       newLessonByOrder.set(oldLesson.order, newLesson)
+      lessonMappings.push({
+        oldLessonId: oldLesson.id,
+        newLessonId: newLesson.id,
+        order: oldLesson.order,
+        paragraphCount: sourceContent.paragraphs.length,
+      })
       const rows = oldLesson.words.map((oldWord) => {
         const correction = meaningById.get(oldWord.meaningId)
         const newRow = {
@@ -273,6 +297,9 @@ async function executeRepair(plan) {
       })
       if (rows.length) await tx.storyLessonWord.createMany({ data: rows })
     }
+
+    const historyMappings = buildHistoricalLessonMappings(publishedCourses, lessonMappings)
+    const historyMigration = await migrateClonedLessonHistory(tx, historyMappings)
 
     // Preserve progress created against any earlier course version, not only the
     // currently ready course. The app has one logical lesson sequence, so migrate
@@ -318,6 +345,7 @@ async function executeRepair(plan) {
       version: published.version,
       changedLessons: changedLessons.length,
       corrections: correctionRows,
+      historyMigration,
     }
   }, { isolationLevel: 'Serializable', maxWait: 10000, timeout: 120000 })
 
