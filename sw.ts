@@ -1,4 +1,4 @@
-import type { PrecacheEntry, SerwistGlobalConfig } from 'serwist'
+import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from 'serwist'
 import { CacheFirst, ExpirationPlugin, NetworkOnly, Serwist } from 'serwist'
 
 type ActivateEvent = {
@@ -19,7 +19,8 @@ const safePrecacheEntries = self.__SW_MANIFEST?.filter((entry) => {
     : value.split(/[?#]/, 1)[0]
   return pathname.startsWith('/_next/static/')
     || /\.(?:js|css|woff2?|png|jpg|jpeg|svg|ico|webp)$/.test(pathname)
-    || pathname === '/manifest.json'
+    || pathname === '/manifest.webmanifest'
+    || pathname === '/story-offline.html'
 })
 
 const sensitiveCacheNames = new Set([
@@ -43,16 +44,26 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+const apiNetworkOnlyRoutes = (['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const).map((method) => ({
+  matcher: ({ sameOrigin, url: { pathname } }) => sameOrigin && pathname.startsWith('/api/'),
+  handler: new NetworkOnly(),
+  method,
+})) satisfies RuntimeCaching[]
+
 const serwist = new Serwist({
   precacheEntries: safePrecacheEntries,
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
+  fallbacks: {
+    entries: [{
+      url: '/story-offline.html',
+      matcher: ({ request }) => request.mode === 'navigate'
+        && /^\/story(?:\/|$)/.test(new URL(request.url).pathname),
+    }],
+  },
   runtimeCaching: [
-    {
-      matcher: ({ sameOrigin, url: { pathname } }) => sameOrigin && pathname.startsWith('/api/'),
-      handler: new NetworkOnly(),
-    },
+    ...apiNetworkOnlyRoutes,
     {
       matcher: ({ request, sameOrigin }) => sameOrigin
         && (request.mode === 'navigate' || request.headers.get('RSC') === '1'),
