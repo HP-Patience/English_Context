@@ -9,8 +9,14 @@ import { StoryReader } from './StoryReader'
 export type StoryRecallRating = '记得' | '模糊' | '忘记'
 
 type StoryRecallProps = {
-  paragraphs: StoryLessonParagraph[]
-  lessonWords: StoryLessonWordDto[]
+  lessonId: string
+  paragraphs: readonly StoryLessonParagraph[]
+  lessonWords: readonly StoryLessonWordDto[]
+  completedCards: number
+  totalCards: number
+  bookmarkedParagraphIndexes: ReadonlySet<number>
+  onParagraphBookmarkChange: (paragraphIndex: number, bookmarked: boolean) => void
+  onParagraphCompletionDelta?: (paragraphIndex: number, delta: 1 | -1) => void
   onRate?: (lessonWordId: string, rating: StoryRecallRating) => void
 }
 
@@ -27,6 +33,7 @@ export function RecallGlossControl({ word, gloss, visible, onVisibleChange }: Re
       <button
         type="button"
         aria-expanded={visible}
+        aria-pressed={visible}
         aria-label={`${visible ? '隐藏' : '显示'} ${word} 的释义`}
         onClick={() => onVisibleChange(!visible)}
         className="min-h-11 rounded-xl border border-red-800/30 bg-red-50 px-4 py-2 text-sm font-semibold text-red-900 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950"
@@ -37,7 +44,17 @@ export function RecallGlossControl({ word, gloss, visible, onVisibleChange }: Re
   )
 }
 
-export function StoryRecall({ paragraphs, lessonWords, onRate }: StoryRecallProps) {
+export function StoryRecall({
+  lessonId,
+  paragraphs,
+  lessonWords,
+  completedCards,
+  totalCards,
+  bookmarkedParagraphIndexes,
+  onParagraphBookmarkChange,
+  onParagraphCompletionDelta,
+  onRate,
+}: StoryRecallProps) {
   const orderedWords = [...lessonWords].sort((left, right) => left.sortOrder - right.sortOrder)
   const [activeIndex, setActiveIndex] = useState(0)
   const [revealedWordId, setRevealedWordId] = useState<string | null>(null)
@@ -50,7 +67,17 @@ export function StoryRecall({ paragraphs, lessonWords, onRate }: StoryRecallProp
 
   return (
     <div className="space-y-8">
-      <StoryReader paragraphs={paragraphs} mode="recall" />
+      <StoryReader
+        lessonId={lessonId}
+        paragraphs={paragraphs}
+        lessonWords={lessonWords}
+        mode="recall"
+        completedCards={completedCards}
+        totalCards={totalCards}
+        bookmarkedParagraphIndexes={bookmarkedParagraphIndexes}
+        onParagraphBookmarkChange={onParagraphBookmarkChange}
+        onParagraphCompletionDelta={onParagraphCompletionDelta}
+      />
 
       {activeWord ? (
         <section aria-labelledby="recall-check-title" className="rounded-2xl border border-stone-300 bg-stone-100 p-5 dark:border-stone-700 dark:bg-stone-900 sm:p-6">
