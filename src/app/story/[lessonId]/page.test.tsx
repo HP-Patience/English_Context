@@ -89,7 +89,7 @@ describe('/story/[lessonId] server page', () => {
     expect(captured.lesson.content).not.toHaveProperty('continuityNotes')
   })
 
-  it('does not offer a locked later lesson as the next navigation target', async () => {
+  it('offers the next published lesson regardless of legacy unlock state', async () => {
     mocks.listStoryLessons.mockResolvedValueOnce([
       { id: 'lesson-1', order: 1, completedStep: 3, isUnlocked: true },
       { id: 'lesson-2', order: 2, completedStep: 0, isUnlocked: false },
@@ -97,7 +97,7 @@ describe('/story/[lessonId] server page', () => {
 
     render(await StoryLessonPage({ params: Promise.resolve({ lessonId: 'lesson-1' }) }))
 
-    expect(mocks.shellProps[0]).toMatchObject({ nextLessonId: null })
+    expect(mocks.shellProps[0]).toMatchObject({ nextLessonId: 'lesson-2' })
   })
 
   it('rejects malformed dynamic params before querying lesson data', async () => {
