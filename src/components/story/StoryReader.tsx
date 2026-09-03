@@ -1,52 +1,62 @@
-import type { StoryLessonParagraph, TargetWordSegment } from '@/lib/story-types'
+'use client'
+
+import { useState } from 'react'
+
+import type { StoryLessonWordDto } from '@/lib/story-service'
+import type { StoryLessonParagraph } from '@/lib/story-types'
+import { StoryParagraphCard } from './StoryParagraphCard'
 
 type StoryReaderProps = {
-  paragraphs: StoryLessonParagraph[]
-  mode: 'learn' | 'recall'
+  readonly lessonId: string
+  readonly paragraphs: readonly StoryLessonParagraph[]
+  readonly lessonWords: readonly StoryLessonWordDto[]
+  readonly mode: 'learn' | 'recall'
+  readonly completedCards: number
+  readonly totalCards: number
+  readonly bookmarkedParagraphIndexes: ReadonlySet<number>
+  readonly onParagraphBookmarkChange: (paragraphIndex: number, bookmarked: boolean) => void
+  readonly onParagraphCompletionDelta?: (paragraphIndex: number, delta: 1 | -1) => void
+  readonly onFirstParagraphCompletion?: (paragraphIndex: number) => void
 }
 
-type StoryTargetProps = {
-  segment: TargetWordSegment
-  mode: StoryReaderProps['mode']
-}
-
-function StoryTarget({ segment, mode }: StoryTargetProps) {
-  return (
-    <span className="story-target mx-0.5 inline-flex flex-wrap items-baseline gap-1 rounded-md px-1 py-0.5 font-semibold leading-6">
-      <span lang="en">{segment.word}</span>
-      {mode === 'learn' ? (
-        <span className="story-target-gloss font-sans text-xs font-medium">
-          （<span>{segment.definitionCn}</span>）
-        </span>
-      ) : null}
-    </span>
+export function StoryReader({
+  lessonId,
+  paragraphs,
+  lessonWords,
+  mode,
+  completedCards,
+  totalCards,
+  bookmarkedParagraphIndexes,
+  onParagraphBookmarkChange,
+  onParagraphCompletionDelta,
+  onFirstParagraphCompletion,
+}: StoryReaderProps) {
+  const [completionDelta, setCompletionDelta] = useState(0)
+  const sharedCompletedCards = Math.min(
+    totalCards,
+    Math.max(0, completedCards + (onParagraphCompletionDelta || onFirstParagraphCompletion ? 0 : completionDelta)),
   )
-}
 
-export function StoryReader({ paragraphs, mode }: StoryReaderProps) {
   return (
     <div className="space-y-8">
       {paragraphs.map((paragraph, paragraphIndex) => (
-        <section
+        <StoryParagraphCard
           key={`${paragraph.sceneTitle}-${paragraphIndex}`}
-          aria-labelledby={`story-scene-${paragraphIndex}`}
-          className="story-scene relative border-l-2 pl-5 sm:pl-7"
-        >
-          <div aria-hidden="true" className="story-scene-dot absolute -left-[0.43rem] top-1.5 h-3 w-3 rounded-full border-2" />
-          <h3
-            id={`story-scene-${paragraphIndex}`}
-            className="font-serif text-lg font-semibold tracking-wide"
-          >
-            {paragraph.sceneTitle}
-          </h3>
-          <p className="mt-3 text-[1.02rem] leading-9 sm:text-[1.08rem]">
-            {paragraph.segments.map((segment, segmentIndex) => (
-              segment.type === 'text'
-                ? <span key={segmentIndex}>{segment.value}</span>
-                : <StoryTarget key={`${segment.wordOrder}-${segmentIndex}`} segment={segment} mode={mode} />
-            ))}
-          </p>
-        </section>
+          lessonId={lessonId}
+          paragraph={paragraph}
+          paragraphIndex={paragraphIndex}
+          lessonWords={lessonWords}
+          mode={mode}
+          completedCards={sharedCompletedCards}
+          totalCards={totalCards}
+          bookmarked={bookmarkedParagraphIndexes.has(paragraphIndex)}
+          onBookmarkedChange={(bookmarked) => onParagraphBookmarkChange(paragraphIndex, bookmarked)}
+          onCompletionDelta={(delta) => {
+            if (onParagraphCompletionDelta) onParagraphCompletionDelta(paragraphIndex, delta)
+            else if (onFirstParagraphCompletion && delta === 1) onFirstParagraphCompletion(paragraphIndex)
+            else setCompletionDelta((current) => current + delta)
+          }}
+        />
       ))}
     </div>
   )
