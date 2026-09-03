@@ -8,6 +8,7 @@ import SelectionSearch from '@/components/SelectionSearch'
 import { highlightWord } from '@/lib/highlight'
 import { cachedFetch, invalidateCache } from '@/lib/api-cache'
 import AnalysisPanel from '@/components/AnalysisPanel'
+import { WordBookmarkButton } from '@/components/WordBookmarkButton'
 
 type TabType = 'review' | 'relearn' | 'analysis'
 
@@ -54,7 +55,6 @@ export default function ReviewPage() {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({})
   const [tab, setTab] = useState<TabType>('review')
   const [relearnQueue, setRelearnQueue] = useState<ReviewItem[]>([])
   const [relearnIdx, setRelearnIdx] = useState(0)
@@ -66,9 +66,6 @@ export default function ReviewPage() {
     cachedFetch<ReviewItem[]>('/api/review-queue')
       .then((data) => {
         setQueue(data)
-        const bm: Record<string, boolean> = {}
-        data.forEach((d: ReviewItem) => { bm[d.userWord.word.id] = d.userWord.bookmarked })
-        setBookmarks(bm)
         setLoading(false)
         if (data.length === 0) setDone(true)
       })
@@ -81,9 +78,6 @@ export default function ReviewPage() {
     cachedFetch<ReviewItem[]>('/api/relearn')
       .then((data) => {
         setRelearnQueue(data)
-        const bm: Record<string, boolean> = {}
-        data.forEach((d: ReviewItem) => { bm[d.userWord.word.id] = d.userWord.bookmarked })
-        setBookmarks((prev) => ({ ...prev, ...bm }))
         setRelearnLoading(false)
       })
       .catch(() => setRelearnLoading(false))
@@ -114,22 +108,6 @@ export default function ReviewPage() {
       case 'vague': return 2
       case 'forgot': return 0
     }
-  }
-
-  async function toggleBookmark(wordId: string) {
-    try {
-      const res = await fetch('/api/bookmarks/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wordId }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.bookmarked !== undefined) {
-          setBookmarks((prev) => ({ ...prev, [wordId]: data.bookmarked }))
-        }
-      }
-    } catch {}
   }
 
   async function handleNext() {
@@ -459,13 +437,12 @@ export default function ReviewPage() {
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold">{item.userWord.word.text}</h2>
               <PronounceButton word={item.userWord.word.text} />
-              <button
-                onClick={() => toggleBookmark(item.userWord.word.id)}
-                className={`text-base ${bookmarks[item.userWord.word.id] ? 'text-amber-500' : 'text-stone-300 hover:text-amber-400 dark:text-stone-600 dark:hover:text-amber-400'}`}
-                title={bookmarks[item.userWord.word.id] ? '取消收藏' : '收藏'}
-              >
-                {bookmarks[item.userWord.word.id] ? '★' : '☆'}
-              </button>
+              <WordBookmarkButton
+                key={item.userWord.word.id}
+                wordId={item.userWord.word.id}
+                initialBookmarked={item.userWord.bookmarked}
+                size="base"
+              />
             </div>
             <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">
               掌握 {item.wordMastery}%
