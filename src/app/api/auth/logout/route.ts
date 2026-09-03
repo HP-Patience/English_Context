@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   const authConfig = getAuthConfig()
   const response = NextResponse.redirect(new URL('/login', request.url), 303)
   response.headers.set('Cache-Control', 'no-store')
-  response.headers.set('Clear-Site-Data', '"cache"')
+  response.headers.set('Clear-Site-Data', '"cache", "storage"')
   response.cookies.set(AUTH_SESSION_COOKIE, '', {
     ...sessionCookieOptions(authConfig?.secureCookie ?? false),
     expires: new Date(0),
