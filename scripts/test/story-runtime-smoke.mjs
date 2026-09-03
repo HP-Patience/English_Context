@@ -113,11 +113,19 @@ const [
   { GET: getLesson },
   { POST: postProgress },
   { GET: getReviewQueue, POST: postReview },
+  { POST: postParagraphCompletion },
+  { POST: postStepCompletion },
+  { POST: postLessonCompletion },
+  { GET: getOfflineSnapshot },
 ] = await Promise.all([
   import('../../src/app/api/story/lessons/route'),
   import('../../src/app/api/story/lessons/[id]/route'),
   import('../../src/app/api/story/lessons/[id]/progress/route'),
   import('../../src/app/api/story/review/route'),
+  import('../../src/app/api/story/lessons/[id]/paragraphs/[paragraphIndex]/completions/route'),
+  import('../../src/app/api/story/lessons/[id]/steps/[step]/completions/route'),
+  import('../../src/app/api/story/lessons/[id]/completions/route'),
+  import('../../src/app/api/story/offline/route'),
 ])
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -396,6 +404,53 @@ beforeEach(async () => {
 })
 
 describe('story runtime smoke', () => {
+  it('persists dated completions and bookmarks while exposing backlinks and the offline snapshot', async () => {
+    const completionPayload = { completionId: 'runtime-completion-1', date: '2026-09-02' }
+    const paragraphResponse = await postParagraphCompletion(
+      jsonRequest('http://runtime.test/api/story/lessons/fixture-lesson-1/paragraphs/0/completions', completionPayload),
+      { params: Promise.resolve({ id: 'fixture-lesson-1', paragraphIndex: '0' }) },
+    )
+    const stepResponse = await postStepCompletion(
+      jsonRequest('http://runtime.test/api/story/lessons/fixture-lesson-1/steps/1/completions', { ...completionPayload, completionId: 'runtime-step-1' }),
+      { params: Promise.resolve({ id: 'fixture-lesson-1', step: '1' }) },
+    )
+    const lessonResponse = await postLessonCompletion(
+      jsonRequest('http://runtime.test/api/story/lessons/fixture-lesson-1/completions', { ...completionPayload, completionId: 'runtime-lesson-1' }),
+      { params: Promise.resolve({ id: 'fixture-lesson-1' }) },
+    )
+
+    expect([paragraphResponse.status, stepResponse.status, lessonResponse.status]).toEqual([200, 200, 200])
+    expect(injected.prisma.state.userStoryParagraphCompletions.size).toBe(1)
+    expect(injected.prisma.state.userStoryStepCompletions.size).toBe(1)
+    expect(injected.prisma.state.userStoryLessonCompletions.size).toBe(1)
+
+    const bookmark = await injected.prisma.userStoryParagraphBookmark.create({
+      data: { userId: LOCAL_USER_ID, lessonId: 'fixture-lesson-1', paragraphIndex: 0 },
+    })
+    expect(bookmark).toMatchObject({ lessonId: 'fixture-lesson-1', paragraphIndex: 0 })
+    await expect(injected.prisma.userStoryParagraphBookmark.findMany({
+      where: { userId: LOCAL_USER_ID, lesson: { status: 'ready', course: { readySlot: 'ready', status: 'ready' } } },
+    })).resolves.toEqual([expect.objectContaining({ id: bookmark.id })])
+
+    await expect(injected.prisma.storyLessonWord.findMany({
+      where: { wordId: 'fixture-word-resolve', lesson: { status: 'ready', course: { readySlot: 'ready', status: 'ready' } } },
+      include: { lesson: { select: { id: true, order: true, title: true, contentJson: true } } },
+    })).resolves.toEqual([
+      expect.objectContaining({ sortOrder: 1, lesson: expect.objectContaining({ id: 'fixture-lesson-1' }) }),
+    ])
+
+    const offlineResponse = await getOfflineSnapshot()
+    expect(offlineResponse.status).toBe(200)
+    expect(await responseJson(offlineResponse)).toMatchObject({
+      schemaVersion: 1,
+      courseVersion: 1,
+      lessons: [
+        expect.objectContaining({ id: 'fixture-lesson-1' }),
+        expect.objectContaining({ id: 'fixture-lesson-2' }),
+      ],
+    })
+  })
+
   it('persists one seeded-user ready-course journey through Step1-Step4 without blocking the next lesson', async () => {
     const initialListResponse = await getLessons()
     expect(initialListResponse.status).toBe(200)

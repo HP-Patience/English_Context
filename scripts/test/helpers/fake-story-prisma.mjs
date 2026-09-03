@@ -1,6 +1,9 @@
 function matchesWhere(row, where = {}) {
   return Object.entries(where).every(([key, expected]) => {
+    if (key === 'NOT') return !matchesWhere(row, expected)
     if (key === 'id' && expected && typeof expected === 'object' && Object.hasOwn(expected, 'not')) return row.id !== expected.not
+    if (expected && typeof expected === 'object' && Object.hasOwn(expected, 'in')) return expected.in.includes(row[key])
+    if (expected && typeof expected === 'object' && Object.hasOwn(expected, 'not')) return row[key] !== expected.not
     if (expected && typeof expected === 'object' && !Array.isArray(expected)) return matchesWhere(row[key] ?? {}, expected)
     return row[key] === expected
   })
@@ -26,6 +29,10 @@ function snapshotState(state) {
     userStoryProgress: structuredClone(state.userStoryProgress),
     userStoryWordProgress: structuredClone(state.userStoryWordProgress),
     storyReviewAttempts: structuredClone(state.storyReviewAttempts),
+    userStoryParagraphCompletions: structuredClone(state.userStoryParagraphCompletions),
+    userStoryStepCompletions: structuredClone(state.userStoryStepCompletions),
+    userStoryLessonCompletions: structuredClone(state.userStoryLessonCompletions),
+    userStoryParagraphBookmarks: structuredClone(state.userStoryParagraphBookmarks),
     userWords: structuredClone(state.userWords),
     userWordMeanings: structuredClone(state.userWordMeanings),
     nextUser: state.nextUser,
@@ -35,6 +42,10 @@ function snapshotState(state) {
     nextProgress: state.nextProgress,
     nextWordProgress: state.nextWordProgress,
     nextReviewAttempt: state.nextReviewAttempt,
+    nextParagraphCompletion: state.nextParagraphCompletion,
+    nextStepCompletion: state.nextStepCompletion,
+    nextLessonCompletion: state.nextLessonCompletion,
+    nextParagraphBookmark: state.nextParagraphBookmark,
     nextUserWord: state.nextUserWord,
     nextUserWordMeaning: state.nextUserWordMeaning,
   }
@@ -50,6 +61,10 @@ function restoreState(state, snapshot) {
   state.userStoryProgress = snapshot.userStoryProgress
   state.userStoryWordProgress = snapshot.userStoryWordProgress
   state.storyReviewAttempts = snapshot.storyReviewAttempts
+  state.userStoryParagraphCompletions = snapshot.userStoryParagraphCompletions
+  state.userStoryStepCompletions = snapshot.userStoryStepCompletions
+  state.userStoryLessonCompletions = snapshot.userStoryLessonCompletions
+  state.userStoryParagraphBookmarks = snapshot.userStoryParagraphBookmarks
   state.userWords = snapshot.userWords
   state.userWordMeanings = snapshot.userWordMeanings
   state.nextUser = snapshot.nextUser
@@ -59,6 +74,10 @@ function restoreState(state, snapshot) {
   state.nextProgress = snapshot.nextProgress
   state.nextWordProgress = snapshot.nextWordProgress
   state.nextReviewAttempt = snapshot.nextReviewAttempt
+  state.nextParagraphCompletion = snapshot.nextParagraphCompletion
+  state.nextStepCompletion = snapshot.nextStepCompletion
+  state.nextLessonCompletion = snapshot.nextLessonCompletion
+  state.nextParagraphBookmark = snapshot.nextParagraphBookmark
   state.nextUserWord = snapshot.nextUserWord
   state.nextUserWordMeaning = snapshot.nextUserWordMeaning
 }
@@ -75,6 +94,10 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
     userStoryProgress: new Map(),
     userStoryWordProgress: new Map(),
     storyReviewAttempts: new Map(),
+    userStoryParagraphCompletions: new Map(),
+    userStoryStepCompletions: new Map(),
+    userStoryLessonCompletions: new Map(),
+    userStoryParagraphBookmarks: new Map(),
     userWords: new Map(),
     userWordMeanings: new Map(),
     wordGroups,
@@ -85,6 +108,10 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
     nextProgress: 1,
     nextWordProgress: 1,
     nextReviewAttempt: 1,
+    nextParagraphCompletion: 1,
+    nextStepCompletion: 1,
+    nextLessonCompletion: 1,
+    nextParagraphBookmark: 1,
     nextUserWord: 1,
     nextUserWordMeaning: 1,
   }
@@ -118,6 +145,18 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
   function requireLesson(lessonId) {
     if (!state.lessons.has(lessonId)) throw fixtureError(`unknown story lesson ${lessonId}`)
     return state.lessons.get(lessonId)
+  }
+
+  function matchesLessonWhere(lesson, where = {}) {
+    const { course: courseWhere, ...lessonWhere } = where
+    if (!matchesWhere(lesson, lessonWhere)) return false
+    return !courseWhere || matchesWhere(requireCourse(lesson.courseId), courseWhere)
+  }
+
+  function matchesLessonWordWhere(lessonWord, where = {}) {
+    const { lesson: lessonWhere, ...wordWhere } = where
+    if (!matchesWhere(lessonWord, wordWhere)) return false
+    return !lessonWhere || matchesLessonWhere(requireLesson(lessonWord.lessonId), lessonWhere)
   }
 
   function requireLessonWord(lessonWordId) {
@@ -172,6 +211,10 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
     assertMapIds('Word', state.words)
     assertMapIds('Meaning', state.meanings)
     assertMapIds('UserWordMeaning', state.userWordMeanings)
+    assertMapIds('UserStoryParagraphCompletion', state.userStoryParagraphCompletions)
+    assertMapIds('UserStoryStepCompletion', state.userStoryStepCompletions)
+    assertMapIds('UserStoryLessonCompletion', state.userStoryLessonCompletions)
+    assertMapIds('UserStoryParagraphBookmark', state.userStoryParagraphBookmarks)
 
     const users = [...state.users.values()]
     assertUnique(users, (row) => row.email, 'User.email', { ignoreNull: true })
@@ -261,6 +304,26 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
       requireUser(row.userId)
       requireLessonWord(row.lessonWordId)
     }
+    for (const rows of [
+      state.userStoryParagraphCompletions,
+      state.userStoryStepCompletions,
+      state.userStoryLessonCompletions,
+    ]) {
+      assertUnique([...rows.values()], (row) => `${row.userId}:${row.completionId}`, 'story completion(userId,completionId)')
+      for (const row of rows.values()) {
+        requireUser(row.userId)
+        requireLesson(row.lessonId)
+      }
+    }
+    assertUnique(
+      [...state.userStoryParagraphBookmarks.values()],
+      (row) => `${row.userId}:${row.lessonId}:${row.paragraphIndex}`,
+      'UserStoryParagraphBookmark(userId,lessonId,paragraphIndex)',
+    )
+    for (const row of state.userStoryParagraphBookmarks.values()) {
+      requireUser(row.userId)
+      requireLesson(row.lessonId)
+    }
     for (const [key, row] of state.userWords) {
       if (key !== `${row.userId}:${row.wordId}`) throw fixtureError(`invalid UserWord key ${key}`)
       requireUser(row.userId)
@@ -282,8 +345,9 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
     return relation?.take ? ordered.slice(0, relation.take) : ordered
   }
 
-  function includeLessonWordRelations(lessonWord, include) {
+  function includeLessonWordRelations(lessonWord, relations) {
     if (!lessonWord) return null
+    const include = relations?.select ?? relations?.include ?? relations
     const result = structuredClone(lessonWord)
     if (include?.word) result.word = structuredClone(state.words.get(lessonWord.wordId))
     if (include?.meaning) result.meaning = structuredClone(state.meanings.get(lessonWord.meaningId))
@@ -300,13 +364,14 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
       ))
     }
     if (include?.lesson) {
-      result.lesson = includeLessonRelations(state.lessons.get(lessonWord.lessonId), include.lesson.include)
+      result.lesson = includeLessonRelations(state.lessons.get(lessonWord.lessonId), include.lesson)
     }
     return result
   }
 
-  function includeLessonRelations(lesson, include) {
+  function includeLessonRelations(lesson, relations) {
     if (!lesson) return null
+    const include = relations?.select ?? relations?.include ?? relations
     const result = structuredClone(lesson)
     if (include?.userProgress) {
       result.userProgress = structuredClone(rowsForRelation(
@@ -318,22 +383,78 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
       result.words = sortRows(
         [...state.lessonWords.values()]
           .filter((row) => row.lessonId === lesson.id)
-          .map((row) => includeLessonWordRelations(row, include.words.include)),
+          .map((row) => includeLessonWordRelations(row, include.words)),
         include.words.orderBy,
       )
     }
     return result
   }
 
-  function includeCourseRelations(course, include) {
+  function includeCourseRelations(course, relations) {
+    const include = relations?.select ?? relations?.include ?? relations
     if (!course || !include?.lessons) return course ? structuredClone(course) : null
     const lessonRows = sortRows(
       [...state.lessons.values()]
-        .filter((lesson) => lesson.courseId === course.id)
-        .map((lesson) => includeLessonRelations(lesson, include.lessons.include)),
+        .filter((lesson) => lesson.courseId === course.id && matchesWhere(lesson, include.lessons.where))
+        .map((lesson) => includeLessonRelations(lesson, include.lessons)),
       include.lessons.orderBy,
     )
     return { ...structuredClone(course), lessons: lessonRows }
+  }
+
+  function completionDelegate(rows, idPrefix, counterField) {
+    return {
+      async findMany({ where } = {}) {
+        return [...rows.values()]
+          .filter((row) => matchesWhere(row, where))
+          .sort((left, right) => (
+            new Date(right.completionDate).getTime() - new Date(left.completionDate).getTime()
+            || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+            || left.id.localeCompare(right.id)
+          ))
+          .map((row) => structuredClone(row))
+      },
+      async groupBy({ by, where } = {}) {
+        const groups = new Map()
+        for (const row of rows.values()) {
+          if (!matchesWhere(row, where)) continue
+          const dimensions = Object.fromEntries(by.map((field) => [field, row[field]]))
+          const key = JSON.stringify(dimensions)
+          const current = groups.get(key)
+          const completionDate = current === undefined || new Date(row.completionDate) > new Date(current._max.completionDate)
+            ? row.completionDate
+            : current._max.completionDate
+          groups.set(key, {
+            ...dimensions,
+            _count: { _all: (current?._count._all ?? 0) + 1 },
+            _max: { completionDate },
+          })
+        }
+        return structuredClone([...groups.values()])
+      },
+      async upsert({ where, create, update }) {
+        const key = where.userId_completionId
+        const current = [...rows.values()].find((row) => row.userId === key.userId && row.completionId === key.completionId)
+        if (current) return structuredClone({ ...current, ...structuredClone(update) })
+        requireUser(create.userId)
+        requireLesson(create.lessonId)
+        const row = {
+          id: `${idPrefix}-${state[counterField]++}`,
+          createdAt: new Date(),
+          ...structuredClone(create),
+        }
+        rows.set(row.id, row)
+        return structuredClone(row)
+      },
+      async update({ where, data }) {
+        const current = rows.get(where.id)
+        if (!current) throw new Error(`${idPrefix} not found: ${where.id}`)
+        const row = { ...current, ...structuredClone(data) }
+        requireLesson(row.lessonId)
+        rows.set(row.id, row)
+        return structuredClone(row)
+      },
+    }
   }
 
   const client = {
@@ -388,9 +509,22 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
       async findMany() { return structuredClone(state.wordGroups) },
     },
     word: {
-      async findUnique({ where }) {
+      async findUnique({ where, include }) {
         const row = state.words.get(where.id)
-        return row ? structuredClone(row) : null
+        if (!row) return null
+        const result = structuredClone(row)
+        if (include?.meanings) {
+          result.meanings = [...state.meanings.values()]
+            .filter((meaning) => meaning.wordId === row.id)
+            .map((meaning) => ({ ...structuredClone(meaning), userWordMeanings: [] }))
+        }
+        if (include?.userWords) {
+          result.userWords = [...state.userWords.values()]
+            .filter((userWord) => userWord.wordId === row.id && matchesWhere(userWord, include.userWords.where))
+            .map((userWord) => structuredClone(userWord))
+        }
+        if (include?.groups) result.groups = []
+        return result
       },
       async update({ where, data }) {
         const current = state.words.get(where.id)
@@ -408,11 +542,11 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
       async findMany({ where, orderBy } = {}) {
         return sortRows([...state.courses.values()].filter((row) => matchesWhere(row, where)).map((row) => structuredClone(row)), orderBy)
       },
-      async findUnique({ where, include } = {}) {
+      async findUnique({ where, include, select } = {}) {
         const course = where.id
           ? state.courses.get(where.id)
           : [...state.courses.values()].find((row) => matchesWhere(row, where))
-        return includeCourseRelations(course, include)
+        return includeCourseRelations(course, include ?? select)
       },
       async aggregate() {
         const versions = [...state.courses.values()].map((course) => course.version)
@@ -446,17 +580,21 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
     storyLesson: {
       async findMany({ where, orderBy, include } = {}) {
         return sortRows(
-          [...state.lessons.values()].filter((row) => matchesWhere(row, where)).map((row) => includeLessonRelations(row, include)),
+          [...state.lessons.values()].filter((row) => matchesLessonWhere(row, where)).map((row) => includeLessonRelations(row, include)),
           orderBy,
         )
       },
       async findUnique({ where }) {
+        if (where.id) {
+          const row = state.lessons.get(where.id)
+          return row ? structuredClone(row) : null
+        }
         const key = where.courseId_order
         const row = [...state.lessons.values()].find((lesson) => lesson.courseId === key.courseId && lesson.order === key.order)
         return row ? structuredClone(row) : null
       },
       async findFirst({ where, include } = {}) {
-        const row = [...state.lessons.values()].find((lesson) => matchesWhere(lesson, where))
+        const row = [...state.lessons.values()].find((lesson) => matchesLessonWhere(lesson, where))
         return includeLessonRelations(row, include)
       },
       async upsert({ where, create, update }) {
@@ -540,6 +678,75 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
         return { count }
       },
     },
+    userStoryParagraphCompletion: completionDelegate(
+      state.userStoryParagraphCompletions,
+      'story-paragraph-completion',
+      'nextParagraphCompletion',
+    ),
+    userStoryStepCompletion: completionDelegate(
+      state.userStoryStepCompletions,
+      'story-step-completion',
+      'nextStepCompletion',
+    ),
+    userStoryLessonCompletion: completionDelegate(
+      state.userStoryLessonCompletions,
+      'story-lesson-completion',
+      'nextLessonCompletion',
+    ),
+    userStoryParagraphBookmark: {
+      async findMany({ where } = {}) {
+        return [...state.userStoryParagraphBookmarks.values()]
+          .filter((row) => {
+            const { lesson: lessonWhere, ...bookmarkWhere } = where ?? {}
+            return matchesWhere(row, bookmarkWhere)
+              && (!lessonWhere || matchesLessonWhere(requireLesson(row.lessonId), lessonWhere))
+          })
+          .map((row) => ({
+            ...structuredClone(row),
+            lesson: includeLessonRelations(requireLesson(row.lessonId), { select: { order: true, title: true, contentJson: true } }),
+          }))
+      },
+      async findUnique({ where }) {
+        const key = where.userId_lessonId_paragraphIndex
+        const row = [...state.userStoryParagraphBookmarks.values()].find((candidate) => (
+          candidate.userId === key.userId
+          && candidate.lessonId === key.lessonId
+          && candidate.paragraphIndex === key.paragraphIndex
+        ))
+        return row ? {
+          ...structuredClone(row),
+          lesson: includeLessonRelations(requireLesson(row.lessonId), { select: { order: true, title: true, contentJson: true } }),
+        } : null
+      },
+      async create({ data }) {
+        requireUser(data.userId)
+        const lesson = requireLesson(data.lessonId)
+        const duplicate = [...state.userStoryParagraphBookmarks.values()].find((row) => (
+          row.userId === data.userId && row.lessonId === data.lessonId && row.paragraphIndex === data.paragraphIndex
+        ))
+        if (duplicate) throw new Error('unique story paragraph bookmark violation')
+        const row = { id: `story-paragraph-bookmark-${state.nextParagraphBookmark++}`, createdAt: new Date(), ...structuredClone(data) }
+        state.userStoryParagraphBookmarks.set(row.id, row)
+        return { ...structuredClone(row), lesson: structuredClone(lesson) }
+      },
+      async delete({ where }) {
+        const key = where.userId_lessonId_paragraphIndex
+        const entry = [...state.userStoryParagraphBookmarks.entries()].find(([, row]) => (
+          row.userId === key.userId && row.lessonId === key.lessonId && row.paragraphIndex === key.paragraphIndex
+        ))
+        if (!entry) throw new Error('story paragraph bookmark not found')
+        state.userStoryParagraphBookmarks.delete(entry[0])
+        return structuredClone(entry[1])
+      },
+      async update({ where, data }) {
+        const current = state.userStoryParagraphBookmarks.get(where.id)
+        if (!current) throw new Error(`story paragraph bookmark not found: ${where.id}`)
+        const row = { ...current, ...structuredClone(data) }
+        requireLesson(row.lessonId)
+        state.userStoryParagraphBookmarks.set(row.id, row)
+        return structuredClone(row)
+      },
+    },
     userStoryWordProgress: {
       async findUnique({ where }) {
         const key = where.userId_lessonWordId
@@ -582,6 +789,16 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
       },
     },
     userWord: {
+      async findMany({ where } = {}) {
+        return [...state.userWords.values()]
+          .filter((row) => matchesWhere(row, where))
+          .map((row) => structuredClone(row))
+      },
+      async findUnique({ where }) {
+        const key = where.userId_wordId
+        const row = state.userWords.get(`${key.userId}:${key.wordId}`)
+        return row ? structuredClone(row) : null
+      },
       async upsert({ where, create, update }) {
         const key = where.userId_wordId
         if (create.userId !== key.userId || create.wordId !== key.wordId) {
@@ -640,6 +857,11 @@ export function createFakeStoryPrisma({ wordGroups = [] } = {}) {
       },
     },
     storyLessonWord: {
+      async findMany({ where, include } = {}) {
+        return [...state.lessonWords.values()]
+          .filter((row) => matchesLessonWordWhere(row, where))
+          .map((row) => includeLessonWordRelations(row, include))
+      },
       async findFirst({ where, include } = {}) {
         const lessonWhere = where?.lesson
         const wordWhere = { ...(where ?? {}) }
