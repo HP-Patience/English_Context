@@ -1,256 +1,140 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import PronounceButton from '@/components/PronounceButton'
-import SentenceTTSButton from '@/components/SentenceTTSButton'
-import SelectionSearch from '@/components/SelectionSearch'
-import { highlightWord } from '@/lib/highlight'
+
 import Loading from '@/components/Loading'
+import PronounceButton from '@/components/PronounceButton'
+import { invalidateCache } from '@/lib/api-cache'
+import type { BookmarkStatePayload } from '@/lib/bookmark-api-types'
 
-type WordDetail = {
-  id: string
-  text: string
-  meanings: Array<{
-    id: string
-    partOfSpeech: string
-    definition: string
-    definitionCn: string | null
-    userWordMeanings: Array<{
-      id: string
-      mastery: number
-      easeFactor: number
-      interval: number
-      nextReviewAt: string
-      sentences: Array<{
-        sentenceText: string
-        sentenceCn: string | null
-        contextTopic: string | null
-      }>
-    }>
-  }>
-  groups: Array<{
-    wordGroup: { id: string; name: string }
-  }>
-}
-
-type UserWordInfo = {
-  id: string
-  mastery: number
-  status: string
-  bookmarked: boolean
-}
+import { StoryReferences } from './StoryReferences'
+import { WordLearningContent } from './WordLearningContent'
+import type { UserWordInfo, WordDetail, WordDetailResponse } from './word-detail-types'
 
 export default function WordDetailPage() {
-  const params = useParams()
+  const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const id = params.id as string
-
   const [word, setWord] = useState<WordDetail | null>(null)
   const [userWord, setUserWord] = useState<UserWordInfo | null>(null)
+  const [storyReferences, setStoryReferences] = useState<WordDetailResponse['storyReferences']>([])
   const [error, setError] = useState('')
+  const [bookmarkError, setBookmarkError] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
-  const loading = !word && !error
+  const [savingBookmark, setSavingBookmark] = useState(false)
+  const loading = word === null && error.length === 0
 
   useEffect(() => {
     if (!id) return
     fetch(`/api/words/${id}`)
-      .then((r) => {
-        if (!r.ok) throw new Error('未找到单词')
-        return r.json()
+      .then(async (response): Promise<WordDetailResponse> => {
+        if (!response.ok) throw new WordNotFoundError()
+        return response.json()
       })
       .then((data) => {
         setWord(data.word)
-        const uw = data.word.userWords?.[0]
-        if (uw) {
-          setUserWord(uw)
-          setBookmarked(uw.bookmarked ?? false)
+        setStoryReferences(data.storyReferences)
+        const currentUserWord = data.word.userWords[0]
+        if (currentUserWord) {
+          setUserWord(currentUserWord)
+          setBookmarked(currentUserWord.bookmarked)
         }
       })
-      .catch((e) => setError(e.message))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : '单词加载失败，请稍后重试。'))
   }, [id])
 
-  async function toggleBookmark() {
+  async function toggleBookmark(): Promise<void> {
     if (!word) return
+    setSavingBookmark(true)
+    setBookmarkError('')
     try {
-      const res = await fetch('/api/bookmarks/toggle', {
+      const payload: BookmarkStatePayload = { type: 'word', wordId: word.id, bookmarked: !bookmarked }
+      const response = await fetch('/api/bookmarks/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wordId: word.id }),
+        body: JSON.stringify(payload),
       })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.bookmarked !== undefined) setBookmarked(data.bookmarked)
+      if (!response.ok) {
+        setBookmarkError('收藏状态保存失败，请稍后重试。')
+        return
       }
-    } catch {}
+      const data: { readonly bookmarked: boolean } = await response.json()
+      invalidateCache('/api/bookmarks')
+      setBookmarked(data.bookmarked)
+    } catch (caught) {
+      setBookmarkError(caught instanceof Error ? '网络连接失败，请稍后重试。' : '收藏状态保存失败，请稍后重试。')
+    } finally {
+      setSavingBookmark(false)
+    }
   }
 
-  function masteryLabel(m: number): string {
-    if (m >= 75) return '已掌握'
-    if (m >= 25) return '学习中'
-    if (m > 0) return '初学'
-    return '未学'
-  }
-
-  function masteryColor(m: number): string {
-    if (m >= 75) return 'text-green-600 dark:text-green-400'
-    if (m >= 25) return 'text-amber-600 dark:text-amber-400'
-    return 'text-stone-400 dark:text-stone-500'
-  }
-
-  if (loading) {
-    return <div className="mx-auto max-w-lg"><Loading /></div>
-  }
+  if (loading) return <div className="mx-auto max-w-lg"><Loading /></div>
 
   if (error || !word) {
     return (
       <div className="mx-auto max-w-lg py-16 text-center">
-        <p className="text-sm text-stone-400 dark:text-stone-500">{error || '单词未找到'}</p>
-        <button onClick={() => router.back()} className="mt-4 rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900">返回</button>
+        <p className="text-sm text-stone-500 dark:text-stone-400">{error || '单词未找到'}</p>
+        <button type="button" onClick={() => router.back()} className="mt-4 min-h-11 rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900">返回</button>
       </div>
     )
   }
 
   return (
     <div className="mx-auto max-w-lg">
-      {/* Word header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-stone-900 dark:text-stone-100">{word.text}</h1>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h1 className="break-words font-serif text-3xl font-bold text-stone-900 dark:text-stone-100" lang="en">{word.text}</h1>
           <PronounceButton word={word.text} />
           <button
+            type="button"
             onClick={toggleBookmark}
-            className={`text-xl ${bookmarked ? 'text-amber-500' : 'text-stone-300 hover:text-amber-400 dark:text-stone-600 dark:hover:text-amber-400'}`}
-            title={bookmarked ? '取消收藏' : '收藏'}
+            disabled={savingBookmark}
+            aria-pressed={bookmarked}
+            aria-label={`${bookmarked ? '取消收藏' : '收藏'}单词 ${word.text}`}
+            className={`inline-flex min-h-11 items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 dark:focus-visible:ring-offset-stone-950 ${bookmarked ? 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200' : 'border-stone-200 bg-white text-stone-600 hover:border-amber-300 hover:text-amber-700 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:border-amber-700 dark:hover:text-amber-300'}`}
           >
-            {bookmarked ? '★' : '☆'}
+            {savingBookmark ? '保存中' : bookmarked ? '已收藏' : '收藏'}
           </button>
         </div>
-        {userWord && (
-          <span className={`rounded-full bg-stone-100 px-3 py-1 text-xs font-medium dark:bg-stone-800 ${masteryColor(userWord.mastery)}`}>
-            {masteryLabel(userWord.mastery)} {userWord.mastery > 0 && `· ${userWord.mastery}%`}
-          </span>
-        )}
-      </div>
+        {userWord ? <span className={`rounded-full bg-stone-100 px-3 py-1 text-xs font-medium dark:bg-stone-800 ${masteryColor(userWord.mastery)}`}>{masteryLabel(userWord.mastery)} {userWord.mastery > 0 ? `· ${userWord.mastery}%` : ''}</span> : null}
+      </header>
 
-      {/* Groups */}
-      {word.groups.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2">
-          {word.groups.map((g) => (
-            <button
-              key={g.wordGroup.id}
-              onClick={() => router.push(`/learn?groupId=${g.wordGroup.id}`)}
-              className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-500 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700"
-            >
-              {g.wordGroup.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {bookmarkError ? <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">{bookmarkError}</p> : null}
 
-      {/* Meanings */}
-      <div className="mb-6 space-y-4">
-        <h2 className="text-sm font-medium text-stone-500 dark:text-stone-400">释义</h2>
-        {word.meanings.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-stone-200 bg-white px-5 py-8 text-center text-sm text-stone-400 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500">
-            该单词的坏释义已清理，当前暂无可显示内容。
-          </div>
-        ) : word.meanings.map((m) => {
-          const uwm = m.userWordMeanings[0]
-          return (
-            <div
-              key={m.id}
-              className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900"
-            >
-              <div className="mb-1">
-                <span className="text-xs font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
-                  {m.partOfSpeech}
-                </span>
-                {uwm && (
-                  <span className="ml-2 text-xs text-stone-400 dark:text-stone-500">
-                    掌握 {uwm.mastery}% · 间隔 {uwm.interval}天
-                  </span>
-                )}
-              </div>
-              <SelectionSearch><p className="text-base font-medium text-stone-900 dark:text-stone-100">{m.definition}</p></SelectionSearch>
-              {m.definitionCn && m.definitionCn !== m.definition && (
-                <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{m.definitionCn}</p>
-              )}
-            </div>
-          )
-        })}
-      </div>
+      {word.groups.length > 0 ? (
+        <nav aria-label="所属词组" className="mb-6 flex flex-wrap gap-2">
+          {word.groups.map((group) => <button type="button" key={group.wordGroup.id} onClick={() => router.push(`/learn?groupId=${group.wordGroup.id}`)} className="min-h-11 rounded-full bg-stone-100 px-3 py-2 text-xs text-stone-500 hover:bg-stone-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700">{group.wordGroup.name}</button>)}
+        </nav>
+      ) : null}
 
-      {/* Sentences */}
-      {word.meanings.some((m) => m.userWordMeanings[0]?.sentences?.length > 0) && (
-        <div className="mb-6 space-y-3">
-          <h2 className="text-sm font-medium text-stone-500 dark:text-stone-400">例句与译文</h2>
-          {word.meanings.map((m) => {
-            const sentences = m.userWordMeanings[0]?.sentences ?? []
-            if (sentences.length === 0) return null
-            return (
-              <div key={m.id} className="space-y-2">
-                {sentences.map((s, i) => (
-                  <div key={i}>
-                    <div className="mb-1 flex justify-end">
-                      <SentenceTTSButton text={s.sentenceText} />
-                    </div>
-                    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900"
-                    >
-                      <SelectionSearch>
-                        <p className="text-sm leading-relaxed text-stone-800 dark:text-stone-200">
-                          {highlightWord(s.sentenceText, word.text).map((part, j) =>
-                            part.highlight ? (
-                              <span key={j} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
-                            ) : (
-                              <span key={j}>{part.text}</span>
-                            )
-                          )}
-                        </p>
-                      </SelectionSearch>
-                      {s.sentenceCn && (
-                        <p className="mt-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
-                          {s.sentenceCn}
-                        </p>
-                      )}
-                    {s.contextTopic && (
-                      <span className="mt-1.5 inline-block rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-400 dark:bg-stone-800 dark:text-stone-500">
-                        {s.contextTopic}
-                      </span>
-                    )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )
-          })}
-        </div>
-      )}
+      <WordLearningContent word={word} />
+      <StoryReferences references={storyReferences} />
 
-      {/* Action buttons */}
       <div className="mt-8 flex gap-3">
-        {userWord && userWord.mastery > 0 ? (
-          <button
-            onClick={() => router.push('/review')}
-            className="flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
-          >
-            去复习
-          </button>
-        ) : word.groups.length > 0 ? (
-          <button
-            onClick={() => router.push(`/learn?groupId=${word.groups[0].wordGroup.id}`)}
-            className="flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
-          >
-            从 {word.groups[0].wordGroup.name} 学习
-          </button>
-        ) : null}
-        <button
-          onClick={() => router.back()}
-          className="rounded-xl border border-stone-200 px-4 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800"
-        >
-          返回
-        </button>
+        {userWord && userWord.mastery > 0 ? <button type="button" onClick={() => router.push('/review')} className="min-h-12 flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">去复习</button> : word.groups[0] ? <button type="button" onClick={() => router.push(`/learn?groupId=${word.groups[0]?.wordGroup.id}`)} className="min-h-12 flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">从 {word.groups[0].wordGroup.name} 学习</button> : null}
+        <button type="button" onClick={() => router.back()} className="min-h-12 rounded-xl border border-stone-200 px-4 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">返回</button>
       </div>
     </div>
   )
+}
+
+function masteryLabel(mastery: number): string {
+  if (mastery >= 75) return '已掌握'
+  if (mastery >= 25) return '学习中'
+  if (mastery > 0) return '初学'
+  return '未学'
+}
+
+function masteryColor(mastery: number): string {
+  if (mastery >= 75) return 'text-green-600 dark:text-green-400'
+  if (mastery >= 25) return 'text-amber-700 dark:text-amber-400'
+  return 'text-stone-500 dark:text-stone-400'
+}
+
+class WordNotFoundError extends Error {
+  readonly name = 'WordNotFoundError'
+
+  constructor() {
+    super('未找到单词')
+  }
 }
