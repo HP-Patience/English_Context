@@ -7,6 +7,7 @@ import SentenceTTSButton from '@/components/SentenceTTSButton'
 import SelectionSearch from '@/components/SelectionSearch'
 import { highlightWord } from '@/lib/highlight'
 import Loading from '@/components/Loading'
+import { WordBookmarkButton } from '@/components/WordBookmarkButton'
 
 type LearnItem = {
   id: string
@@ -37,7 +38,6 @@ function LearnPageContent() {
   const [doneInfo, setDoneInfo] = useState<any>(null)
   const [revealed, setRevealed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [bookmarked, setBookmarked] = useState(false)
   const [selfRate, setSelfRate] = useState<'clear' | 'vague' | 'forgot' | null>(null)
   const [showForgotAfterClear, setShowForgotAfterClear] = useState(false)
   const [stack, setStack] = useState<LearnItem[]>([])
@@ -65,7 +65,6 @@ function LearnPageContent() {
         setDoneInfo(data)
       } else {
         setItem(data)
-        setBookmarked(data.bookmarked ?? false)
       }
       return
     }
@@ -80,7 +79,6 @@ function LearnPageContent() {
         setDoneInfo(data)
       } else {
         setItem(data)
-        setBookmarked(data.bookmarked ?? false)
       }
     } catch {
       setDone(true)
@@ -291,25 +289,12 @@ function LearnPageContent() {
         <div className="flex items-center justify-center gap-2">
           <h1 className="text-3xl font-bold">{item.word}</h1>
           <PronounceButton word={item.word} />
-          <button
-            onClick={async () => {
-              try {
-                const res = await fetch('/api/bookmarks/toggle', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ wordId: item.wordId }),
-                })
-                if (res.ok) {
-                  const data = await res.json()
-                  if (data.bookmarked !== undefined) setBookmarked(data.bookmarked)
-                }
-              } catch {}
-            }}
-            className={`text-lg ${bookmarked ? 'text-amber-500' : 'text-stone-300 hover:text-amber-400 dark:text-stone-600 dark:hover:text-amber-400'}`}
-            title={bookmarked ? '取消收藏' : '收藏'}
-          >
-            {bookmarked ? '★' : '☆'}
-          </button>
+          <WordBookmarkButton
+            key={item.wordId}
+            wordId={item.wordId}
+            initialBookmarked={item.bookmarked}
+            size="large"
+          />
         </div>
         {revealed && (
           <div className="mt-2 flex items-center justify-center gap-3 text-sm">
