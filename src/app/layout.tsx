@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'ContextVocab — 语境背单词',
   description: '通过个性化语境背英语单词',
-  manifest: '/manifest.json',
+  manifest: '/manifest.webmanifest',
   icons: {
     apple: '/apple-touch-icon.png',
   },
