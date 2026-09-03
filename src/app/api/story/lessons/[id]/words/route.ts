@@ -36,12 +36,6 @@ export async function GET(
   } catch (error) {
     const status = classifyStoryApiError(error)
     if (status === 500) console.error('Failed to list story lesson words', error)
-    if (status === 403) {
-      return NextResponse.json(
-        { error: 'Story lesson is locked', code: 'STORY_LESSON_LOCKED' },
-        { status },
-      )
-    }
     return NextResponse.json({ error: status === 404 ? 'Story lesson not found' : 'Internal server error' }, { status })
   }
 }
