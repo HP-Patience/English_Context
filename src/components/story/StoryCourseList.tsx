@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import type { StoryLessonListItem } from '@/lib/story-service'
+import { CompletionDateHistory } from './CompletionDateHistory'
 
 type CourseLesson = StoryLessonListItem & {
   publicationStatus?: 'ready' | 'draft' | 'failed' | 'archived'
@@ -57,7 +58,7 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
               className={`group relative overflow-hidden rounded-2xl border bg-white shadow-sm transition duration-200 dark:bg-stone-900 dark:shadow-none ${
                 isCurrent
                   ? 'border-red-800/50 ring-1 ring-red-800/15 dark:border-red-700/60 dark:ring-red-500/20'
-                  : 'border-stone-200 hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-md dark:border-stone-800 dark:hover:border-stone-700'
+                  : 'border-stone-200 hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-md motion-reduce:hover:translate-y-0 motion-reduce:transition-none dark:border-stone-800 dark:hover:border-stone-700'
               }`}
             >
               <div className="grid sm:grid-cols-[5.25rem_minmax(0,1fr)]">
@@ -93,24 +94,18 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
                       </p>
                     </div>
 
-                    {lesson.isUnlocked ? (
-                      <Link
-                        href={`/story/${lesson.id}`}
-                        aria-current={isCurrent ? 'step' : undefined}
-                        className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-stone-950 ${
-                          isCurrent
-                            ? 'bg-red-900 text-white shadow-sm hover:bg-red-800 dark:bg-red-800 dark:hover:bg-red-700'
-                            : 'border border-stone-300 bg-stone-50 text-stone-800 hover:border-stone-400 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-200 dark:hover:border-stone-600 dark:hover:bg-stone-800'
-                        }`}
-                      >
-                        {actionLabel(lesson, isCurrent)}
-                        <span aria-hidden="true" className="ml-2">→</span>
-                      </Link>
-                    ) : (
-                      <span className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-stone-100 px-4 py-2.5 text-sm font-semibold text-stone-500 dark:border-stone-800 dark:bg-stone-950 dark:text-stone-500">
-                        完成上一篇第三步后解锁
-                      </span>
-                    )}
+                    <Link
+                      href={`/story/${lesson.id}`}
+                      aria-current={isCurrent ? 'step' : undefined}
+                      className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-stone-950 ${
+                        isCurrent
+                          ? 'bg-red-900 text-white shadow-sm hover:bg-red-800 dark:bg-red-800 dark:hover:bg-red-700'
+                          : 'border border-stone-300 bg-stone-50 text-stone-800 hover:border-stone-400 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-200 dark:hover:border-stone-600 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      {actionLabel(lesson, isCurrent)}
+                      <span aria-hidden="true" className="ml-2">→</span>
+                    </Link>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-100 pt-3 text-xs dark:border-stone-800">
@@ -127,6 +122,16 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
                     }`}>
                       {lesson.dueReviewCount > 0 ? `${lesson.dueReviewCount} 个待强化` : '暂无待强化'}
                     </span>
+                  </div>
+                  <div className="mt-4">
+                    <CompletionDateHistory
+                      endpoint={`/api/story/lessons/${encodeURIComponent(lesson.id)}/completions`}
+                      label={`第 ${lesson.order} 篇完成日期`}
+                      summaryLabel="本篇已学习"
+                      initialCount={lesson.completionSummary.lesson.count}
+                      latestDate={lesson.completionSummary.lesson.latestDate}
+                      manageable
+                    />
                   </div>
                 </div>
               </div>

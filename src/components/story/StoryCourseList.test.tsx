@@ -1,14 +1,23 @@
 /** @vitest-environment jsdom */
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { StoryLessonListItem } from '../../lib/story-service'
 import { StoryCourseList } from './StoryCourseList'
 import { StoryCourseProgress } from './StoryCourseProgress'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+beforeEach(() => {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ completions: [] }) }))
+})
 
 type CourseFixtureLesson = StoryLessonListItem & {
   publicationStatus?: 'ready' | 'draft' | 'failed' | 'archived'
@@ -27,6 +36,11 @@ function lesson(overrides: Partial<CourseFixtureLesson>): CourseFixtureLesson {
     currentStep: 1,
     dueReviewCount: 0,
     isUnlocked: true,
+    completionSummary: {
+      lesson: { count: 0, latestDate: null },
+      step: { count: 0, latestDate: null },
+      paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 2 },
+    },
     publicationStatus: 'ready',
     ...overrides,
   }
@@ -79,7 +93,7 @@ describe('StoryCourseList', () => {
     expect(screen.getByRole('link', { name: '查看第 1 篇' })).toHaveAttribute('href', '/story/lesson-1')
   })
 
-  it('renders locked lessons as disabled non-links while preserving the current unlocked continuation', () => {
+  it('keeps every published lesson enterable and gives each card an independent completion history', () => {
     render(
       <StoryCourseList
         currentLessonId="lesson-1"
@@ -91,9 +105,36 @@ describe('StoryCourseList', () => {
     )
 
     expect(screen.getByRole('link', { name: '继续第 1 步' })).toHaveAttribute('href', '/story/lesson-1')
-    const locked = screen.getByRole('article', { name: '第 2 篇：尚未解锁' })
-    expect(within(locked).queryByRole('link')).not.toBeInTheDocument()
-    expect(within(locked).getByText('完成上一篇第三步后解锁')).toBeInTheDocument()
+    const laterLesson = screen.getByRole('article', { name: '第 2 篇：尚未解锁' })
+    expect(within(laterLesson).getByRole('link', { name: '开始第 2 篇' })).toHaveAttribute('href', '/story/lesson-2')
+    expect(within(laterLesson).getByRole('region', { name: '第 2 篇完成日期历史' })).toBeInTheDocument()
+    expect(within(screen.getByRole('article', { name: '第 1 篇：青茅山醒来' }))
+      .getByRole('button', { name: '查看第 1 篇完成日期历史' })).toBeInTheDocument()
+  })
+
+  it('mounts 100 lesson summaries without requesting history until one is expanded', async () => {
+    const fetchMock = vi.mocked(fetch)
+    const lessons = Array.from({ length: 100 }, (_, index) => lesson({
+      id: `lesson-${index + 1}`,
+      order: index + 1,
+      title: `篇章 ${index + 1}`,
+      completionSummary: {
+        lesson: { count: 2, latestDate: '2026-08-18' },
+        step: { count: 0, latestDate: null },
+        paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 2 },
+      },
+    }))
+    render(<StoryCourseList currentLessonId={null} lessons={lessons} />)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(within(screen.getByRole('region', { name: '第 100 篇完成日期历史' })).getByText(/已记录/))
+      .toHaveTextContent('已记录 2 次 · 最近 2026-08-18')
+
+    await userEvent.click(screen.getByRole('button', { name: '查看第 1 篇完成日期历史' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    expect(fetchMock).toHaveBeenCalledWith('/api/story/lessons/lesson-1/completions')
+    expect(screen.getByLabelText('第 1 篇完成日期')).toHaveValue('')
   })
 
   it('shows an accessible empty state when no ready course is published', () => {
