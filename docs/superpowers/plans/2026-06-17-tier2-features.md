@@ -1,5 +1,9 @@
 # Tier 2 Features Implementation Plan
 
+> **Manifest update (2026-09-02):** The static `public/manifest.json` steps below are superseded. `src/app/manifest.ts` is the canonical source and Next.js serves it at `/manifest.webmanifest` with `/story` as its start URL.
+
+> **Privacy supersession (2026-09-03):** This historical plan's Network-First API and `api-cache` guidance is superseded by [ADR-0004](../../adr/0004-free-story-access-and-manual-history.md) and the current privacy policy. `sw.ts` is authoritative: authenticated API, navigation, and RSC requests are Network-Only; only an explicit user-triggered story offline preparation may populate `story-offline-course-v*`, which logout purges. Do not restore general API response caching from the steps below.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add PWA support, daily goal tracking with streak counting, and error word analysis to ContextVocab.
@@ -25,7 +29,7 @@
 ### Task 1: Install @serwist/next and create static assets
 
 **Files:**
-- Create: `public/manifest.json`
+- Create: `src/app/manifest.ts`
 - Create: `public/icon-192.png`
 - Create: `public/icon-512.png`
 
@@ -40,12 +44,12 @@ Expected: dependency added to package.json.
 
 - [ ] **Step 2: Create web manifest**
 
-Create `public/manifest.json`:
+Create the canonical `src/app/manifest.ts` contract (served as `/manifest.webmanifest`):
 ```json
 {
   "name": "考研词汇",
   "short_name": "考研词汇",
-  "start_url": "/",
+  "start_url": "/story",
   "display": "standalone",
   "background_color": "#1c1917",
   "theme_color": "#1c1917",
@@ -124,13 +128,15 @@ Expected: `public/icon-192.png` and `public/icon-512.png` created.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add package.json package-lock.json public/manifest.json public/icon-192.png public/icon-512.png
+git add package.json package-lock.json src/app/manifest.ts public/icon-192.png public/icon-512.png
 git commit -m "feat: add PWA manifest and icons"
 ```
 
 ---
 
 ### Task 2: Configure @serwist/next
+
+> **Superseded implementation detail:** Keep the Network-First example below as plan history only. It must not be applied to authenticated API responses under the current privacy policy.
 
 **Files:**
 - Modify: `next.config.ts`
@@ -197,7 +203,7 @@ git commit -m "feat: configure @serwist/next for PWA service worker"
 - Modify: `src/app/layout.tsx`
 
 **Interface:**
-- Consumes: `public/manifest.json` (from Task 1)
+- Consumes: `/manifest.webmanifest` generated from `src/app/manifest.ts` (from Task 1)
 - Produces: `<link rel="manifest">` and `<meta name="theme-color">` in document head
 
 - [ ] **Step 1: Add manifest link and theme-color meta to layout.tsx**
@@ -212,7 +218,7 @@ with:
 ```tsx
 <html lang="zh-CN" suppressHydrationWarning>
 <head>
-  <link rel="manifest" href="/manifest.json" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#1c1917" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0c0a09" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -234,7 +240,7 @@ with:
 export const metadata: Metadata = {
   title: 'ContextVocab — 语境背单词',
   description: '通过个性化语境背英语单词',
-  manifest: '/manifest.json',
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -250,7 +256,7 @@ Since we want dual-scheme theme-color, add it inside the `<head>` before `<body>
 export const metadata: Metadata = {
   title: 'ContextVocab — 语境背单词',
   description: '通过个性化语境背英语单词',
-  manifest: '/manifest.json',
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

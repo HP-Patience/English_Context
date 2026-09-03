@@ -4,6 +4,8 @@
 **状态:** 待实现
 **上下文:** ContextVocab v1 已完成 Tier 1 (搜索词典、统计看板、收藏难词本、深色模式)，现推进 Tier 2 三个功能。
 
+> **隐私策略取代说明（2026-09-03）：** 本文保留 2026-06-17 的历史设计，但下文“API 请求使用 Network-First / `api-cache`”以及由 Service Worker 运行时缓存用户数据的方案已被 [ADR-0004](../../adr/0004-free-story-access-and-manual-history.md) 和当前隐私策略取代。现行实现以 `sw.ts` 为准：已认证 API、页面导航和 RSC 请求均为 Network-Only；只有用户明确触发的故事离线准备可写入专用 `story-offline-course-v*` 缓存，并在退出登录时清除。不得依据本文恢复通用 API 响应缓存。
+
 ---
 
 ## 功能概览
@@ -32,12 +34,12 @@
 
 #### 1.3.1 Web Manifest
 
-`public/manifest.json`:
+当前规范由 `src/app/manifest.ts` 提供，并由 Next.js 发布为 `/manifest.webmanifest`：
 ```json
 {
   "name": "考研词汇",
   "short_name": "考研词汇",
-  "start_url": "/",
+  "start_url": "/story",
   "display": "standalone",
   "background_color": "#1c1917",
   "theme_color": "#1c1917",
@@ -49,6 +51,8 @@
 ```
 
 #### 1.3.2 Service Worker
+
+> **已取代：** 以下 Network-First API 缓存条目仅记录原始方案，不再是实现指引。现行隐私边界见文首取代说明。
 
 使用 @serwist/next 的默认配置:
 - **静态资源** (JS/CSS/字体): Cache-First，缓存 30 天
@@ -70,7 +74,7 @@
 
 | 操作 | 文件 |
 |------|------|
-| 新增 | `public/manifest.json` |
+| 新增 | `src/app/manifest.ts`（`/manifest.webmanifest` 的唯一规范来源） |
 | 新增 | `public/icon-192.png`, `public/icon-512.png` |
 | 修改 | `next.config.ts` — 加 @serwist/next 配置 |
 | 修改 | `src/app/layout.tsx` — 加 `<link rel="manifest">`, `<meta name="theme-color">` |
