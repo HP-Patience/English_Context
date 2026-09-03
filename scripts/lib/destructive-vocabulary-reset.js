@@ -1,4 +1,8 @@
 const DESTRUCTIVE_VOCABULARY_RESET_ORDER = Object.freeze([
+  'userStoryParagraphBookmark',
+  'userStoryParagraphCompletion',
+  'userStoryStepCompletion',
+  'userStoryLessonCompletion',
   'storyReviewAttempt',
   'userStoryWordProgress',
   'userStoryProgress',

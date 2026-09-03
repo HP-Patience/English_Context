@@ -8,6 +8,10 @@ import {
 import { importVocabularyData } from '../lib/import-new-runner.js'
 
 const expectedOrder = [
+  'userStoryParagraphBookmark',
+  'userStoryParagraphCompletion',
+  'userStoryStepCompletion',
+  'userStoryLessonCompletion',
   'storyReviewAttempt',
   'userStoryWordProgress',
   'userStoryProgress',
@@ -45,6 +49,27 @@ function resetFake({ failAt } = {}) {
   return { prisma, committed }
 }
 
+function foreignKeyResetFake() {
+  const rows = Object.fromEntries(expectedOrder.map((model) => [model, [{ id: `${model}-1` }]]))
+  const lessonDependents = expectedOrder.slice(0, 8)
+  const prisma = {
+    async $transaction(callback) {
+      const tx = Object.fromEntries(expectedOrder.map((model) => [model, {
+        async deleteMany() {
+          if (model === 'storyLesson' && lessonDependents.some((dependent) => rows[dependent].length > 0)) {
+            throw new Error('StoryLesson foreign key violation')
+          }
+          const count = rows[model].length
+          rows[model] = []
+          return { count }
+        },
+      }]))
+      return callback(tx)
+    },
+  }
+  return { prisma, rows }
+}
+
 test('destructive vocabulary reset deletes every story and vocabulary table in FK-safe order inside one transaction', async () => {
   const { prisma, committed } = resetFake()
 
@@ -59,6 +84,14 @@ test('destructive vocabulary reset is atomic when any delete fails', async () =>
 
   await assert.rejects(destructiveVocabularyReset(prisma), /delete failed: storyLesson/)
   assert.deepEqual(committed, [])
+})
+
+test('destructive vocabulary reset removes every StoryLesson-dependent row before its parent', async () => {
+  const { prisma, rows } = foreignKeyResetFake()
+
+  await destructiveVocabularyReset(prisma)
+
+  for (const model of expectedOrder) assert.deepEqual(rows[model], [], `${model} should be empty`)
 })
 
 test('the import path invokes destructive reset before the first insert', async () => {
