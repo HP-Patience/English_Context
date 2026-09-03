@@ -1,5 +1,7 @@
 # Story Learning Runtime Implementation Plan
 
+> **Superseded product constraint (2026-09-02):** ADR-0004 replaces this plan's sequential Step1-Step3 access locks and jump rejection. All `ready` lessons and Steps1-3 are freely accessible; dated completions are independent manual records. The remaining sections are retained as historical implementation context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add an independent `/story` learning mode that presents each generated Gu Zhen Ren lesson through four steps, records non-blocking five-round reinforcement, and synchronizes review results with the existing SM-2 system.

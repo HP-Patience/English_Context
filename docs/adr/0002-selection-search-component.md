@@ -2,11 +2,13 @@
 
 ## 状态
 
-已实现
+superseded
 
 ## 日期
 
 2026-06-21
+
+> 本 ADR 的组件复用设计仍作为历史背景保留。右键菜单相关决定已由 [ADR-0004](./0004-free-story-access-and-manual-history.md) 取代：仅在 `SelectionSearch` 内有效选区的非交互内容上抑制原生上下文菜单。
 
 ## 背景
 
