@@ -35,6 +35,7 @@ import { GET as getLessonWords } from '../app/api/story/lessons/[id]/words/route
 import { GET as getReviewQueue, POST as postReview } from '../app/api/story/review/route'
 import {
   classifyStoryApiError,
+  parseStoryCompletionPayload,
   parseStoryProgressPayload,
   parseStoryReviewApiResponse,
   parseStoryReviewPayload,
@@ -55,6 +56,11 @@ const lessonOne = {
   currentStep: 4,
   dueReviewCount: 2,
   isUnlocked: true,
+  completionSummary: {
+    lesson: { count: 1, latestDate: '2026-08-21' },
+    step: { count: 3, latestDate: '2026-08-21' },
+    paragraph: { count: 2, latestDate: '2026-08-21', completedCards: 2, totalCards: 2 },
+  },
 }
 
 const lessonTwo = {
@@ -69,6 +75,11 @@ const lessonTwo = {
   currentStep: 2,
   dueReviewCount: 1,
   isUnlocked: true,
+  completionSummary: {
+    lesson: { count: 0, latestDate: null },
+    step: { count: 1, latestDate: '2026-08-21' },
+    paragraph: { count: 1, latestDate: '2026-08-21', completedCards: 1, totalCards: 2 },
+  },
 }
 
 const progress = {
@@ -89,6 +100,7 @@ const detail = {
   title: '第一篇',
   sourceChapterStart: '第一章',
   sourceChapterEnd: '第二章',
+  completionSummary: lessonOne.completionSummary,
   content: {
     title: '第一篇',
     order: 1,
@@ -189,6 +201,17 @@ beforeEach(() => {
 })
 
 describe('story API payload parsers', () => {
+  it('accepts only stable completion ids and exact real calendar dates', () => {
+    expect(parseStoryCompletionPayload({ completionId: ' completion-1 ', date: '2024-02-29' })).toEqual({
+      completionId: 'completion-1',
+      date: '2024-02-29',
+    })
+    expect(parseStoryCompletionPayload({ completionId: 'completion-1', date: '2023-02-29' })).toBeNull()
+    expect(parseStoryCompletionPayload({ completionId: 'completion-1', date: '2026-02-30' })).toBeNull()
+    expect(parseStoryCompletionPayload({ completionId: 'completion-1', date: '2026-2-03' })).toBeNull()
+    expect(parseStoryCompletionPayload({ completionId: '', date: '2026-02-03' })).toBeNull()
+  })
+
   it('accepts only first-pass steps and the exact review result identifiers', () => {
     expect(parseStoryProgressPayload({ step: 3 })).toEqual({ step: 3 })
     expect(parseStoryProgressPayload({ step: 4 })).toBeNull()
@@ -323,7 +346,6 @@ describe('story API error classification', () => {
     expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.LESSON_NOT_FOUND, 'lesson missing'))).toBe(404)
     expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND, 'word missing'))).toBe(404)
     expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.LESSON_WORD_NOT_REVIEWABLE, 'Step3 incomplete'))).toBe(404)
-    expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT, 'step conflict'))).toBe(409)
     expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.REVIEW_NOT_DUE, 'not due'))).toBe(409)
     expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.REVIEW_ROUNDS_COMPLETE, 'rounds complete'))).toBe(409)
     expect(classifyStoryApiError(new StoryDomainError(STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT, 'result conflict'))).toBe(409)
@@ -407,15 +429,11 @@ describe('POST /api/story/lessons/[id]/progress', () => {
     expect(mocks.saveFirstPassStep).toHaveBeenCalledWith({ prisma: { mocked: true }, userId: 'user-1', lessonId: 'lesson-2', step: 1 })
   })
 
-  it('maps missing lessons to 404 and out-of-sequence transitions to 409', async () => {
+  it('maps missing lessons to 404', async () => {
     mocks.saveFirstPassStep.mockRejectedValueOnce(new StoryDomainError(STORY_ERROR_CODES.LESSON_NOT_FOUND, 'Story lesson is not ready or does not exist: hidden'))
     const missing = await postProgress(jsonRequest('http://localhost/api/story/lessons/hidden/progress', { step: 1 }), routeContext('hidden'))
 
-    mocks.saveFirstPassStep.mockRejectedValueOnce(new StoryDomainError(STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT, 'Cannot complete Step3 before Step2'))
-    const conflict = await postProgress(jsonRequest('http://localhost/api/story/lessons/lesson-2/progress', { step: 3 }), routeContext('lesson-2'))
-
     expect(missing.status).toBe(404)
-    expect(conflict.status).toBe(409)
   })
 })
 
@@ -573,27 +591,5 @@ describe('POST /api/story/review', () => {
     expect(response.status).toBe(500)
     await expect(responseJson(response)).resolves.toEqual({ error: 'Internal server error' })
     consoleError.mockRestore()
-  })
-})
-
-
-describe('locked story lesson route enforcement', () => {
-  it.each([
-    ['detail GET', async () => getLesson(new NextRequest('http://localhost/api/story/lessons/lesson-2'), routeContext('lesson-2')), mocks.getStoryLesson],
-    ['words GET', async () => getLessonWords(new NextRequest('http://localhost/api/story/lessons/lesson-2/words'), routeContext('lesson-2')), mocks.listStoryLessonWords],
-    ['progress POST', async () => postProgress(jsonRequest('http://localhost/api/story/lessons/lesson-2/progress', { step: 1 }), routeContext('lesson-2')), mocks.saveFirstPassStep],
-  ])('returns the stable typed locked response for %s', async (_label, requestRoute, serviceMock) => {
-    serviceMock.mockRejectedValueOnce(new StoryDomainError(
-      STORY_ERROR_CODES.LESSON_LOCKED,
-      'Story lesson is locked: lesson-2',
-    ))
-
-    const response = await requestRoute()
-
-    expect(response.status).toBe(403)
-    await expect(responseJson(response)).resolves.toEqual({
-      error: 'Story lesson is locked',
-      code: 'STORY_LESSON_LOCKED',
-    })
   })
 })

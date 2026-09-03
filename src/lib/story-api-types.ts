@@ -12,6 +12,8 @@ import type {
 } from './story-review'
 import type { StoryFirstPassStep } from './story-progress'
 import type { StoryLessonDocument } from './story-types'
+export { parseStoryCompletionPayload, parseStoryFirstPassStep, parseStoryParagraphIndex } from './story-completion-api'
+export type { StoryCompletionApiResponse, StoryCompletionHistoryApiResponse, StoryCompletionPayload } from './story-completion-api'
 
 export type StoryLessonsApiResponse = {
   lessons: StoryLessonListItem[]
@@ -66,7 +68,7 @@ export type StoryWordsQuery = {
   pageSize: number
 }
 
-export type StoryApiErrorStatus = 403 | 404 | 409 | 500
+export type StoryApiErrorStatus = 404 | 409 | 500
 
 const DEFAULT_PAGE_SIZE = 25
 const MAX_PAGE_SIZE = 100
@@ -235,12 +237,11 @@ export function classifyStoryApiError(error: unknown): StoryApiErrorStatus {
   switch (error.code) {
     case STORY_ERROR_CODES.READY_COURSE_NOT_FOUND:
     case STORY_ERROR_CODES.LESSON_NOT_FOUND:
+    case STORY_ERROR_CODES.PARAGRAPH_NOT_FOUND:
     case STORY_ERROR_CODES.LESSON_WORD_NOT_FOUND:
     case STORY_ERROR_CODES.LESSON_WORD_NOT_REVIEWABLE:
       return 404
-    case STORY_ERROR_CODES.LESSON_LOCKED:
-      return 403
-    case STORY_ERROR_CODES.PROGRESS_SEQUENCE_CONFLICT:
+    case STORY_ERROR_CODES.COMPLETION_ID_CONFLICT:
     case STORY_ERROR_CODES.REVIEW_NOT_DUE:
     case STORY_ERROR_CODES.REVIEW_ROUNDS_COMPLETE:
     case STORY_ERROR_CODES.REVIEW_RESULT_CONFLICT:
