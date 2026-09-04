@@ -23,14 +23,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ type: 'storyCard', ...result })
     }
 
-    const result = await prisma.userWord.updateMany({
-      where: { userId, wordId: payload.wordId },
-      data: { bookmarked: payload.bookmarked },
+    await prisma.userWord.upsert({
+      where: { userId_wordId: { userId, wordId: payload.wordId } },
+      create: { userId, wordId: payload.wordId, bookmarked: payload.bookmarked },
+      update: { bookmarked: payload.bookmarked },
     })
-
-    if (result.count === 0) {
-      return NextResponse.json({ error: 'Word not in your library' }, { status: 404 })
-    }
 
     return NextResponse.json({ type: 'word', bookmarked: payload.bookmarked })
   } catch (error) {

@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server'
 const mocks = vi.hoisted(() => ({
   getLocalUserId: vi.fn(),
   userWordFindMany: vi.fn(),
-  userWordUpdateMany: vi.fn(),
+  userWordUpsert: vi.fn(),
   wordFindUnique: vi.fn(),
   listStoryCardBookmarks: vi.fn(),
   setStoryCardBookmark: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     userWord: {
       findMany: mocks.userWordFindMany,
-      updateMany: mocks.userWordUpdateMany,
+      upsert: mocks.userWordUpsert,
     },
     word: { findUnique: mocks.wordFindUnique },
   },
@@ -79,11 +79,11 @@ describe('POST /api/bookmarks/toggle', () => {
     expect(mocks.setStoryCardBookmark).toHaveBeenCalledWith({
       prisma: expect.any(Object), userId: 'user-1', lessonId: 'lesson-1', paragraphIndex: 0, bookmarked: true,
     })
-    expect(mocks.userWordUpdateMany).not.toHaveBeenCalled()
+    expect(mocks.userWordUpsert).not.toHaveBeenCalled()
   })
 
   it('sets the requested word state instead of toggling the stored state', async () => {
-    mocks.userWordUpdateMany.mockResolvedValue({ count: 1 })
+    mocks.userWordUpsert.mockResolvedValue({ id: 'user-word-1', bookmarked: false })
 
     const response = await toggleBookmark(new NextRequest('http://localhost/api/bookmarks/toggle', {
       method: 'POST',
@@ -91,22 +91,27 @@ describe('POST /api/bookmarks/toggle', () => {
     }))
 
     expect(response.status).toBe(200)
-    expect(mocks.userWordUpdateMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1', wordId: 'word-1' },
-      data: { bookmarked: false },
+    expect(mocks.userWordUpsert).toHaveBeenCalledWith({
+      where: { userId_wordId: { userId: 'user-1', wordId: 'word-1' } },
+      create: { userId: 'user-1', wordId: 'word-1', bookmarked: false },
+      update: { bookmarked: false },
     })
   })
 
-  it('returns not found when the word leaves the user library during the desired-state write', async () => {
-    mocks.userWordUpdateMany.mockResolvedValue({ count: 0 })
+  it('creates a user-library row when bookmarking a story word for the first time', async () => {
+    mocks.userWordUpsert.mockResolvedValue({ id: 'user-word-new', bookmarked: true })
 
     const response = await toggleBookmark(new NextRequest('http://localhost/api/bookmarks/toggle', {
       method: 'POST',
       body: JSON.stringify({ type: 'word', wordId: 'word-1', bookmarked: true }),
     }))
 
-    expect(response.status).toBe(404)
-    await expect(response.json()).resolves.toEqual({ error: 'Word not in your library' })
+    expect(response.status).toBe(200)
+    expect(mocks.userWordUpsert).toHaveBeenCalledWith({
+      where: { userId_wordId: { userId: 'user-1', wordId: 'word-1' } },
+      create: { userId: 'user-1', wordId: 'word-1', bookmarked: true },
+      update: { bookmarked: true },
+    })
   })
 })
 
