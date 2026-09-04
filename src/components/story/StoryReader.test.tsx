@@ -30,12 +30,12 @@ const paragraphs: StoryLessonParagraph[] = [
 
 const lessonWords: StoryLessonWordDto[] = [
   {
-    id: 'lesson-word-1', sortOrder: 1, glossCn: '决意',
+    id: 'lesson-word-1', sortOrder: 1, glossCn: '决意', bookmarked: false,
     word: { id: 'word-1', text: 'resolve', phonetic: '/rɪˈzɒlv/' },
     meaning: { id: 'meaning-1', partOfSpeech: 'v.', definition: 'decide', definitionCn: '决意', example: null },
   },
   {
-    id: 'lesson-word-2', sortOrder: 2, glossCn: '谋划',
+    id: 'lesson-word-2', sortOrder: 2, glossCn: '谋划', bookmarked: true,
     word: { id: 'word-2', text: 'scheme', phonetic: '/skiːm/' },
     meaning: { id: 'meaning-2', partOfSpeech: 'n.', definition: 'plan', definitionCn: '谋划', example: null },
   },
@@ -80,15 +80,16 @@ describe('StoryReader paragraph cards', () => {
     expect(screen.queryByRole('link', { name: '查看本段详情' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '查看本段详情' })).not.toBeInTheDocument()
 
-    const visibleGloss = screen.getByRole('button', { name: '隐藏段内 resolve 的释义' })
+    const visibleGloss = screen.getByRole('button', { name: '隐藏段内 resolve 的释义：决意' })
     expect(visibleGloss).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(visibleGloss)
-    expect(screen.queryByText('决意')).not.toBeInTheDocument()
-    expect(screen.getByText('谋划')).toBeInTheDocument()
+    expect(screen.getByText('决意')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByText('谋划')).toHaveAttribute('aria-hidden', 'false')
     const hiddenGloss = screen.getByRole('button', { name: '显示段内 resolve 的释义' })
     expect(hiddenGloss).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(hiddenGloss)
-    expect(screen.getByText('决意')).toBeInTheDocument()
+    expect(hiddenGloss).toHaveAccessibleName('隐藏段内 resolve 的释义：决意')
+    expect(screen.getByText('决意')).toHaveAttribute('aria-hidden', 'false')
   })
 
   it('updates the shared completed-card count on every card after a first paragraph completion', async () => {

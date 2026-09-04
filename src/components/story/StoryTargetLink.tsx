@@ -28,7 +28,7 @@ export function StoryTargetLink({ word, gloss, wordId, initiallyVisible }: Story
         type="button"
         aria-expanded={visible}
         aria-pressed={visible}
-        aria-label={`${visible ? '隐藏' : '显示'}段内 ${word} 的释义`}
+        aria-label={visible ? `隐藏段内 ${word} 的释义：${gloss}` : `显示段内 ${word} 的释义`}
         onClick={() => setVisible((current) => !current)}
         className="story-target-gloss inline-grid h-6 min-w-14 max-w-full grid-cols-1 grid-rows-1 place-items-center rounded-sm border border-dashed border-[var(--story-accent-line)] bg-[var(--story-surface)] px-1.5 text-[0.625rem] font-medium leading-none [overflow-wrap:anywhere] hover:border-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)]"
       >
