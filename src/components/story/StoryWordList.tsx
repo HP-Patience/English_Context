@@ -27,11 +27,11 @@ export function StoryWordList({ lessonWords, bookmarkedWordIds, onWordBookmarked
   }
 
   return (
-    <ol aria-label="本篇目标词" className="divide-y divide-[var(--story-line)] rounded-2xl border border-[var(--story-line)] bg-[var(--story-surface)] px-4 sm:px-5">
+    <ol aria-label="本篇目标词" className="divide-y divide-[var(--story-line)] rounded-2xl border border-[var(--story-line)] bg-[var(--story-surface)] px-3 sm:px-5">
       {orderedWords.map((lessonWord) => {
         const visible = revealedWordIds.has(lessonWord.id)
         return (
-          <li key={lessonWord.id} className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3 py-3 sm:gap-5">
+          <li key={lessonWord.id} className="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-2 py-3 max-[359px]:grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] sm:gap-5">
             <div className="flex min-w-0 items-center gap-1.5">
               <PronounceButton word={lessonWord.word.text} />
               <WordBookmarkButton
@@ -44,7 +44,7 @@ export function StoryWordList({ lessonWords, bookmarkedWordIds, onWordBookmarked
               <Link
                 href={`/word/${encodeURIComponent(lessonWord.word.id)}`}
                 lang="en"
-                className="ml-1 min-w-0 break-words rounded-sm font-serif text-lg font-semibold text-[var(--story-ink)] underline decoration-[var(--story-accent-line)] underline-offset-4 transition-colors duration-200 hover:text-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)]"
+                className="ml-1 min-w-0 whitespace-nowrap rounded-sm font-serif text-base font-semibold text-[var(--story-ink)] underline decoration-[var(--story-accent-line)] underline-offset-4 transition-colors duration-200 hover:text-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)] sm:text-lg"
               >
                 {lessonWord.word.text}
               </Link>
@@ -57,7 +57,7 @@ export function StoryWordList({ lessonWords, bookmarkedWordIds, onWordBookmarked
                 ? `隐藏 ${lessonWord.word.text} 的释义：${lessonWord.glossCn}`
                 : `显示 ${lessonWord.word.text} 的释义`}
               onClick={() => toggleGloss(lessonWord.id)}
-              className="inline-grid min-h-10 min-w-0 grid-cols-1 grid-rows-1 place-items-center rounded-lg border border-dashed border-[var(--story-accent-line)] bg-[var(--story-bg)] px-3 py-2 text-center text-xs font-semibold text-[var(--story-ink)] hover:border-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)]"
+              className="inline-grid min-h-10 min-w-0 grid-cols-1 grid-rows-1 place-items-center rounded-lg border border-dashed border-[var(--story-accent-line)] bg-[var(--story-bg)] px-2 py-2 text-center text-xs font-semibold text-[var(--story-ink)] hover:border-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)] sm:px-3"
             >
               <span
                 aria-hidden={!visible}
