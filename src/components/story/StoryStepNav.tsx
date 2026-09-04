@@ -17,7 +17,7 @@ const steps: Array<{ step: FirstPassStep; title: string; caption: string }> = [
 export function StoryStepNav({ currentStep, completedStep, onSelect }: StoryStepNavProps) {
   return (
     <nav aria-label="首次学习步骤" className="story-step-nav rounded-2xl border p-2">
-      <ol className="grid grid-cols-3 gap-1">
+      <ol className="story-step-list grid grid-cols-3 gap-1" data-current-step={currentStep}>
         {steps.map(({ step, title, caption }) => {
           const active = currentStep === step
           const complete = completedStep >= step
