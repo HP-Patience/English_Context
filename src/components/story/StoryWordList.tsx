@@ -1,72 +1,81 @@
-import { StoryWordDetail, type StoryWordDisplay } from './StoryWordDetail'
+'use client'
+
+import Link from 'next/link'
+import { useState } from 'react'
+
+import PronounceButton from '@/components/PronounceButton'
+import { WordBookmarkButton } from '@/components/WordBookmarkButton'
+import type { StoryLessonWordDto } from '@/lib/story-service'
 
 type StoryWordListProps = {
-  lessonWords: StoryWordDisplay[]
-  query: string
-  scene: string
+  readonly lessonWords: readonly StoryLessonWordDto[]
+  readonly bookmarkedWordIds?: ReadonlySet<string>
+  readonly onWordBookmarkedChange?: (wordId: string, bookmarked: boolean) => void
 }
 
-function searchableText(word: StoryWordDisplay) {
-  return [
-    word.word.text,
-    word.glossCn,
-    word.meaning.partOfSpeech,
-    word.meaning.definition,
-    word.meaning.definitionCn,
-    word.meaning.example,
-    word.storyUsage,
-    word.sceneTitle,
-  ].filter(Boolean).join(' ').toLocaleLowerCase()
-}
+export function StoryWordList({ lessonWords, bookmarkedWordIds, onWordBookmarkedChange }: StoryWordListProps) {
+  const [revealedWordIds, setRevealedWordIds] = useState<ReadonlySet<string>>(() => new Set())
+  const orderedWords = [...lessonWords].sort((left, right) => left.sortOrder - right.sortOrder)
 
-export function StoryWordList({ lessonWords, query, scene }: StoryWordListProps) {
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const normalizedScene = scene.trim()
-  const filteredWords = [...lessonWords]
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-    .filter((word) => !normalizedScene || word.sceneTitle === normalizedScene)
-    .filter((word) => !normalizedQuery || searchableText(word).includes(normalizedQuery))
-
-  const sceneOrder: string[] = []
-  const wordsByScene = new Map<string, StoryWordDisplay[]>()
-  for (const word of filteredWords) {
-    const sceneTitle = word.sceneTitle || '未分场'
-    if (!wordsByScene.has(sceneTitle)) {
-      sceneOrder.push(sceneTitle)
-      wordsByScene.set(sceneTitle, [])
-    }
-    wordsByScene.get(sceneTitle)?.push(word)
-  }
-
-  if (filteredWords.length === 0) {
-    return (
-      <p role="status" className="rounded-2xl border border-dashed border-stone-300 px-5 py-10 text-center text-sm text-stone-500 dark:border-stone-700 dark:text-stone-400">
-        没有符合当前筛选的目标词。
-      </p>
-    )
+  function toggleGloss(lessonWordId: string) {
+    setRevealedWordIds((current) => {
+      const next = new Set(current)
+      if (next.has(lessonWordId)) next.delete(lessonWordId)
+      else next.add(lessonWordId)
+      return next
+    })
   }
 
   return (
-    <div className="space-y-8">
-      {sceneOrder.map((sceneTitle, sceneIndex) => {
-        const words = wordsByScene.get(sceneTitle) ?? []
+    <ol aria-label="本篇目标词" className="divide-y divide-[var(--story-line)] rounded-2xl border border-[var(--story-line)] bg-[var(--story-surface)] px-4 sm:px-5">
+      {orderedWords.map((lessonWord) => {
+        const visible = revealedWordIds.has(lessonWord.id)
         return (
-          <section key={sceneTitle} role="region" aria-label={sceneTitle}>
-            <div className="mb-3 flex items-center gap-3">
-              <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-stone-900 font-serif text-sm font-bold text-stone-50 dark:bg-stone-100 dark:text-stone-950">
-                {sceneIndex + 1}
+          <li key={lessonWord.id} className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3 py-3 sm:gap-5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <PronounceButton word={lessonWord.word.text} />
+              <WordBookmarkButton
+                wordId={lessonWord.word.id}
+                word={lessonWord.word.text}
+                initialBookmarked={bookmarkedWordIds?.has(lessonWord.word.id) ?? lessonWord.bookmarked}
+                size="base"
+                onBookmarkedChange={(bookmarked) => onWordBookmarkedChange?.(lessonWord.word.id, bookmarked)}
+              />
+              <Link
+                href={`/word/${encodeURIComponent(lessonWord.word.id)}`}
+                lang="en"
+                className="ml-1 min-w-0 break-words rounded-sm font-serif text-lg font-semibold text-[var(--story-ink)] underline decoration-[var(--story-accent-line)] underline-offset-4 transition-colors duration-200 hover:text-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)]"
+              >
+                {lessonWord.word.text}
+              </Link>
+            </div>
+            <button
+              type="button"
+              aria-expanded={visible}
+              aria-pressed={visible}
+              aria-label={visible
+                ? `隐藏 ${lessonWord.word.text} 的释义：${lessonWord.glossCn}`
+                : `显示 ${lessonWord.word.text} 的释义`}
+              onClick={() => toggleGloss(lessonWord.id)}
+              className="inline-grid min-h-10 min-w-0 grid-cols-1 grid-rows-1 place-items-center rounded-lg border border-dashed border-[var(--story-accent-line)] bg-[var(--story-bg)] px-3 py-2 text-center text-xs font-semibold text-[var(--story-ink)] hover:border-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)]"
+            >
+              <span
+                aria-hidden={!visible}
+                lang="zh-CN"
+                className={`col-start-1 row-start-1 break-words transition-opacity duration-200 motion-reduce:transition-none ${visible ? 'opacity-100' : 'opacity-0'}`}
+              >
+                {lessonWord.glossCn}
               </span>
-              <div>
-                <h3 className="font-serif text-lg font-semibold text-stone-900 dark:text-stone-100">{sceneTitle}</h3>
-                <p className="text-xs text-stone-500 dark:text-stone-400">{words.length} 个目标词</p>
-              </div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {words.map((word) => <StoryWordDetail key={word.id} lessonWord={word} />)}
-            </div>
-          </section>
+              <span
+                aria-hidden={visible}
+                className={`col-start-1 row-start-1 transition-opacity duration-200 motion-reduce:transition-none ${visible ? 'opacity-0' : 'opacity-100'}`}
+              >
+                点击查看释义
+              </span>
+            </button>
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }

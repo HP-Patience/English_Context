@@ -8,7 +8,6 @@ import type { UserStoryProgressDto } from '@/lib/story-service'
 import type { StoryFirstPassStep } from '@/lib/story-progress'
 import { CompletionDateHistory } from './CompletionDateHistory'
 import { StoryFirstPassPanel, type FirstPassView } from './StoryFirstPassPanel'
-import type { StoryRecallRating } from './StoryRecall'
 import { StoryReinforcementSection } from './StoryReinforcementSection'
 import { StoryStepNav } from './StoryStepNav'
 import { useStoryReviewQueue } from './useStoryReviewQueue'
@@ -42,7 +41,6 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
   const [activeStep, setActiveStep] = useState<FirstPassView>(() => firstPassView(progress))
   const [savingStep, setSavingStep] = useState<StoryFirstPassStep | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [recallStatus, setRecallStatus] = useState<string | null>(null)
   const [bookmarkedParagraphIndexes, setBookmarkedParagraphIndexes] = useState<ReadonlySet<number>>(
     () => new Set(lesson.bookmarkedParagraphIndexes),
   )
@@ -65,11 +63,6 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
     } finally {
       setSavingStep(null)
     }
-  }
-
-  function handleRate(lessonWordId: string, rating: StoryRecallRating) {
-    const word = lesson.lessonWords.find((item) => item.id === lessonWordId)
-    setRecallStatus(`${word?.word.text ?? '目标词'}：${rating}`)
   }
 
   function handleParagraphBookmarkChange(paragraphIndex: number, bookmarked: boolean) {
@@ -122,8 +115,6 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
         completionSummary={lesson.completionSummary}
         bookmarkedParagraphIndexes={bookmarkedParagraphIndexes}
         onParagraphBookmarkChange={handleParagraphBookmarkChange}
-        onRate={handleRate}
-        recallStatus={recallStatus}
       />
 
       {error ? <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-900 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">{error}</p> : null}

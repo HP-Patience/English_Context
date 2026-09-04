@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 import SelectionSearch from '@/components/SelectionSearch'
 import type { StoryCompletionSummary } from '@/lib/story-completion'
@@ -8,8 +8,6 @@ import type { StoryLessonWordDto } from '@/lib/story-service'
 import type { StoryLessonParagraph } from '@/lib/story-types'
 import { CompletionDateHistory } from './CompletionDateHistory'
 import { StoryReader } from './StoryReader'
-import { StoryRecall, type StoryRecallRating } from './StoryRecall'
-import type { StoryWordDisplay } from './StoryWordDetail'
 import { StoryWordList } from './StoryWordList'
 
 export type FirstPassView = 1 | 2 | 3
@@ -22,8 +20,6 @@ type StoryFirstPassPanelProps = {
   readonly completionSummary: StoryCompletionSummary
   readonly bookmarkedParagraphIndexes: ReadonlySet<number>
   readonly onParagraphBookmarkChange: (paragraphIndex: number, bookmarked: boolean) => void
-  readonly onRate: (lessonWordId: string, rating: StoryRecallRating) => void
-  readonly recallStatus: string | null
 }
 
 const stepHeading: Record<FirstPassView, string> = {
@@ -34,26 +30,8 @@ const stepHeading: Record<FirstPassView, string> = {
 
 const stepDescription: Record<FirstPassView, string> = {
   1: '顺着剧情阅读，英文目标词与本篇语境释义同时出现。',
-  2: '英文仍留在故事里，先回想，再按需要揭开释义并自评。',
-  3: '按场景核对本篇完整词册；完成后即可继续下一篇。',
-}
-
-function buildWordLedger(
-  paragraphs: readonly StoryLessonParagraph[],
-  lessonWords: readonly StoryLessonWordDto[],
-): StoryWordDisplay[] {
-  const sceneByOrder = new Map<number, { sceneTitle: string; storyUsage: string }>()
-  for (const paragraph of paragraphs) {
-    const storyUsage = paragraph.segments.map((segment) => segment.type === 'text' ? segment.value : segment.word).join('').trim()
-    for (const segment of paragraph.segments) {
-      if (segment.type === 'targetWord') sceneByOrder.set(segment.wordOrder, { sceneTitle: paragraph.sceneTitle, storyUsage })
-    }
-  }
-  return lessonWords.map((word) => ({
-    ...word,
-    sceneTitle: sceneByOrder.get(word.sortOrder)?.sceneTitle ?? '未分场',
-    storyUsage: sceneByOrder.get(word.sortOrder)?.storyUsage ?? null,
-  }))
+  2: '重读完整故事，英文仍留在原处；先回想，再按需要揭开段内释义。',
+  3: '按顺序快速回想本篇单词，点击右侧逐个核对释义。',
 }
 
 export function StoryFirstPassPanel({
@@ -64,14 +42,11 @@ export function StoryFirstPassPanel({
   completionSummary,
   bookmarkedParagraphIndexes,
   onParagraphBookmarkChange,
-  onRate,
-  recallStatus,
 }: StoryFirstPassPanelProps) {
-  const [query, setQuery] = useState('')
-  const [scene, setScene] = useState('')
   const [completionDelta, setCompletionDelta] = useState(0)
-  const wordLedger = useMemo(() => buildWordLedger(paragraphs, lessonWords), [paragraphs, lessonWords])
-  const scenes = useMemo(() => [...new Set(wordLedger.map((word) => word.sceneTitle))], [wordLedger])
+  const [bookmarkedWordIds, setBookmarkedWordIds] = useState<ReadonlySet<string>>(
+    () => new Set(lessonWords.filter((word) => word.bookmarked).map((word) => word.word.id)),
+  )
   const completedCards = Math.min(
     completionSummary.paragraph.totalCards,
     Math.max(0, completionSummary.paragraph.completedCards + completionDelta),
@@ -113,41 +88,34 @@ export function StoryFirstPassPanel({
       ) : null}
       {activeStep === 2 ? (
         <SelectionSearch>
-          <StoryRecall
+          <StoryReader
             lessonId={lessonId}
             paragraphs={paragraphs}
             lessonWords={lessonWords}
+            mode="recall"
             completedCards={completedCards}
             totalCards={completionSummary.paragraph.totalCards}
             bookmarkedParagraphIndexes={bookmarkedParagraphIndexes}
             onParagraphBookmarkChange={onParagraphBookmarkChange}
             onParagraphCompletionDelta={(_paragraphIndex, delta) => setCompletionDelta((current) => current + delta)}
-            onRate={onRate}
           />
         </SelectionSearch>
       ) : null}
-      {recallStatus && activeStep === 2 ? (
-        <p role="status" className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          {recallStatus}
-        </p>
-      ) : null}
       {activeStep === 3 ? (
-        <div>
-          <div className="mb-6 grid gap-3 rounded-2xl border border-stone-200 bg-white p-4 dark:border-stone-700 dark:bg-stone-900 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.55fr)] sm:p-5">
-            <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-              搜索本篇词册
-              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入单词、词义或用法" className="mt-2 min-h-11 w-full rounded-xl border border-stone-300 bg-stone-50 px-3 text-base text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-red-700 focus:ring-2 focus:ring-red-700/20 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100" />
-            </label>
-            <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-              按场景筛选
-              <select value={scene} onChange={(event) => setScene(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-stone-300 bg-stone-50 px-3 text-base text-stone-900 outline-none transition focus:border-red-700 focus:ring-2 focus:ring-red-700/20 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100">
-                <option value="">全部场景</option>
-                {scenes.map((sceneTitle) => <option key={sceneTitle} value={sceneTitle}>{sceneTitle}</option>)}
-              </select>
-            </label>
-          </div>
-          <SelectionSearch><StoryWordList lessonWords={wordLedger} query={query} scene={scene} /></SelectionSearch>
-        </div>
+        <SelectionSearch>
+          <StoryWordList
+            lessonWords={lessonWords}
+            bookmarkedWordIds={bookmarkedWordIds}
+            onWordBookmarkedChange={(wordId, bookmarked) => {
+              setBookmarkedWordIds((current) => {
+                const next = new Set(current)
+                if (bookmarked) next.add(wordId)
+                else next.delete(wordId)
+                return next
+              })
+            }}
+          />
+        </SelectionSearch>
       ) : null}
     </section>
   )
