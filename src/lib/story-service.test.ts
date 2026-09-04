@@ -78,6 +78,11 @@ type ParagraphBookmarkRow = {
   lessonId: string
   paragraphIndex: number
 }
+type UserWordBookmarkRow = {
+  userId: string
+  wordId: string
+  bookmarked: boolean
+}
 type LessonWordRow = {
   id: string
   lessonId: string
@@ -85,7 +90,12 @@ type LessonWordRow = {
   meaningId: string
   sortOrder: number
   glossCn: string
-  word: { id: string; text: string; phonetic: string | null }
+  word: {
+    id: string
+    text: string
+    phonetic: string | null
+    userWords: Array<{ bookmarked: boolean }>
+  }
   meaning: { id: string; partOfSpeech: string; definition: string; definitionCn: string | null; example: string | null }
   userProgress?: WordProgressRow[]
   reviewAttempts?: ReviewAttemptRow[]
@@ -115,6 +125,7 @@ type ServiceFakePrisma = {
     wordProgress: WordProgressRow[]
     reviewAttempts: ReviewAttemptRow[]
     paragraphBookmarks: ParagraphBookmarkRow[]
+    userWords: UserWordBookmarkRow[]
     nextProgress: number
   }
   $transaction<T>(callback: (tx: ServiceFakePrisma) => Promise<T>): Promise<T>
@@ -155,7 +166,7 @@ function makeLesson(overrides: Partial<LessonRow> = {}): LessonRow {
         meaningId: 'meaning-beta',
         sortOrder: 2,
         glossCn: '贝塔',
-        word: { id: 'word-beta', text: 'beta', phonetic: null },
+        word: { id: 'word-beta', text: 'beta', phonetic: null, userWords: [] },
         meaning: { id: 'meaning-beta', partOfSpeech: 'n.', definition: 'beta', definitionCn: '贝塔', example: null },
       },
       {
@@ -165,7 +176,7 @@ function makeLesson(overrides: Partial<LessonRow> = {}): LessonRow {
         meaningId: 'meaning-alpha',
         sortOrder: 1,
         glossCn: '阿尔法',
-        word: { id: 'word-alpha', text: 'alpha', phonetic: '/ˈælfə/' },
+        word: { id: 'word-alpha', text: 'alpha', phonetic: '/ˈælfə/', userWords: [] },
         meaning: { id: 'meaning-alpha', partOfSpeech: 'n.', definition: 'alpha', definitionCn: '阿尔法', example: 'alpha example' },
       },
     ],
@@ -216,6 +227,7 @@ function createServicePrisma({
   wordProgress = [] as WordProgressRow[],
   reviewAttempts = [] as ReviewAttemptRow[],
   paragraphBookmarks = [] as ParagraphBookmarkRow[],
+  userWords = [] as UserWordBookmarkRow[],
   now = new Date('2026-08-21T00:00:00.000Z'),
 } = {}) {
   const state = {
@@ -225,6 +237,7 @@ function createServicePrisma({
     wordProgress: clone(wordProgress),
     reviewAttempts: clone(reviewAttempts),
     paragraphBookmarks: clone(paragraphBookmarks),
+    userWords: clone(userWords),
     nextProgress: 1,
   }
   const calls: string[] = []
@@ -239,9 +252,20 @@ function createServicePrisma({
     }
     if (args.include?.words) {
       const wordInclude = (args.include.words as { include?: Record<string, unknown> }).include
+      const userWordQuery = typeof wordInclude?.word === 'object'
+        ? (wordInclude.word as { select?: { userWords?: { where?: { userId?: string }; select?: { bookmarked?: boolean } } } }).select?.userWords
+        : undefined
       row.words = row.words
         .map((word) => ({
           ...clone(word),
+          word: {
+            ...clone(word.word),
+            userWords: userWordQuery
+              ? state.userWords
+                .filter((item) => item.wordId === word.wordId && item.userId === userWordQuery.where?.userId)
+                .map((item) => ({ bookmarked: item.bookmarked }))
+              : [],
+          },
           userProgress: state.wordProgress
             .filter((item) => item.lessonWordId === word.id && item.userId === 'user-1')
             .map(clone),
@@ -419,6 +443,22 @@ describe('listStoryLessons', () => {
 })
 
 describe('getStoryLesson', () => {
+  it('returns the current user bookmark state and defaults missing UserWord rows to false', async () => {
+    const prisma = createServicePrisma({
+      userWords: [
+        { userId: 'user-1', wordId: 'word-alpha', bookmarked: true },
+        { userId: 'other-user', wordId: 'word-beta', bookmarked: true },
+      ],
+    })
+
+    const detail = await getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-ready-1' })
+
+    expect(detail?.lessonWords.map(({ word, bookmarked }) => ({ word: word.text, bookmarked }))).toEqual([
+      { word: 'alpha', bookmarked: true },
+      { word: 'beta', bookmarked: false },
+    ])
+  })
+
   it('returns only the current user bookmark indexes from the lesson detail query', async () => {
     const prisma = createServicePrisma({
       paragraphBookmarks: [

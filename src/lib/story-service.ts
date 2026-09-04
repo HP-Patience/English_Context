@@ -51,6 +51,7 @@ export type StoryLessonWordDto = {
   id: string
   sortOrder: number
   glossCn: string
+  readonly bookmarked: boolean
   word: {
     id: string
     text: string
@@ -159,7 +160,12 @@ type LessonWordRow = {
   id: string
   sortOrder: number
   glossCn: string
-  word: { id: string; text: string; phonetic: string | null }
+  word: {
+    id: string
+    text: string
+    phonetic: string | null
+    userWords?: Array<{ bookmarked: boolean }>
+  }
   meaning: {
     id: string
     partOfSpeech?: string | null
@@ -383,7 +389,18 @@ function lessonInclude(userId: string, includeDetailRelations = false) {
     words: {
       orderBy: { sortOrder: 'asc' },
       include: {
-        word: true,
+        word: {
+          select: {
+            id: true,
+            text: true,
+            phonetic: true,
+            userWords: {
+              where: { userId },
+              select: { bookmarked: true },
+              take: 1,
+            },
+          },
+        },
         meaning: true,
         userProgress: { where: { userId } },
         ...(includeDetailRelations ? {
@@ -541,6 +558,7 @@ function toLessonWordDto(row: LessonWordRow): StoryLessonWordDto {
     id: row.id,
     sortOrder: row.sortOrder,
     glossCn: row.glossCn,
+    bookmarked: row.word.userWords?.[0]?.bookmarked ?? false,
     word: {
       id: row.word.id,
       text: row.word.text,
