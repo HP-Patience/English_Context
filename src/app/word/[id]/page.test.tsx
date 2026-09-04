@@ -77,6 +77,7 @@ describe('/word/[id]', () => {
     const user = userEvent.setup()
     render(<WordDetailPage />)
     await screen.findByRole('heading', { level: 1, name: 'resolve' })
+    expect(screen.getByRole('button', { name: '收藏单词 resolve' }).querySelector('svg')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '收藏单词 resolve' }))
 

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 
 import Loading from '@/components/Loading'
 import PronounceButton from '@/components/PronounceButton'
+import { BookmarkStarIcon } from '@/components/BookmarkStarIcon'
 import { invalidateCache } from '@/lib/api-cache'
 import type { BookmarkStatePayload } from '@/lib/bookmark-api-types'
 
@@ -91,9 +92,9 @@ export default function WordDetailPage() {
             disabled={savingBookmark}
             aria-pressed={bookmarked}
             aria-label={`${bookmarked ? '取消收藏' : '收藏'}单词 ${word.text}`}
-            className={`inline-flex min-h-11 items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 dark:focus-visible:ring-offset-stone-950 ${bookmarked ? 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200' : 'border-stone-200 bg-white text-stone-600 hover:border-amber-300 hover:text-amber-700 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:border-amber-700 dark:hover:text-amber-300'}`}
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 dark:focus-visible:ring-offset-stone-950 ${bookmarked ? 'word-bookmark-selected' : 'border-stone-200 bg-white text-stone-600 hover:border-amber-300 hover:text-amber-700 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:border-amber-700 dark:hover:text-amber-300'}`}
           >
-            {savingBookmark ? '保存中' : bookmarked ? '已收藏' : '收藏'}
+            <BookmarkStarIcon bookmarked={bookmarked} className="h-6 w-6" />
           </button>
         </div>
         {userWord ? <span className={`rounded-full bg-stone-100 px-3 py-1 text-xs font-medium dark:bg-stone-800 ${masteryColor(userWord.mastery)}`}>{masteryLabel(userWord.mastery)} {userWord.mastery > 0 ? `· ${userWord.mastery}%` : ''}</span> : null}
