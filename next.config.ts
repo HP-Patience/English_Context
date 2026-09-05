@@ -3,6 +3,9 @@ import withSerwist from "@serwist/next";
 
 const nextConfig: NextConfig = {
   turbopack: {},
+  experimental: {
+    cpus: 1,
+  },
   async headers() {
     return [{
       source: '/sw.js',
