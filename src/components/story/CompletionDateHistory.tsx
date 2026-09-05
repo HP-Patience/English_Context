@@ -174,7 +174,7 @@ export function CompletionDateHistory({
     <section aria-label={`${label}历史`} className="rounded-xl border border-[var(--story-line)] bg-[var(--story-bg)] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-[var(--story-muted)]">
-          {manageable ? <span className="mr-2 text-[var(--story-ink)]">编辑学习记录</span> : null}
+          {manageable && expanded ? <span className="mr-2 text-[var(--story-ink)]">编辑学习记录</span> : null}
           {visibleCount === undefined ? '可独立记录完成日期' : <>{summaryLabel} <span className="tabular-nums text-[var(--story-ink)]">{visibleCount}</span> 次{visibleLatestDate ? <> · 最近 <time dateTime={visibleLatestDate}>{visibleLatestDate}</time></> : null}</>}
         </p>
         {!expanded ? <button type="button" aria-label={`记录或查看${label}历史`} onClick={() => setExpanded(true)} className={controlClass}>编辑学习记录</button> : null}

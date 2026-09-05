@@ -79,6 +79,8 @@ describe('StoryReader paragraph cards', () => {
     expect(screen.getByRole('link', { name: '学堂试探' })).toHaveAttribute('href', '/story/lesson-1/cards/1')
     expect(screen.queryByRole('link', { name: '查看本段详情' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '查看本段详情' })).not.toBeInTheDocument()
+    expect(await within(cards[0]).findByText('编辑学习记录')).toBeInTheDocument()
+    expect(within(cards[0]).getByRole('button', { name: '记录今天' })).toBeInTheDocument()
 
     const visibleGloss = screen.getByRole('button', { name: '隐藏段内 resolve 的释义：决意' })
     expect(visibleGloss).toHaveAttribute('aria-pressed', 'true')
@@ -119,7 +121,6 @@ describe('StoryReader paragraph cards', () => {
     )
 
     const firstCard = screen.getAllByRole('article', { name: /故事段落/ })[0]
-    fireEvent.click(within(firstCard).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
     fireEvent.click(await within(firstCard).findByRole('button', { name: '补记其他日期' }))
     const picker = within(firstCard).getByLabelText('第 1 段完成日期')
     fireEvent.change(picker, { target: { value: '2026-08-22' } })
@@ -204,7 +205,6 @@ describe('StoryReader paragraph cards', () => {
 
     render(<LearningViews />)
     const firstCard = screen.getAllByRole('article', { name: /故事段落/ })[0]
-    fireEvent.click(within(firstCard).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
     fireEvent.click(await within(firstCard).findByRole('button', { name: '补记其他日期' }))
     const picker = within(firstCard).getByLabelText('第 1 段完成日期')
     fireEvent.change(picker, { target: { value: '2026-08-22' } })
@@ -215,8 +215,8 @@ describe('StoryReader paragraph cards', () => {
     expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(2)
   })
 
-  it('keeps 100 paragraph histories lazy while loading and saving expanded cards independently', async () => {
-    const manyParagraphs: StoryLessonParagraph[] = Array.from({ length: 100 }, (_, index) => ({
+  it('loads and saves expanded paragraph histories independently', async () => {
+    const manyParagraphs: StoryLessonParagraph[] = Array.from({ length: 2 }, (_, index) => ({
       sceneTitle: `段落 ${index + 1}`,
       segments: [{ type: 'text', value: `内容 ${index + 1}` }],
     }))
@@ -251,18 +251,13 @@ describe('StoryReader paragraph cards', () => {
         lessonWords={[]}
         mode="learn"
         completedCards={0}
-        totalCards={100}
+        totalCards={2}
         bookmarkedParagraphIndexes={new Set()}
         onParagraphBookmarkChange={() => undefined}
       />,
     )
 
-    expect(screen.getAllByRole('button', { name: /记录或查看第 .* 段完成日期历史/ })).toHaveLength(100)
-    expect(fetchMock).not.toHaveBeenCalled()
-
     const cards = screen.getAllByRole('article', { name: /故事段落/ })
-    fireEvent.click(within(cards[0]).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
-    fireEvent.click(within(cards[1]).getByRole('button', { name: '记录或查看第 2 段完成日期历史' }))
     const firstHistory = await within(cards[0]).findByRole('list', { name: '已保存日期' })
     const secondHistory = await within(cards[1]).findByRole('list', { name: '已保存日期' })
     expect(within(firstHistory).getByText('2026-09-01')).toBeInTheDocument()

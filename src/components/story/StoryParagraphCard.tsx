@@ -114,7 +114,6 @@ export function StoryParagraphCard({
           label={`第 ${paragraphIndex + 1} 段完成日期`}
           summaryLabel="本卡已学习"
           onCompletionDelta={onCompletionDelta}
-          lazy
           manageable
         />
       </div>
