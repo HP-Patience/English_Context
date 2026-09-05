@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
@@ -211,7 +212,14 @@ function LearnPageContent() {
       <div className="mx-auto max-w-lg">
         <div className="mb-6 text-center">
           <div className="flex items-center justify-center gap-2">
-            <h1 className="text-3xl font-bold">{showPrevItem.word}</h1>
+            <h1 className="text-3xl font-bold">
+              <Link
+                href={`/word/${encodeURIComponent(showPrevItem.wordId)}`}
+                className="underline decoration-stone-300 decoration-2 underline-offset-4 transition-colors hover:text-amber-700 focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:decoration-stone-600 dark:hover:text-amber-400"
+              >
+                {showPrevItem.word}
+              </Link>
+            </h1>
             <PronounceButton word={showPrevItem.word} />
           </div>
           <div className="mt-2 text-sm text-stone-500 dark:text-stone-400">
@@ -287,7 +295,14 @@ function LearnPageContent() {
       )}
       <div className="mb-6 text-center">
         <div className="flex items-center justify-center gap-2">
-          <h1 className="text-3xl font-bold">{item.word}</h1>
+          <h1 className="text-3xl font-bold">
+            <Link
+              href={`/word/${encodeURIComponent(item.wordId)}`}
+              className="underline decoration-stone-300 decoration-2 underline-offset-4 transition-colors hover:text-amber-700 focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:decoration-stone-600 dark:hover:text-amber-400"
+            >
+              {item.word}
+            </Link>
+          </h1>
           <PronounceButton word={item.word} />
           <WordBookmarkButton
             key={item.wordId}

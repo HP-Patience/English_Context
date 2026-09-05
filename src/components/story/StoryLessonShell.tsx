@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useDeferredValue, useState } from 'react'
 
 import type { PublicStoryLessonDetail, StoryProgressApiResponse } from '@/lib/story-api-types'
 import type { UserStoryProgressDto } from '@/lib/story-service'
@@ -39,6 +39,7 @@ function stepName(step: FirstPassView): string {
 export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = null }: StoryLessonShellProps) {
   const [savedProgress, setSavedProgress] = useState(progress)
   const [activeStep, setActiveStep] = useState<FirstPassView>(() => firstPassView(progress))
+  const renderedStep = useDeferredValue(activeStep)
   const [savingStep, setSavingStep] = useState<StoryFirstPassStep | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [bookmarkedParagraphIndexes, setBookmarkedParagraphIndexes] = useState<ReadonlySet<number>>(
@@ -107,15 +108,20 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
         <StoryStepNav currentStep={activeStep} completedStep={savedProgress.completedStep} onSelect={setActiveStep} />
       </div>
 
-      <StoryFirstPassPanel
-        lessonId={lesson.id}
-        activeStep={activeStep}
-        paragraphs={lesson.content.paragraphs}
-        lessonWords={lesson.lessonWords}
-        completionSummary={lesson.completionSummary}
-        bookmarkedParagraphIndexes={bookmarkedParagraphIndexes}
-        onParagraphBookmarkChange={handleParagraphBookmarkChange}
-      />
+      <div
+        aria-busy={renderedStep !== activeStep}
+        className={`story-step-panel ${renderedStep !== activeStep ? 'story-step-panel-pending' : ''}`}
+      >
+        <StoryFirstPassPanel
+          lessonId={lesson.id}
+          activeStep={renderedStep}
+          paragraphs={lesson.content.paragraphs}
+          lessonWords={lesson.lessonWords}
+          completionSummary={lesson.completionSummary}
+          bookmarkedParagraphIndexes={bookmarkedParagraphIndexes}
+          onParagraphBookmarkChange={handleParagraphBookmarkChange}
+        />
+      </div>
 
       {error ? <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-900 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">{error}</p> : null}
 

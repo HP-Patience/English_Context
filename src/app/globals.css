@@ -91,6 +91,8 @@
 .story-theme .story-scene {
   border-color: var(--story-line);
   color: var(--story-ink);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 24rem;
 }
 
 .story-theme .story-scene h3 {
@@ -157,8 +159,19 @@
   color: var(--story-ink);
 }
 
+.story-theme .story-step-panel {
+  opacity: 1;
+  transition: opacity 200ms ease-out;
+}
+
+.story-theme .story-step-panel-pending {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .story-theme .story-step-list::before {
+  .story-theme .story-step-list::before,
+  .story-theme .story-step-panel {
     transition: none;
   }
 }

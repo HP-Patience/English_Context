@@ -323,6 +323,18 @@ describe('StoryLessonShell', () => {
     expect(screen.getByRole('heading', { level: 2, name: '第二步 · 遮义回想' })).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(1)
   })
+
+  it('updates the selected step before settling the deferred story panel', async () => {
+    render(<StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /第三步/ }))
+
+    expect(screen.getByRole('button', { name: /第三步/ })).toHaveAttribute('aria-current', 'step')
+    const heading = await screen.findByRole('heading', { level: 2, name: '第三步 · 归卷复习' })
+    expect(heading).toBeInTheDocument()
+    expect(heading.closest('.story-step-panel')).toHaveAttribute('aria-busy', 'false')
+  })
+
   it('keeps Step3 enterable while sequential persistence renders an ordered independent gloss reveal list', async () => {
     const lessonWithUnorderedWords = { ...lesson, lessonWords: [...lesson.lessonWords].reverse() }
     render(<StoryLessonShell lesson={lessonWithUnorderedWords} progress={lesson.progress} dueWords={2} nextLessonId="lesson-2" />)
