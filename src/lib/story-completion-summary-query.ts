@@ -10,6 +10,7 @@ type CompletionAggregateRow = {
 
 type ParagraphCompletionAggregateRow = CompletionAggregateRow & {
   readonly paragraphIndex: number
+  readonly step: number
 }
 
 type CompletionAggregateDelegate<Row> = {
@@ -56,7 +57,7 @@ export async function loadStoryCompletionSummaries({
     ...aggregateFields,
   } satisfies Prisma.UserStoryStepCompletionGroupByArgs
   const paragraphQuery = {
-    by: ['lessonId', 'paragraphIndex'],
+    by: ['lessonId', 'step', 'paragraphIndex'],
     ...aggregateFields,
   } satisfies Prisma.UserStoryParagraphCompletionGroupByArgs
   const [lessonRows, stepRows, paragraphRows] = await Promise.all([
@@ -76,13 +77,25 @@ export async function loadStoryCompletionSummaries({
   for (const row of paragraphRows) {
     const summary = summaries[row.lessonId]
     if (!summary) continue
+    const step = row.step === 2 ? 2 : 1
+    const stepSummary = summary.paragraphByStep?.[step]
+    if (!stepSummary) continue
     summaries[row.lessonId] = {
       ...summary,
-      paragraph: {
+      paragraph: step === 1 ? {
         ...summary.paragraph,
         count: summary.paragraph.count + row._count._all,
         latestDate: laterDate(summary.paragraph.latestDate, dateOnly(row._max.completionDate)),
         completedCards: summary.paragraph.completedCards + 1,
+      } : summary.paragraph,
+      paragraphByStep: {
+        ...summary.paragraphByStep,
+        [step]: {
+          count: stepSummary.count + row._count._all,
+          latestDate: laterDate(stepSummary.latestDate, dateOnly(row._max.completionDate)),
+          completedCards: stepSummary.completedCards + 1,
+          completedParagraphIndexes: [...stepSummary.completedParagraphIndexes, row.paragraphIndex],
+        },
       },
     }
   }
@@ -94,10 +107,12 @@ function aggregateSummary(row: CompletionAggregateRow): { readonly count: number
 }
 
 function emptySummary(totalCards: number): StoryCompletionSummary {
+  const emptyStep = () => ({ count: 0, latestDate: null, completedCards: 0, completedParagraphIndexes: [] })
   return {
     lesson: { count: 0, latestDate: null },
     step: { count: 0, latestDate: null },
     paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards },
+    paragraphByStep: { 1: emptyStep(), 2: emptyStep() },
   }
 }
 

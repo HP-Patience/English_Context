@@ -118,16 +118,55 @@ describe('StoryReader paragraph cards', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
-    const picker = await screen.findByLabelText('第 1 段完成日期')
+    const firstCard = screen.getAllByRole('article', { name: /故事段落/ })[0]
+    fireEvent.click(within(firstCard).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
+    fireEvent.click(await within(firstCard).findByRole('button', { name: '补记其他日期' }))
+    const picker = within(firstCard).getByLabelText('第 1 段完成日期')
     fireEvent.change(picker, { target: { value: '2026-08-22' } })
     fireEvent.click(screen.getAllByRole('button', { name: '保存日期' })[0])
 
     await waitFor(() => expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(2))
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/story/lessons/lesson-1/paragraphs/0/completions',
+      '/api/story/lessons/lesson-1/paragraphs/0/completions?step=1',
       expect.objectContaining({ method: 'POST' }),
     )
+  })
+
+  it('scrolls to the first incomplete paragraph and hides the control when all are complete', () => {
+    window.scrollTo = vi.fn()
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true })
+    const { rerender } = render(
+      <StoryReader
+        lessonId="lesson-1"
+        paragraphs={paragraphs}
+        lessonWords={lessonWords}
+        mode="recall"
+        completedCards={1}
+        totalCards={2}
+        completedParagraphIndexes={new Set([0])}
+        bookmarkedParagraphIndexes={new Set()}
+        onParagraphBookmarkChange={() => undefined}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '跳到第 2 个未完成段落' }))
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0)
+    expect(screen.getAllByText('故事学习进度 1/2')).toHaveLength(2)
+
+    rerender(
+      <StoryReader
+        lessonId="lesson-1"
+        paragraphs={paragraphs}
+        lessonWords={lessonWords}
+        mode="recall"
+        completedCards={2}
+        totalCards={2}
+        completedParagraphIndexes={new Set([0, 1])}
+        bookmarkedParagraphIndexes={new Set()}
+        onParagraphBookmarkChange={() => undefined}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: /未完成段落/ })).not.toBeInTheDocument()
   })
 
   it('reports first completions so shared progress survives a learning-view remount', async () => {
@@ -164,8 +203,10 @@ describe('StoryReader paragraph cards', () => {
     }
 
     render(<LearningViews />)
-    fireEvent.click(screen.getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
-    const picker = await screen.findByLabelText('第 1 段完成日期')
+    const firstCard = screen.getAllByRole('article', { name: /故事段落/ })[0]
+    fireEvent.click(within(firstCard).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
+    fireEvent.click(await within(firstCard).findByRole('button', { name: '补记其他日期' }))
+    const picker = within(firstCard).getByLabelText('第 1 段完成日期')
     fireEvent.change(picker, { target: { value: '2026-08-22' } })
     fireEvent.click(screen.getAllByRole('button', { name: '保存日期' })[0])
     await waitFor(() => expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(2))
@@ -219,17 +260,21 @@ describe('StoryReader paragraph cards', () => {
     expect(screen.getAllByRole('button', { name: /记录或查看第 .* 段完成日期历史/ })).toHaveLength(100)
     expect(fetchMock).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
-    fireEvent.click(screen.getByRole('button', { name: '记录或查看第 2 段完成日期历史' }))
-    expect(await screen.findByRole('button', { name: '选择日期 2026-09-01' })).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: '选择日期 2026-09-02' })).toBeInTheDocument()
+    const cards = screen.getAllByRole('article', { name: /故事段落/ })
+    fireEvent.click(within(cards[0]).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
+    fireEvent.click(within(cards[1]).getByRole('button', { name: '记录或查看第 2 段完成日期历史' }))
+    const firstHistory = await within(cards[0]).findByRole('list', { name: '已保存日期' })
+    const secondHistory = await within(cards[1]).findByRole('list', { name: '已保存日期' })
+    expect(within(firstHistory).getByText('2026-09-01')).toBeInTheDocument()
+    expect(within(secondHistory).getByText('2026-09-02')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
-    fireEvent.change(screen.getByLabelText('第 1 段完成日期'), { target: { value: '2026-09-03' } })
-    fireEvent.click(screen.getAllByRole('button', { name: '保存日期' })[0])
+    fireEvent.click(within(cards[0]).getByRole('button', { name: '补记其他日期' }))
+    fireEvent.change(within(cards[0]).getByLabelText('第 1 段完成日期'), { target: { value: '2026-09-03' } })
+    fireEvent.click(within(cards[0]).getByRole('button', { name: '保存日期' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
-    expect(screen.getByRole('button', { name: '选择日期 2026-09-03' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择日期 2026-09-02' })).toBeInTheDocument()
+    expect(within(firstHistory).getByText('2026-09-03')).toBeInTheDocument()
+    expect(within(secondHistory).getByText('2026-09-02')).toBeInTheDocument()
   })
 })

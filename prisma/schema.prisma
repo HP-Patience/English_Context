@@ -176,6 +176,7 @@ model UserStoryParagraphCompletion {
   userId         String
   lessonId       String
   paragraphIndex Int
+  step           Int      @default(1)
   completionDate DateTime @db.Date
   createdAt      DateTime @default(now())
 
@@ -183,7 +184,7 @@ model UserStoryParagraphCompletion {
   lesson StoryLesson @relation(fields: [lessonId], references: [id])
 
   @@unique([userId, completionId])
-  @@index([userId, lessonId, paragraphIndex])
+  @@index([userId, lessonId, step, paragraphIndex])
   @@index([lessonId, completionDate])
 }
 

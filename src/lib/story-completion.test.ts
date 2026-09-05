@@ -101,7 +101,7 @@ function createCompletionPrisma() {
 describe('story completion persistence', () => {
   it('is idempotent by completionId while allowing the same date under distinct ids', async () => {
     const prisma = createCompletionPrisma()
-    const base = { prisma, userId: 'user-1', lessonId: 'lesson-1', paragraphIndex: 0 }
+    const base = { prisma, userId: 'user-1', lessonId: 'lesson-1', paragraphIndex: 0, step: 1 as const }
 
     const first = await recordParagraphCompletion({
       ...base,
@@ -120,6 +120,26 @@ describe('story completion persistence', () => {
     expect(prisma.state.paragraphRows).toHaveLength(2)
   })
 
+  it('isolates paragraph records by step and treats an omitted step as Step 1', async () => {
+    const prisma = createCompletionPrisma()
+    const base = { prisma, userId: 'user-1', lessonId: 'lesson-1', paragraphIndex: 0 }
+
+    await recordParagraphCompletion({
+      ...base,
+      payload: { completionId: 'legacy-client', date: '2026-09-01' },
+    })
+    await recordParagraphCompletion({
+      ...base,
+      step: 2,
+      payload: { completionId: 'recall-client', date: '2026-09-02' },
+    })
+
+    expect(prisma.state.paragraphRows).toEqual([
+      expect.objectContaining({ completionId: 'legacy-client', step: 1 }),
+      expect.objectContaining({ completionId: 'recall-client', step: 2 }),
+    ])
+  })
+
   it('rejects a paragraph index outside immutable ready lesson content', async () => {
     const prisma = createCompletionPrisma()
 
@@ -135,7 +155,7 @@ describe('story completion persistence', () => {
 
   it('rejects reuse of a completionId for a different immutable event', async () => {
     const prisma = createCompletionPrisma()
-    const base = { prisma, userId: 'user-1', lessonId: 'lesson-1', paragraphIndex: 0 }
+    const base = { prisma, userId: 'user-1', lessonId: 'lesson-1', paragraphIndex: 0, step: 1 as const }
     await recordParagraphCompletion({ ...base, payload: { completionId: 'client-1', date: '2026-09-01' } })
 
     await expect(recordParagraphCompletion({

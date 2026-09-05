@@ -635,6 +635,10 @@ describe('getStoryLesson', () => {
       lesson: { count: 0, latestDate: null },
       step: { count: 0, latestDate: null },
       paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 2 },
+      paragraphByStep: {
+        1: { count: 0, latestDate: null, completedCards: 0, completedParagraphIndexes: [] },
+        2: { count: 0, latestDate: null, completedCards: 0, completedParagraphIndexes: [] },
+      },
     })
     await expect(getStoryLesson({ prisma, userId: 'user-1', lessonId: 'lesson-hidden', now: prisma.now })).resolves.toBeNull()
   })

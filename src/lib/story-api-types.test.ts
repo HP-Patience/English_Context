@@ -36,6 +36,7 @@ import { GET as getReviewQueue, POST as postReview } from '../app/api/story/revi
 import {
   classifyStoryApiError,
   parseStoryCompletionPayload,
+  parseStoryParagraphStep,
   parseStoryProgressPayload,
   parseStoryReviewApiResponse,
   parseStoryReviewPayload,
@@ -221,6 +222,13 @@ describe('story API payload parsers', () => {
     expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', round: 0, result: 'vague' })).toBeNull()
     expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', round: 6, result: 'vague' })).toBeNull()
     expect(parseStoryReviewPayload({ lessonWordId: 'lesson-word-1', round: 1.5, result: 'vague' })).toBeNull()
+  })
+
+  it('defaults legacy paragraph completion requests to Step 1 and accepts only reading steps', () => {
+    expect(parseStoryParagraphStep(null)).toBe(1)
+    expect(parseStoryParagraphStep('1')).toBe(1)
+    expect(parseStoryParagraphStep('2')).toBe(2)
+    expect(parseStoryParagraphStep('3')).toBeNull()
   })
 
   it('accepts only a complete POST review response matching the requested due round', () => {

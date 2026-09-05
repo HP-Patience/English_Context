@@ -17,6 +17,7 @@ export type StoryCompletionDeletePayload = {
 
 export type StoryCompletionApiResponse = { readonly completion: StoryCompletionEvent }
 export type StoryCompletionHistoryApiResponse = { readonly completions: readonly StoryCompletionEvent[] }
+export type StoryParagraphStep = 1 | 2
 
 const MAX_IDENTIFIER_LENGTH = 200
 
@@ -59,6 +60,12 @@ export function parseStoryParagraphIndex(value: string): number | null {
   if (!/^(0|[1-9]\d*)$/.test(value)) return null
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) ? parsed : null
+}
+
+export function parseStoryParagraphStep(value: string | null): StoryParagraphStep | null {
+  if (value === null || value === '1') return 1
+  if (value === '2') return 2
+  return null
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

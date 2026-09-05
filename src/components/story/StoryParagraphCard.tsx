@@ -39,8 +39,9 @@ export function StoryParagraphCard({
 
   return (
     <article
+      id={`story-paragraph-${paragraphIndex}`}
       aria-label={`故事段落 ${paragraphIndex + 1}：${paragraph.sceneTitle}`}
-      className="story-scene relative rounded-2xl border border-[var(--story-line)] bg-[var(--story-surface)] p-4 shadow-sm sm:p-5"
+      className="story-scene relative scroll-mt-6 rounded-2xl border border-[var(--story-line)] bg-[var(--story-surface)] p-4 shadow-sm sm:p-5"
     >
       <div>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -109,10 +110,11 @@ export function StoryParagraphCard({
 
       <div className="mt-4 space-y-3">
         <CompletionDateHistory
-          endpoint={`/api/story/lessons/${encodeURIComponent(lessonId)}/paragraphs/${paragraphIndex}/completions`}
-          label={`第 ${paragraphIndex + 1} 段学习记录`}
+          endpoint={`/api/story/lessons/${encodeURIComponent(lessonId)}/paragraphs/${paragraphIndex}/completions?step=${mode === 'learn' ? 1 : 2}`}
+          label={`第 ${paragraphIndex + 1} 段完成日期`}
           summaryLabel="本卡已学习"
           onCompletionDelta={onCompletionDelta}
+          lazy
           manageable
         />
       </div>

@@ -36,7 +36,11 @@ const lesson: StoryLessonDetail = {
   completionSummary: {
     lesson: { count: 0, latestDate: null },
     step: { count: 0, latestDate: null },
-    paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 2 },
+    paragraph: { count: 1, latestDate: '2026-09-01', completedCards: 1, totalCards: 2 },
+    paragraphByStep: {
+      1: { count: 1, latestDate: '2026-09-01', completedCards: 1, completedParagraphIndexes: [0] },
+      2: { count: 0, latestDate: null, completedCards: 0, completedParagraphIndexes: [] },
+    },
   },
   content: {
     title: '青茅山醒来',
@@ -190,6 +194,7 @@ function reviewResponse(overrides: Record<string, unknown> = {}) {
 
 describe('StoryLessonShell', () => {
   beforeEach(() => {
+    window.scrollTo = vi.fn()
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => progressResponse(1) })
       .mockResolvedValueOnce({ ok: true, json: async () => progressResponse(2) })
@@ -213,14 +218,27 @@ describe('StoryLessonShell', () => {
       '/api/story/lessons/lesson-1/steps/1/completions',
     )
     expect(screen.getAllByRole('article', { name: /故事段落/ })).toHaveLength(2)
+    expect(screen.getAllByText('故事学习进度 1/2')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '跳到第 2 个未完成段落' })).toBeInTheDocument()
+    expect(screen.getByText('第 1 段完成日期')).toHaveAttribute(
+      'data-endpoint',
+      '/api/story/lessons/lesson-1/paragraphs/0/completions?step=1',
+    )
     expect(screen.getByText(/<img src=x onerror="alert\(1\)">雨声压住/)).toBeInTheDocument()
     expect(container.querySelector('img')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /第二步/ }))
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' })
     expect(screen.getByText('第二步完成日期')).toHaveAttribute(
       'data-endpoint',
       '/api/story/lessons/lesson-1/steps/2/completions',
     )
+    expect(screen.getByText('第 1 段完成日期')).toHaveAttribute(
+      'data-endpoint',
+      '/api/story/lessons/lesson-1/paragraphs/0/completions?step=2',
+    )
+    expect(screen.getAllByText('故事学习进度 0/2')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '跳到第 1 个未完成段落' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /第三步/ }))
     expect(screen.getByText('第三步完成日期')).toHaveAttribute(
       'data-endpoint',
@@ -277,10 +295,11 @@ describe('StoryLessonShell', () => {
       body: JSON.stringify({ step: 1 }),
     }))
     expect(await screen.findByRole('heading', { level: 2, name: '第二步 · 遮义回想' })).toBeInTheDocument()
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' })
     expect(screen.getAllByRole('article', { name: /故事段落/ })).toHaveLength(2)
     expect(screen.getByRole('button', { name: '取消收藏第 1 段' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getAllByRole('progressbar', { name: '段落完成进度' })).toHaveLength(2)
-    expect(screen.getByText('第 1 段学习记录')).toBeInTheDocument()
+    expect(screen.getByText('第 1 段完成日期')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '记得' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '模糊' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '忘记' })).not.toBeInTheDocument()

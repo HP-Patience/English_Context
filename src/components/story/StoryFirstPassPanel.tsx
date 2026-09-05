@@ -43,14 +43,34 @@ export function StoryFirstPassPanel({
   bookmarkedParagraphIndexes,
   onParagraphBookmarkChange,
 }: StoryFirstPassPanelProps) {
-  const [completionDelta, setCompletionDelta] = useState(0)
+  const [paragraphProgress, setParagraphProgress] = useState(() => ({
+    1: initialParagraphProgress(completionSummary, 1),
+    2: initialParagraphProgress(completionSummary, 2),
+  }))
   const [bookmarkedWordIds, setBookmarkedWordIds] = useState<ReadonlySet<string>>(
     () => new Set(lessonWords.filter((word) => word.bookmarked).map((word) => word.word.id)),
   )
-  const completedCards = Math.min(
-    completionSummary.paragraph.totalCards,
-    Math.max(0, completionSummary.paragraph.completedCards + completionDelta),
-  )
+  const activeParagraphStep = activeStep === 2 ? 2 : 1
+  const activeParagraphProgress = paragraphProgress[activeParagraphStep]
+
+  function handleParagraphCompletionDelta(paragraphIndex: number, delta: 1 | -1) {
+    setParagraphProgress((current) => {
+      const stepProgress = current[activeParagraphStep]
+      const completedParagraphIndexes = new Set(stepProgress.completedParagraphIndexes)
+      if (delta === 1) completedParagraphIndexes.add(paragraphIndex)
+      else completedParagraphIndexes.delete(paragraphIndex)
+      return {
+        ...current,
+        [activeParagraphStep]: {
+          completedCards: Math.min(
+            completionSummary.paragraph.totalCards,
+            Math.max(0, stepProgress.completedCards + delta),
+          ),
+          completedParagraphIndexes,
+        },
+      }
+    })
+  }
 
   return (
     <section aria-labelledby={`step-${activeStep}-title`} className="mt-7">
@@ -78,11 +98,12 @@ export function StoryFirstPassPanel({
             paragraphs={paragraphs}
             lessonWords={lessonWords}
             mode="learn"
-            completedCards={completedCards}
+            completedCards={activeParagraphProgress.completedCards}
+            completedParagraphIndexes={activeParagraphProgress.completedParagraphIndexes}
             totalCards={completionSummary.paragraph.totalCards}
             bookmarkedParagraphIndexes={bookmarkedParagraphIndexes}
             onParagraphBookmarkChange={onParagraphBookmarkChange}
-            onParagraphCompletionDelta={(_paragraphIndex, delta) => setCompletionDelta((current) => current + delta)}
+            onParagraphCompletionDelta={handleParagraphCompletionDelta}
           />
         </SelectionSearch>
       ) : null}
@@ -93,11 +114,12 @@ export function StoryFirstPassPanel({
             paragraphs={paragraphs}
             lessonWords={lessonWords}
             mode="recall"
-            completedCards={completedCards}
+            completedCards={activeParagraphProgress.completedCards}
+            completedParagraphIndexes={activeParagraphProgress.completedParagraphIndexes}
             totalCards={completionSummary.paragraph.totalCards}
             bookmarkedParagraphIndexes={bookmarkedParagraphIndexes}
             onParagraphBookmarkChange={onParagraphBookmarkChange}
-            onParagraphCompletionDelta={(_paragraphIndex, delta) => setCompletionDelta((current) => current + delta)}
+            onParagraphCompletionDelta={handleParagraphCompletionDelta}
           />
         </SelectionSearch>
       ) : null}
@@ -119,4 +141,12 @@ export function StoryFirstPassPanel({
       ) : null}
     </section>
   )
+}
+
+function initialParagraphProgress(summary: StoryCompletionSummary, step: 1 | 2) {
+  const stepSummary = summary.paragraphByStep?.[step]
+  return {
+    completedCards: stepSummary?.completedCards ?? (step === 1 ? summary.paragraph.completedCards : 0),
+    completedParagraphIndexes: new Set(stepSummary?.completedParagraphIndexes ?? []),
+  }
 }

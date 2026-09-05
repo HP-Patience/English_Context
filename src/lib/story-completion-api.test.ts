@@ -73,7 +73,7 @@ describe('story completion history routes', () => {
 
   it('records zero-based paragraph completion with an exact calendar date', async () => {
     const response = await postParagraphCompletion(
-      request('http://localhost/api/story/lessons/lesson-1/paragraphs/0/completions', {
+      request('http://localhost/api/story/lessons/lesson-1/paragraphs/0/completions?step=2', {
         completionId: ' client-1 ', date: '2026-09-01',
       }),
       { params: Promise.resolve({ id: 'lesson-1', paragraphIndex: '0' }) },
@@ -86,6 +86,7 @@ describe('story completion history routes', () => {
       userId: 'user-1',
       lessonId: 'lesson-1',
       paragraphIndex: 0,
+      step: 2,
       payload: { completionId: 'client-1', date: '2026-09-01' },
     })
   })

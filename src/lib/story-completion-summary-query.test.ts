@@ -11,8 +11,9 @@ describe('loadStoryCompletionSummaries', () => {
       { lessonId: 'lesson-1', _count: { _all: 4 }, _max: { completionDate: new Date('2026-08-19T00:00:00.000Z') } },
     ])
     const paragraphGroupBy = vi.fn().mockResolvedValue([
-      { lessonId: 'lesson-1', paragraphIndex: 0, _count: { _all: 3 }, _max: { completionDate: new Date('2026-08-18T00:00:00.000Z') } },
-      { lessonId: 'lesson-1', paragraphIndex: 2, _count: { _all: 1 }, _max: { completionDate: new Date('2026-08-21T00:00:00.000Z') } },
+      { lessonId: 'lesson-1', step: 1, paragraphIndex: 0, _count: { _all: 3 }, _max: { completionDate: new Date('2026-08-18T00:00:00.000Z') } },
+      { lessonId: 'lesson-1', step: 1, paragraphIndex: 2, _count: { _all: 1 }, _max: { completionDate: new Date('2026-08-21T00:00:00.000Z') } },
+      { lessonId: 'lesson-1', step: 2, paragraphIndex: 1, _count: { _all: 1 }, _max: { completionDate: new Date('2026-08-22T00:00:00.000Z') } },
     ])
     const prisma = {
       userStoryLessonCompletion: { groupBy: lessonGroupBy },
@@ -33,11 +34,19 @@ describe('loadStoryCompletionSummaries', () => {
       lesson: { count: 2, latestDate: '2026-08-20' },
       step: { count: 4, latestDate: '2026-08-19' },
       paragraph: { count: 4, latestDate: '2026-08-21', completedCards: 2, totalCards: 5 },
+      paragraphByStep: {
+        1: { count: 4, latestDate: '2026-08-21', completedCards: 2, completedParagraphIndexes: [0, 2] },
+        2: { count: 1, latestDate: '2026-08-22', completedCards: 1, completedParagraphIndexes: [1] },
+      },
     })
     expect(summaries['lesson-2']).toEqual({
       lesson: { count: 0, latestDate: null },
       step: { count: 0, latestDate: null },
       paragraph: { count: 0, latestDate: null, completedCards: 0, totalCards: 2 },
+      paragraphByStep: {
+        1: { count: 0, latestDate: null, completedCards: 0, completedParagraphIndexes: [] },
+        2: { count: 0, latestDate: null, completedCards: 0, completedParagraphIndexes: [] },
+      },
     })
     expect(lessonGroupBy).toHaveBeenCalledWith(expect.objectContaining({
       by: ['lessonId'],
@@ -45,6 +54,6 @@ describe('loadStoryCompletionSummaries', () => {
       _count: { _all: true },
       _max: { completionDate: true },
     }))
-    expect(paragraphGroupBy).toHaveBeenCalledWith(expect.objectContaining({ by: ['lessonId', 'paragraphIndex'] }))
+    expect(paragraphGroupBy).toHaveBeenCalledWith(expect.objectContaining({ by: ['lessonId', 'step', 'paragraphIndex'] }))
   })
 })

@@ -138,6 +138,12 @@ test('user story progress models capture lesson steps and review scheduling', ()
   assertContains(wordProgress, '@@index([nextReviewAt])')
 })
 
+test('paragraph completion progress is isolated by first-pass step while old rows default to Step 1', () => {
+  const block = modelBlock('UserStoryParagraphCompletion')
+  assertField(block, 'step', 'Int\\s+@default\\(1\\)')
+  assertContains(block, '@@index([userId, lessonId, step, paragraphIndex])')
+})
+
 test('story review attempts are unique per user lesson word and round', () => {
   const block = modelBlock('StoryReviewAttempt')
 

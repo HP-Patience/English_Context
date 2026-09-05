@@ -12,7 +12,7 @@ import type {
 } from './story-review'
 import type { StoryFirstPassStep } from './story-progress'
 import type { StoryLessonDocument } from './story-types'
-export { parseStoryCompletionPayload, parseStoryFirstPassStep, parseStoryParagraphIndex } from './story-completion-api'
+export { parseStoryCompletionPayload, parseStoryFirstPassStep, parseStoryParagraphIndex, parseStoryParagraphStep } from './story-completion-api'
 export type { StoryCompletionApiResponse, StoryCompletionHistoryApiResponse, StoryCompletionPayload } from './story-completion-api'
 
 export type StoryLessonsApiResponse = {

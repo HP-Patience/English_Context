@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { STORY_ERROR_CODES, StoryDomainError } from './story-errors'
 import { parseStoryContent } from './story-types'
 import { projectLegacyStep, syncLegacyStepProjection } from './story-completion-projection'
-import type { StoryCompletionPayload, StoryCompletionUpdatePayload } from './story-completion-api'
+import type { StoryCompletionPayload, StoryCompletionUpdatePayload, StoryParagraphStep } from './story-completion-api'
 import type { StoryFirstPassStep } from './story-progress'
 
 const READY_STATUS = 'ready'
@@ -25,6 +25,12 @@ export type StoryCompletionSummary = {
     readonly completedCards: number
     readonly totalCards: number
   }
+  readonly paragraphByStep?: Readonly<Record<StoryParagraphStep, {
+    readonly count: number
+    readonly latestDate: string | null
+    readonly completedCards: number
+    readonly completedParagraphIndexes: readonly number[]
+  }>>
 }
 
 type CompletionSummaryRow = {
@@ -35,7 +41,7 @@ type CompletionSummaryRow = {
 }
 
 type CompletionRow = CompletionSummaryRow & { readonly userId: string; readonly lessonId: string }
-type ParagraphCompletionRow = CompletionRow & { readonly paragraphIndex: number }
+type ParagraphCompletionRow = CompletionRow & { readonly paragraphIndex: number; readonly step: number }
 type StepCompletionRow = CompletionRow & { readonly step: number }
 type ParagraphCompletionSummaryRow = CompletionSummaryRow & { readonly paragraphIndex: number }
 type StepCompletionSummaryRow = CompletionSummaryRow & { readonly step: number }
@@ -176,28 +182,28 @@ export async function deleteStepCompletion(
 }
 
 export async function listParagraphCompletions(
-  params: CompletionParams & { readonly paragraphIndex: number },
+  params: CompletionParams & { readonly paragraphIndex: number; readonly step?: StoryParagraphStep },
 ): Promise<readonly StoryCompletionEvent[]> {
   const client = asPrisma(params.prisma)
   await requireParagraph(client, params.lessonId, params.paragraphIndex)
   return mapEvents(await client.userStoryParagraphCompletion.findMany(
-    historyQuery(params, { paragraphIndex: params.paragraphIndex }),
+    historyQuery(params, { paragraphIndex: params.paragraphIndex, step: params.step ?? 1 }),
   ))
 }
 
 export async function recordParagraphCompletion(
-  params: RecordCompletionParams & { readonly paragraphIndex: number },
+  params: RecordCompletionParams & { readonly paragraphIndex: number; readonly step?: StoryParagraphStep },
 ): Promise<StoryCompletionEvent> {
   const client = asPrisma(params.prisma)
   await requireParagraph(client, params.lessonId, params.paragraphIndex)
-  const dimensions = { paragraphIndex: params.paragraphIndex }
+  const dimensions = { paragraphIndex: params.paragraphIndex, step: params.step ?? 1 }
   const row = await client.userStoryParagraphCompletion.upsert(eventUpsert(params, dimensions))
   requireMatchingEvent(row, params, dimensions)
   return toEvent(row)
 }
 
 export async function updateParagraphCompletion(
-  params: CompletionParams & { readonly paragraphIndex: number; readonly payload: StoryCompletionUpdatePayload },
+  params: CompletionParams & { readonly paragraphIndex: number; readonly step?: StoryParagraphStep; readonly payload: StoryCompletionUpdatePayload },
 ): Promise<StoryCompletionEvent> {
   const client = asPrisma(params.prisma)
   await requireParagraph(client, params.lessonId, params.paragraphIndex)
@@ -213,7 +219,7 @@ export async function updateParagraphCompletion(
 }
 
 export async function deleteParagraphCompletion(
-  params: CompletionParams & { readonly paragraphIndex: number; readonly completionEventId: string },
+  params: CompletionParams & { readonly paragraphIndex: number; readonly step?: StoryParagraphStep; readonly completionEventId: string },
 ): Promise<void> {
   const client = asPrisma(params.prisma)
   await requireParagraph(client, params.lessonId, params.paragraphIndex)
@@ -285,7 +291,7 @@ function eventUpsert(params: RecordCompletionParams, dimensions: Readonly<Record
 }
 
 function paragraphEventWhere(
-  params: CompletionParams & { readonly paragraphIndex: number },
+  params: CompletionParams & { readonly paragraphIndex: number; readonly step?: StoryParagraphStep },
   id: string,
 ) {
   return {
@@ -293,6 +299,7 @@ function paragraphEventWhere(
     userId: params.userId,
     lessonId: params.lessonId,
     paragraphIndex: params.paragraphIndex,
+    step: params.step ?? 1,
   }
 }
 

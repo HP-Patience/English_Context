@@ -12,21 +12,23 @@ import {
   parseStoryCompletionPayload,
   parseStoryCompletionUpdatePayload,
   parseStoryParagraphIndex,
+  parseStoryParagraphStep,
 } from '@/lib/story-completion-api'
 import type { StoryCompletionApiResponse, StoryCompletionHistoryApiResponse } from '@/lib/story-completion-api'
 import { classifyStoryApiError, normalizeStoryIdentifier } from '@/lib/story-api-types'
 
 type Context = { readonly params: Promise<{ readonly id: string; readonly paragraphIndex: string }> }
 
-export async function GET(_request: NextRequest, { params }: Context) {
+export async function GET(request: NextRequest, { params }: Context) {
   try {
     const values = await params
     const lessonId = normalizeStoryIdentifier(values.id)
     const paragraphIndex = parseStoryParagraphIndex(values.paragraphIndex)
-    if (!lessonId || paragraphIndex === null) return NextResponse.json({ error: 'Invalid story paragraph' }, { status: 400 })
+    const step = parseStoryParagraphStep(request.nextUrl.searchParams.get('step'))
+    if (!lessonId || paragraphIndex === null || step === null) return NextResponse.json({ error: 'Invalid story paragraph' }, { status: 400 })
     const userId = await getLocalUserId()
     const response: StoryCompletionHistoryApiResponse = {
-      completions: await listParagraphCompletions({ prisma, userId, lessonId, paragraphIndex }),
+      completions: await listParagraphCompletions({ prisma, userId, lessonId, paragraphIndex, step }),
     }
     return NextResponse.json(response)
   } catch (error) {
@@ -39,12 +41,13 @@ export async function POST(request: NextRequest, { params }: Context) {
     const values = await params
     const lessonId = normalizeStoryIdentifier(values.id)
     const paragraphIndex = parseStoryParagraphIndex(values.paragraphIndex)
-    if (!lessonId || paragraphIndex === null) return NextResponse.json({ error: 'Invalid story paragraph' }, { status: 400 })
+    const step = parseStoryParagraphStep(request.nextUrl.searchParams.get('step'))
+    if (!lessonId || paragraphIndex === null || step === null) return NextResponse.json({ error: 'Invalid story paragraph' }, { status: 400 })
     const payload = parseStoryCompletionPayload(await request.json())
     if (!payload) return NextResponse.json({ error: 'Invalid story completion payload' }, { status: 400 })
     const userId = await getLocalUserId()
     const response: StoryCompletionApiResponse = {
-      completion: await recordParagraphCompletion({ prisma, userId, lessonId, paragraphIndex, payload }),
+      completion: await recordParagraphCompletion({ prisma, userId, lessonId, paragraphIndex, step, payload }),
     }
     return NextResponse.json(response)
   } catch (error) {
@@ -58,12 +61,13 @@ export async function PATCH(request: NextRequest, { params }: Context) {
     const values = await params
     const lessonId = normalizeStoryIdentifier(values.id)
     const paragraphIndex = parseStoryParagraphIndex(values.paragraphIndex)
-    if (!lessonId || paragraphIndex === null) return NextResponse.json({ error: 'Invalid story paragraph' }, { status: 400 })
+    const step = parseStoryParagraphStep(request.nextUrl.searchParams.get('step'))
+    if (!lessonId || paragraphIndex === null || step === null) return NextResponse.json({ error: 'Invalid story paragraph' }, { status: 400 })
     const payload = parseStoryCompletionUpdatePayload(await request.json())
     if (!payload) return NextResponse.json({ error: 'Invalid story completion payload' }, { status: 400 })
     const userId = await getLocalUserId()
     const response: StoryCompletionApiResponse = {
-      completion: await updateParagraphCompletion({ prisma, userId, lessonId, paragraphIndex, payload }),
+      completion: await updateParagraphCompletion({ prisma, userId, lessonId, paragraphIndex, step, payload }),
     }
     return NextResponse.json(response)
   } catch (error) {
@@ -77,7 +81,8 @@ export async function DELETE(request: NextRequest, { params }: Context) {
     const values = await params
     const lessonId = normalizeStoryIdentifier(values.id)
     const paragraphIndex = parseStoryParagraphIndex(values.paragraphIndex)
-    if (!lessonId || paragraphIndex === null) return NextResponse.json({ error: 'Invalid story paragraph' }, { status: 400 })
+    const step = parseStoryParagraphStep(request.nextUrl.searchParams.get('step'))
+    if (!lessonId || paragraphIndex === null || step === null) return NextResponse.json({ error: 'Invalid story paragraph' }, { status: 400 })
     const payload = parseStoryCompletionDeletePayload(await request.json())
     if (!payload) return NextResponse.json({ error: 'Invalid story completion payload' }, { status: 400 })
     const userId = await getLocalUserId()
@@ -86,6 +91,7 @@ export async function DELETE(request: NextRequest, { params }: Context) {
       userId,
       lessonId,
       paragraphIndex,
+      step,
       completionEventId: payload.id,
     })
     return NextResponse.json({ deleted: true })

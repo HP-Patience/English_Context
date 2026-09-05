@@ -47,6 +47,11 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
   )
   const review = useStoryReviewQueue(lesson, dueWords)
 
+  function selectStep(step: FirstPassView) {
+    setActiveStep(step)
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }
+
   async function completeStep(step: StoryFirstPassStep) {
     if (savingStep !== null || savedProgress.completedStep >= step || step > savedProgress.completedStep + 1) return
     setSavingStep(step)
@@ -58,7 +63,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
       if (!response.ok) throw new Error('progress request failed')
       const payload = await response.json() as StoryProgressApiResponse
       setSavedProgress(payload.progress)
-      if (step < 3) setActiveStep((step + 1) as FirstPassView)
+      if (step < 3) selectStep((step + 1) as FirstPassView)
     } catch {
       setError('进度未能保存，请稍后重试。当前步骤不会被跳过。')
     } finally {
@@ -105,7 +110,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
       </header>
 
       <div className="mt-4 shadow-lg shadow-stone-950/10">
-        <StoryStepNav currentStep={activeStep} completedStep={savedProgress.completedStep} onSelect={setActiveStep} />
+        <StoryStepNav currentStep={activeStep} completedStep={savedProgress.completedStep} onSelect={selectStep} />
       </div>
 
       <div
@@ -131,7 +136,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
             type="button"
             disabled={savingStep !== null}
             onClick={() => {
-              if (viewingFutureStep || revisitingCompletedStep) setActiveStep(nextRequiredStep)
+              if (viewingFutureStep || revisitingCompletedStep) selectStep(nextRequiredStep)
               else void completeStep(activeStep)
             }}
             className="inline-flex min-h-12 items-center justify-center rounded-xl bg-red-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 dark:bg-red-800 dark:hover:bg-red-700 dark:focus-visible:ring-offset-stone-950"
