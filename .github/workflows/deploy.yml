@@ -31,7 +31,7 @@ jobs:
 
       - name: Test
         run: |
-          npx vitest run src/lib scripts/test/story-runtime-smoke.mjs --maxWorkers=1
+          npx vitest run src/lib scripts/test/story-runtime-smoke.mjs src/components/story/CompletionDateHistory.insecure-context.test.tsx --maxWorkers=1
           npm run test:story
 
       - name: Build standalone application

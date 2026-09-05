@@ -165,7 +165,7 @@ export function CompletionDateHistory({
   }
 
   function recordToday() {
-    const completion = { completionId: crypto.randomUUID(), date: localCalendarDate() }
+    const completion = { completionId: createCompletionId(), date: localCalendarDate() }
     setPending(completion)
     void create(completion)
   }
@@ -214,7 +214,7 @@ export function CompletionDateHistory({
           {backfillOpen ? <div className="flex flex-col gap-2 sm:flex-row">
             <input type="date" aria-label={label} value={backfillDate} onChange={(event) => setBackfillDate(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--story-line)] bg-[var(--story-surface)] px-3 text-base tabular-nums text-[var(--story-ink)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)]" />
             <button type="button" disabled={!backfillDate || busy || !online} onClick={() => {
-              const completion = { completionId: crypto.randomUUID(), date: backfillDate }
+              const completion = { completionId: createCompletionId(), date: backfillDate }
               setPending(completion)
               void create(completion)
             }} className={controlClass}>保存日期</button>
@@ -235,6 +235,16 @@ function localCalendarDate(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function createCompletionId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 function sortCompletions(completions: readonly StoryCompletionEvent[]): readonly StoryCompletionEvent[] {
