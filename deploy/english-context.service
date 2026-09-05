@@ -1,0 +1,16 @@
+[Unit]
+Description=English Context Next.js application
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/English_Context/current
+Environment=NODE_ENV=production
+Environment=PORT=3456
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

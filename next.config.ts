@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import withSerwist from "@serwist/next";
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   turbopack: {},
   experimental: {
     cpus: 1,

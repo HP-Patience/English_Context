@@ -1,0 +1,75 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: |
+          npx vitest run src/lib scripts/test/story-runtime-smoke.mjs --maxWorkers=1
+          npm run test:story
+
+      - name: Build standalone application
+        run: npm run build
+
+      - name: Package release
+        run: |
+          rm -f .next/standalone/.env .next/standalone/.env.local .next/standalone/.env.production .next/standalone/.env.production.local
+          mkdir -p .next/standalone/.next/static .next/standalone/public .next/standalone/deploy
+          cp -a .next/static/. .next/standalone/.next/static/
+          cp -a public/. .next/standalone/public/
+          cp deploy/english-context.service .next/standalone/deploy/
+          tar -C .next/standalone -czf "$RUNNER_TEMP/${GITHUB_SHA}.tar.gz" .
+
+      - name: Configure SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          test -n "$SERVER_HOST"
+          test -n "$SERVER_USER"
+          test -n "$SERVER_SSH_KEY"
+          test -n "$SERVER_KNOWN_HOSTS"
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 0600 ~/.ssh/deploy_key
+          printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0644 ~/.ssh/known_hosts
+
+      - name: Upload and activate release
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          SSH=(ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o IdentitiesOnly=yes)
+          SCP=(scp -i ~/.ssh/deploy_key -o BatchMode=yes -o IdentitiesOnly=yes)
+          "${SSH[@]}" "$SERVER_USER@$SERVER_HOST" 'mkdir -p "$HOME/English_Context/incoming"'
+          "${SCP[@]}" "$RUNNER_TEMP/${GITHUB_SHA}.tar.gz" "${SERVER_USER}@${SERVER_HOST}:English_Context/incoming/${GITHUB_SHA}.tar.gz"
+          "${SSH[@]}" "$SERVER_USER@$SERVER_HOST" "bash -s -- '$GITHUB_SHA'" < deploy/deploy.sh
