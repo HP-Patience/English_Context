@@ -37,6 +37,11 @@ for environment_file in .env .env.local .env.production .env.production.local; d
   fi
 done
 [[ "$environment_found" == true ]] || { echo "No runtime environment file found in $app_root" >&2; exit 1; }
+[[ -f "$release/deploy/apply-production-migrations.mjs" ]] || { echo "Release does not contain the production migration runner" >&2; exit 1; }
+
+# Apply additive changes and bootstrap while the previous release remains active.
+# Credential NOT NULL constraints are deferred until the new release is healthy.
+(cd "$release" && node deploy/apply-production-migrations.mjs)
 
 if [[ -L "$current" ]]; then
   previous="$(readlink -f "$current")"
@@ -80,6 +85,13 @@ if [[ "$healthy" != true ]]; then
   echo "Health check failed." >&2
   rollback
   exit 1
+fi
+
+# The new release is live and healthy; only now make account credentials NOT NULL.
+# The application also supports the nullable state, so a failed hardening transaction
+# must not roll back to the legacy release, whose user upsert lacks these fields.
+if ! (cd "$release" && node deploy/apply-production-migrations.mjs --finalize); then
+  echo "WARNING: credential constraints were not finalized; the healthy release remains active and the migration will retry on the next deploy." >&2
 fi
 
 rm -f "$archive"

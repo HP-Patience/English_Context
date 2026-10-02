@@ -40,10 +40,12 @@ jobs:
       - name: Package release
         run: |
           rm -f .next/standalone/.env .next/standalone/.env.local .next/standalone/.env.production .next/standalone/.env.production.local
-          mkdir -p .next/standalone/.next/static .next/standalone/public .next/standalone/deploy
+          mkdir -p .next/standalone/.next/static .next/standalone/public .next/standalone/deploy/prisma/migrations .next/standalone/scripts
           cp -a .next/static/. .next/standalone/.next/static/
           cp -a public/. .next/standalone/public/
-          cp deploy/english-context.service .next/standalone/deploy/
+          cp deploy/english-context.service deploy/apply-production-migrations.mjs .next/standalone/deploy/
+          cp scripts/migrate-single-user-to-admin.mjs .next/standalone/scripts/
+          cp -a prisma/migrations/20261002_multi_user_accounts prisma/migrations/20261002_multi_user_interactions prisma/migrations/20261002_require_account_credentials .next/standalone/deploy/prisma/migrations/
           tar -C .next/standalone -czf "$RUNNER_TEMP/${GITHUB_SHA}.tar.gz" .
 
       - name: Configure SSH
