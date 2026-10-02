@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { prisma } from '@/lib/prisma'
 import { getAuthConfig } from '@/lib/auth/config'
 import { verifyPassword } from '@/lib/auth/password'
 import {
@@ -64,18 +65,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '请求格式错误' }, { status: 400 })
   }
 
-  const passwordMatches = await verifyPassword(password, authConfig.passwordHash)
-  if (username !== authConfig.username || !passwordMatches) {
+  const normalizedUsername = username.trim().toLowerCase()
+  const user = normalizedUsername
+    ? await prisma.user.findUnique({
+      where: { username: normalizedUsername },
+      select: { id: true, passwordHash: true, status: true },
+    })
+    : null
+  const passwordMatches = user?.passwordHash
+    ? await verifyPassword(password, user.passwordHash)
+    : false
+
+  if (!user || user.status !== 'active' || !passwordMatches) {
     recordFailedLogin()
     await new Promise((resolve) => setTimeout(resolve, 500))
     return invalidCredentials()
   }
 
   clearLoginFailures()
-  const token = await createSessionToken(
-    authConfig.username,
-    authConfig.secret,
-  )
+  const token = await createSessionToken(user.id, authConfig.secret)
   const response = NextResponse.json({ ok: true })
   response.headers.set('Cache-Control', 'no-store')
   response.cookies.set(AUTH_SESSION_COOKIE, token, {

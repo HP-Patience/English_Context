@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Word already added' }, { status: 409 })
   }
 
-  const meaningsData = await getWordData(word)
+  const meaningsData = await getWordData(word, userId)
   const meaningRecords = await Promise.all(
     meaningsData.map((m: { partOfSpeech: string; definition: string; definitionCn?: string }) =>
       prisma.meaning.create({
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   })
 
   const uwmIds = userWord.meanings.map((uwm) => uwm.id)
-  generateSentences(word, meaningRecords, interests ?? [], uwmIds).catch(console.error)
+  generateSentences(word, meaningRecords, interests ?? [], uwmIds, userId).catch(console.error)
 
   return NextResponse.json({
     wordId: wordRecord.id,

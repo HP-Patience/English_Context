@@ -1,4 +1,8 @@
+import { cookies } from 'next/headers'
 import { PrismaClient } from '@prisma/client'
+
+import { getAuthConfig } from './auth/config'
+import { AUTH_SESSION_COOKIE, verifySessionToken } from './auth/session'
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
 
@@ -6,17 +10,28 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-const LOCAL_USER_ID = process.env.LOCAL_USER_ID || 'local-user'
+export async function getSessionUserId(): Promise<string | null> {
+  const authConfig = getAuthConfig()
+  if (!authConfig) return null
+  const cookieStore = await cookies()
+  return verifySessionToken(
+    cookieStore.get(AUTH_SESSION_COOKIE)?.value,
+    authConfig.secret,
+  )
+}
 
-let _localUserId: string | null = null
-
+/**
+ * Compatibility name for existing learning paths.
+ * It now resolves the active session user and never falls back to a fixed user.
+ */
 export async function getLocalUserId(): Promise<string> {
-  if (_localUserId) return _localUserId
-  const user = await prisma.user.upsert({
-    where: { id: LOCAL_USER_ID },
-    update: {},
-    create: { id: LOCAL_USER_ID, email: 'local@contextvocab.app', name: 'Local User' },
+  const userId = await getSessionUserId()
+  if (!userId) throw new Error('Authentication required')
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { status: true },
   })
-  _localUserId = user.id
-  return user.id
+  if (!user || user.status !== 'active') throw new Error('Authentication required')
+  return userId
 }

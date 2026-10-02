@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import LogoutButton from './LogoutButton'
 import ThemeToggle from './ThemeToggle'
 
@@ -12,11 +12,18 @@ const mainLinks = [
   { href: '/search', label: '搜索' },
   { href: '/stats', label: '统计' },
   { href: '/bookmarks', label: '难词本' },
+  { href: '/interaction', label: '互动' },
 ]
 
 export default function NavBar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const [canManageUsers, setCanManageUsers] = useState(false)
+
+  useEffect(() => {
+    if (pathname === '/login') return
+    fetch('/api/admin/users', { cache: 'no-store' }).then((response) => setCanManageUsers(response.ok)).catch(() => setCanManageUsers(false))
+  }, [pathname])
 
   if (pathname === '/login') return <ThemeToggle />
 
@@ -33,6 +40,10 @@ export default function NavBar() {
             {link.label}
           </Link>
         ))}
+{canManageUsers ? <Link
+          href="/admin"
+          className="text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100"
+        >管理</Link> : null}
         <Link
           href="/settings"
           className="text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100"
@@ -49,6 +60,10 @@ export default function NavBar() {
 
       {/* Mobile controls */}
       <div className="flex md:hidden items-center gap-2">
+{canManageUsers ? <Link
+          href="/admin"
+          className="text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100"
+        >管理</Link> : null}
         <Link
           href="/settings"
           className="p-1 text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100"
@@ -93,6 +108,7 @@ export default function NavBar() {
                   </Link>
                 ))}
               </nav>
+{canManageUsers ? <Link href="/admin" onClick={() => setOpen(false)} className="rounded-lg px-4 py-1.5 text-sm text-stone-700 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800">管理</Link> : null}
               <LogoutButton className="w-full rounded-lg px-4 py-1.5 text-left text-sm text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100" />
             </div>
           </div>

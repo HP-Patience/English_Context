@@ -1,15 +1,34 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  snapshot: vi.fn().mockResolvedValue({ schemaVersion: 1, courseVersion: 3, lessons: [] }),
+  userId: vi.fn(),
+  snapshot: vi.fn(),
 }))
 
-vi.mock('@/lib/prisma', () => ({ prisma: { storyCourse: {} } }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: { storyCourse: {} },
+  getLocalUserId: mocks.userId,
+}))
 vi.mock('@/lib/story-offline', () => ({ getReadyStoryOfflineSnapshot: mocks.snapshot }))
 
 import { GET } from './route'
 
+beforeEach(() => {
+  mocks.userId.mockReset()
+  mocks.userId.mockResolvedValue('user-1')
+  mocks.snapshot.mockReset()
+  mocks.snapshot.mockResolvedValue({ schemaVersion: 1, courseVersion: 3, lessons: [] })
+})
+
 describe('GET /api/story/offline', () => {
+  it('returns 401 without an authenticated user', async () => {
+    mocks.userId.mockRejectedValueOnce(new Error('Authentication required'))
+
+    const response = await GET()
+
+    expect(response.status).toBe(401)
+  })
+
   it('returns the versioned snapshot without allowing shared-cache storage', async () => {
     const response = await GET()
 

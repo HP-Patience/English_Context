@@ -8,10 +8,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String?  @unique
-  name      String?
-  interests String?  @default("[]") // JSON array
+  id                    String   @id @default(cuid())
+  username              String   @unique
+  passwordHash          String
+  role                  String   @default("user") // admin | user
+  status                String   @default("active") // active | disabled
+  statsSharingEnabled   Boolean  @default(false)
+  email                 String?  @unique
+  name                  String?
+  interests             String?  @default("[]") // JSON array
   llmConfig   String?   // JSON: { baseURL, apiKey, model }
   dailyTarget Int       @default(30)
   ttsConfig   String?  @default("{}") // JSON: { provider, baseURL, apiKey, voice }
@@ -26,6 +31,12 @@ model User {
   storyStepCompletions      UserStoryStepCompletion[]
   storyLessonCompletions    UserStoryLessonCompletion[]
   storyParagraphBookmarks   UserStoryParagraphBookmark[]
+  createdChallenges         LearningChallenge[] @relation("ChallengeCreatedBy")
+  challengeParticipants     LearningChallengeParticipant[]
+  sentMessages              LearningMessage[] @relation("MessageSender")
+  receivedMessages          LearningMessage[] @relation("MessageRecipient")
+  sentQuizzes               LearningQuiz[] @relation("QuizSender")
+  receivedQuizzes           LearningQuiz[] @relation("QuizRecipient")
 }
 
 model Word {
@@ -38,6 +49,7 @@ model Word {
   userWords        UserWord[]
   groups           WordGroupItem[]
   storyLessonWords StoryLessonWord[]
+  learningQuizWords LearningQuizWord[]
 }
 
 model WordGroup {
@@ -366,4 +378,78 @@ model DailyGoal {
 
   @@unique([userId, date])
   @@index([userId])
+}
+model LearningChallenge {
+  id          String   @id @default(cuid())
+  createdById String
+  title       String
+  kind        String   // active_days | learned_words | story_completion
+  target      Int
+  startsAt    DateTime
+  endsAt      DateTime
+  status      String   @default("active") // active | completed | cancelled
+  createdAt   DateTime @default(now())
+
+  createdBy     User                           @relation("ChallengeCreatedBy", fields: [createdById], references: [id])
+  participants  LearningChallengeParticipant[]
+
+  @@index([status, startsAt, endsAt])
+}
+
+model LearningChallengeParticipant {
+  id          String   @id @default(cuid())
+  challengeId String
+  userId      String
+  joinedAt    DateTime @default(now())
+
+  challenge LearningChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id])
+
+  @@unique([challengeId, userId])
+  @@index([userId])
+}
+
+model LearningMessage {
+  id          String   @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  kind        String   @default("text") // text | encouragement
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  sender    User @relation("MessageSender", fields: [senderId], references: [id])
+  recipient User @relation("MessageRecipient", fields: [recipientId], references: [id])
+
+  @@index([recipientId, readAt, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model LearningQuiz {
+  id          String   @id @default(cuid())
+  senderId    String
+  recipientId String
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  sender    User              @relation("QuizSender", fields: [senderId], references: [id])
+  recipient User              @relation("QuizRecipient", fields: [recipientId], references: [id])
+  words     LearningQuizWord[]
+
+  @@index([recipientId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model LearningQuizWord {
+  id         String   @id @default(cuid())
+  quizId     String
+  wordId     String
+  answered   Boolean?
+  answeredAt DateTime?
+
+  quiz LearningQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  word Word         @relation(fields: [wordId], references: [id])
+
+  @@unique([quizId, wordId])
+  @@index([wordId])
 }

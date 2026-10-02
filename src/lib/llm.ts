@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { prisma, getLocalUserId } from './prisma'
+import { prisma } from './prisma'
 
 interface LlmConfig {
   baseURL?: string
@@ -7,9 +7,8 @@ interface LlmConfig {
   model?: string
 }
 
-async function getLlmConfig(): Promise<LlmConfig> {
+async function getLlmConfig(userId: string): Promise<LlmConfig> {
   try {
-    const userId = await getLocalUserId()
     const user = await prisma.user.findUnique({ where: { id: userId } })
     if (user?.llmConfig) return JSON.parse(user.llmConfig)
   } catch { /* fallback to env */ }
@@ -19,12 +18,12 @@ async function getLlmConfig(): Promise<LlmConfig> {
 const TIMEOUT_MS = 15_000
 const MAX_RETRIES = 1
 
-async function callLLM(prompt: string): Promise<string | null> {
+async function callLLM(prompt: string, userId: string): Promise<string | null> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
     try {
-      const cfg = await getLlmConfig()
+      const cfg = await getLlmConfig(userId)
       const openai = new OpenAI({
         apiKey: cfg.apiKey || process.env.OPENAI_API_KEY,
         baseURL: cfg.baseURL || process.env.OPENAI_BASE_URL || undefined,
@@ -51,7 +50,7 @@ async function callLLM(prompt: string): Promise<string | null> {
   return null
 }
 
-export async function getWordData(word: string) {
+export async function getWordData(word: string, userId: string) {
   const prompt = `Return the word "${word}" with its REAL dictionary meanings as a JSON array.
 Each entry: {"partOfSpeech": "noun|verb|adjective|etc", "definition": "English short definition", "definitionCn": "中文释义"}
 
@@ -69,7 +68,7 @@ Example for "run":
 
 Return only JSON array, no extra text.`
 
-  const raw = await callLLM(prompt)
+  const raw = await callLLM(prompt, userId)
   if (!raw) return [{ partOfSpeech: 'unknown', definition: word, definitionCn: word }]
 
   try {
@@ -98,7 +97,8 @@ export async function generateSentences(
   word: string,
   meanings: Array<{ id: string; partOfSpeech: string; definition: string }>,
   interests: Array<{ topic: string; weight: number }>,
-  userWordMeaningIds: string[]
+  userWordMeaningIds: string[],
+  userId: string,
 ): Promise<SentenceResult[]> {
   const topicList = interests.map((i) => i.topic).join(', ')
   const meaningsBlock = meanings
@@ -126,7 +126,7 @@ CRITICAL: The "general" and "interestTuned" sentences MUST literally include the
 
 Return a JSON object with key "sentences" containing an array. Only JSON.`
 
-  const raw = await callLLM(prompt)
+  const raw = await callLLM(prompt, userId)
   const results: SentenceResult[] = []
 
   if (!raw) {

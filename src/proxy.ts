@@ -32,7 +32,7 @@ export async function proxy(request: NextRequest) {
   const authConfig = getAuthConfig()
   const token = request.cookies.get(AUTH_SESSION_COOKIE)?.value
   const authenticated = authConfig
-    ? await verifySessionToken(token, authConfig.secret, authConfig.username)
+    ? Boolean(await verifySessionToken(token, authConfig.secret))
     : false
 
   if (pathname === '/login') {

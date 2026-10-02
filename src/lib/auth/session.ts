@@ -8,13 +8,13 @@ function secretKey(secret: string) {
 }
 
 export async function createSessionToken(
-  username: string,
+  userId: string,
   secret: string,
   now = new Date(),
 ) {
   const issuedAt = Math.floor(now.getTime() / 1000)
 
-  return new SignJWT({ sub: username })
+  return new SignJWT({ sub: userId })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt(issuedAt)
     .setExpirationTime(issuedAt + AUTH_SESSION_MAX_AGE_SECONDS)
@@ -24,19 +24,18 @@ export async function createSessionToken(
 export async function verifySessionToken(
   token: string | undefined,
   secret: string,
-  expectedUsername: string,
   now = new Date(),
-) {
-  if (!token) return false
+): Promise<string | null> {
+  if (!token) return null
 
   try {
     const { payload } = await jwtVerify(token, secretKey(secret), {
       algorithms: ['HS256'],
       currentDate: now,
     })
-    return payload.sub === expectedUsername
+    return typeof payload.sub === 'string' && payload.sub ? payload.sub : null
   } catch {
-    return false
+    return null
   }
 }
 

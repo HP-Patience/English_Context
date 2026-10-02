@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import { prisma, getLocalUserId } from '@/lib/prisma'
 
-async function getLlmConfig() {
-  const userId = await getLocalUserId()
+async function getLlmConfig(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (user?.llmConfig) return JSON.parse(user.llmConfig)
   return {}
 }
 
 export async function GET() {
-  const cfg = await getLlmConfig()
+  const userId = await getLocalUserId()
+  const cfg = await getLlmConfig(userId)
   const baseURL = cfg.baseURL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
   const apiKey = cfg.apiKey || process.env.OPENAI_API_KEY
 

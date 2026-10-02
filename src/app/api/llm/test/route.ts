@@ -2,15 +2,15 @@ import { NextResponse } from 'next/server'
 import { prisma, getLocalUserId } from '@/lib/prisma'
 import OpenAI from 'openai'
 
-async function getLlmConfig() {
-  const userId = await getLocalUserId()
+async function getLlmConfig(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (user?.llmConfig) return JSON.parse(user.llmConfig)
   return {}
 }
 
 export async function POST() {
-  const cfg = await getLlmConfig()
+  const userId = await getLocalUserId()
+  const cfg = await getLlmConfig(userId)
   const apiKey = cfg.apiKey || process.env.OPENAI_API_KEY
   const baseURL = cfg.baseURL || process.env.OPENAI_BASE_URL || undefined
   const model = cfg.model || process.env.LLM_MODEL || 'gpt-4o-mini'
