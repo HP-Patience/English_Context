@@ -8,17 +8,18 @@ import { StoryQuickNav } from './StoryQuickNav'
 afterEach(cleanup)
 
 describe('StoryQuickNav', () => {
-  it('can collapse and reopen without switching the step', async () => {
+  it('starts collapsed and can reopen without switching the step', async () => {
     const onSelect = vi.fn()
     const { container } = render(<StoryQuickNav currentStep={2} onSelect={onSelect} />)
     const panel = container.querySelector('details')!
-    expect(panel).toHaveAttribute('open')
+    expect(panel).not.toHaveAttribute('open')
     const toggle = screen.getByLabelText('展开或收起快捷导航')
     expect(toggle).toHaveAttribute('title', '步骤 / 章节导航')
     await userEvent.click(toggle)
+    expect(panel).toHaveAttribute('open')
+    await userEvent.click(toggle)
     expect(panel).not.toHaveAttribute('open')
     await userEvent.click(toggle)
-    expect(panel).toHaveAttribute('open')
     expect(screen.getByRole('button', { name: '下一步' })).toBeEnabled()
     expect(onSelect).not.toHaveBeenCalled()
   })
@@ -26,6 +27,7 @@ describe('StoryQuickNav', () => {
   it('shows two labelled rows with icon-only controls and disables the first boundaries', () => {
     const onSelect = vi.fn()
     render(<StoryQuickNav currentStep={1} onSelect={onSelect} previousLessonId={null} nextLessonId="lesson-2" />)
+    fireEvent.click(screen.getByLabelText('展开或收起快捷导航'))
     const nav = screen.getByRole('navigation', { name: '故事快捷导航' })
     expect(within(nav).getByText('步骤')).toBeInTheDocument()
     expect(within(nav).getByText('章节')).toBeInTheDocument()
@@ -42,6 +44,7 @@ describe('StoryQuickNav', () => {
   it('disables last boundaries while allowing the previous step and chapter', () => {
     const onSelect = vi.fn()
     render(<StoryQuickNav currentStep={3} onSelect={onSelect} previousLessonId="lesson/1" nextLessonId={null} />)
+    fireEvent.click(screen.getByLabelText('展开或收起快捷导航'))
     expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '下一章' })).toBeDisabled()
     expect(screen.getByRole('link', { name: '上一章' })).toHaveAttribute('href', '/story/lesson%2F1')

@@ -75,12 +75,6 @@ export default function WordListPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => router.push(`/learn?groupId=${groupId}`)}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
-          >
-            开始学习
-          </button>
-          <button
             onClick={() => router.back()}
             className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800"
           >

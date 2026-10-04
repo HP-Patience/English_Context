@@ -2,118 +2,63 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import LogoutButton from './LogoutButton'
+import { useState } from 'react'
 import ThemeToggle from './ThemeToggle'
 
 const mainLinks = [
   { href: '/story', label: '故事' },
+  { href: '/learn', label: '单词' },
   { href: '/review', label: '复习' },
-  { href: '/search', label: '搜索' },
-  { href: '/stats', label: '统计' },
-  { href: '/bookmarks', label: '难词本' },
+  { href: '/bookmarks', label: '收藏' },
   { href: '/interaction', label: '互动' },
 ]
+const iconControlClass = 'grid h-10 w-10 place-items-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100'
 
 export default function NavBar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const [canManageUsers, setCanManageUsers] = useState(false)
-
-  useEffect(() => {
-    if (pathname === '/login') return
-    fetch('/api/admin/users', { cache: 'no-store' }).then((response) => setCanManageUsers(response.ok)).catch(() => setCanManageUsers(false))
-  }, [pathname])
+  const isCurrent = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
 
   if (pathname === '/login') return <ThemeToggle />
 
   return (
     <>
-      {/* Desktop nav */}
-      <nav className="hidden md:flex items-center gap-4 text-sm">
-        {mainLinks.map(link => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-          >
-            {link.label}
+      <div className="flex items-center gap-3 sm:gap-5">
+        <nav aria-label="主导航" className="hidden items-center gap-5 text-sm md:flex">
+          {mainLinks.map(link => (
+            <Link key={link.href} href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}
+              className={`border-b-2 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 ${isCurrent(link.href) ? 'border-stone-900 font-semibold text-stone-900 dark:border-stone-100 dark:text-stone-100' : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'}`}>
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="flex items-center gap-1">
+          {/* Iconify / Lucide search and settings (ISC), embedded locally. */}
+          <Link href="/search" aria-label="搜索" title="搜索" aria-current={isCurrent('/search') ? 'page' : undefined} onClick={() => setOpen(false)} className={iconControlClass}>
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 21l-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg>
           </Link>
-        ))}
-{canManageUsers ? <Link
-          href="/admin"
-          className="text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100"
-        >管理</Link> : null}
-        <Link
-          href="/settings"
-          className="text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100"
-          aria-label="设置"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-          </svg>
-        </Link>
-        <LogoutButton className="text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100" />
-        <ThemeToggle />
-      </nav>
-
-      {/* Mobile controls */}
-      <div className="flex md:hidden items-center gap-2">
-{canManageUsers ? <Link
-          href="/admin"
-          className="text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100"
-        >管理</Link> : null}
-        <Link
-          href="/settings"
-          className="p-1 text-stone-500 hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100"
-          aria-label="设置"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-          </svg>
-        </Link>
-        <ThemeToggle />
-        <button
-          onClick={() => setOpen(!open)}
-          className="p-1 text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-          aria-label={open ? '关闭菜单' : '打开菜单'}
-        >
-          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            {open ? (
-              <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
-            )}
-          </svg>
-        </button>
+          <Link href="/settings" aria-label="设置" title="设置" aria-current={isCurrent('/settings') ? 'page' : undefined} onClick={() => setOpen(false)} className={iconControlClass}>
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0a2.34 2.34 0 0 0 3.319 1.915a2.34 2.34 0 0 1 2.33 4.033a2.34 2.34 0 0 0 0 3.831a2.34 2.34 0 0 1-2.33 4.033a2.34 2.34 0 0 0-3.319 1.915a2.34 2.34 0 0 1-4.659 0a2.34 2.34 0 0 0-3.32-1.915a2.34 2.34 0 0 1-2.33-4.033a2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" /></svg>
+          </Link>
+          <ThemeToggle />
+          <button type="button" onClick={() => setOpen(!open)} aria-label={open ? '关闭菜单' : '打开菜单'} aria-expanded={open} aria-controls="mobile-navigation" className={`${iconControlClass} md:hidden`}>
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d={open ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'} /></svg>
+          </button>
+        </div>
       </div>
-
-      {/* Mobile menu overlay */}
-      {open && (
+      {open ? (
         <>
-          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-full z-50 border-b border-stone-200 bg-white shadow-lg dark:border-stone-700 dark:bg-stone-900">
-            <div className="mx-auto max-w-4xl px-4 py-1">
-              <nav className="flex flex-col">
-                {mainLinks.map(link => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={() => setOpen(false)}
-                    className="rounded-lg px-4 py-1.5 text-sm text-stone-700 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </nav>
-{canManageUsers ? <Link href="/admin" onClick={() => setOpen(false)} className="rounded-lg px-4 py-1.5 text-sm text-stone-700 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800">管理</Link> : null}
-              <LogoutButton className="w-full rounded-lg px-4 py-1.5 text-left text-sm text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100" />
-            </div>
-          </div>
+          <div className="fixed inset-0 z-40 bg-black/20 md:hidden" onClick={() => setOpen(false)} />
+          <nav id="mobile-navigation" aria-label="移动导航" className="absolute left-0 right-0 top-full z-50 flex flex-col border-b border-stone-200 bg-white p-3 dark:border-stone-700 dark:bg-stone-900 md:hidden">
+            {mainLinks.map(link => (
+              <Link key={link.href} href={link.href} onClick={() => setOpen(false)} aria-current={isCurrent(link.href) ? 'page' : undefined}
+                className={`rounded-lg px-4 py-3 text-sm ${isCurrent(link.href) ? 'bg-stone-100 font-semibold text-stone-900 dark:bg-stone-800 dark:text-stone-100' : 'text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800'}`}>
+                {link.label}
+              </Link>
+            ))}
+          </nav>
         </>
-      )}
+      ) : null}
     </>
   )
 }

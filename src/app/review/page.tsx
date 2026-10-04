@@ -182,13 +182,12 @@ export default function ReviewPage() {
 
   if (done) {
     return (
-      <div className="mx-auto max-w-lg pt-12 text-center">
+      <div className="mx-auto max-w-lg text-center">
         <TabBar tab={tab} onTabChange={setTab} />
         <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">✓</p>
         <h2 className="mb-1 text-xl font-semibold">复习完成</h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">完成了 {idx} 个单词</p>
         <div className="flex justify-center gap-3">
-          <button onClick={() => router.push('/learn')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">查看单词</button>
           <button onClick={() => router.push('/')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">学新词</button>
         </div>
       </div>
@@ -197,7 +196,7 @@ export default function ReviewPage() {
 
   if (!item && queue.length === 0) {
     return (
-      <div className="mx-auto max-w-lg pt-12 text-center">
+      <div className="mx-auto max-w-lg text-center">
         <TabBar tab={tab} onTabChange={setTab} />
         <h2 className="mb-1 text-xl font-semibold">暂无复习</h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">学些新词再来</p>
@@ -218,7 +217,7 @@ export default function ReviewPage() {
 
     if (relearnDone) {
       return (
-        <div className="mx-auto max-w-lg pt-12 text-center">
+        <div className="mx-auto max-w-lg text-center">
           <TabBar tab={tab} onTabChange={setTab} />
           <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">✓</p>
           <h2 className="mb-1 text-xl font-semibold">重新学习完成</h2>
@@ -231,17 +230,16 @@ export default function ReviewPage() {
     if (!relearnStarted) {
       if (relearnQueue.length === 0) {
         return (
-          <div className="mx-auto max-w-lg pt-12 text-center">
+          <div className="mx-auto max-w-lg text-center">
             <TabBar tab={tab} onTabChange={setTab} />
             <h2 className="mb-1 text-xl font-semibold">暂无需要重新学习的单词</h2>
             <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">继续保持！</p>
-            <button onClick={() => router.push('/learn')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">学新词</button>
           </div>
         )
       }
 
       return (
-        <div className="mx-auto max-w-lg pt-12 text-center">
+        <div className="mx-auto max-w-lg text-center">
           <TabBar tab={tab} onTabChange={setTab} />
           <h2 className="mb-1 text-xl font-semibold">{relearnQueue.length} 个需要重新学习</h2>
           <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">掌握度低于 60% 的单词</p>
@@ -265,7 +263,7 @@ export default function ReviewPage() {
     const relearnItem = relearnQueue[relearnIdx]
     if (!relearnItem) {
       return (
-        <div className="mx-auto max-w-lg pt-12 text-center">
+        <div className="mx-auto max-w-lg text-center">
           <TabBar tab={tab} onTabChange={setTab} />
           <p className="text-sm text-stone-400 dark:text-stone-500">暂无内容</p>
         </div>

@@ -13,8 +13,8 @@ vi.mock('@/components/PronounceButton', () => ({
 }))
 
 vi.mock('./CompletionDateHistory', () => ({
-  CompletionDateHistory: ({ endpoint, label }: { endpoint: string; label: string }) => (
-    <div data-endpoint={endpoint}>{label}</div>
+  CompletionDateHistory: ({ endpoint, label, lazy }: { endpoint: string; label: string; lazy?: boolean }) => (
+    <div data-endpoint={endpoint} data-lazy={lazy}>{label}</div>
   ),
 }))
 
@@ -201,8 +201,33 @@ describe('StoryLessonShell', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => progressResponse(3) }))
   })
 
+  it('keeps the reading surface concise and places lazy date histories after the content', () => {
+    const { container } = render(<StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} />)
+    expect(screen.queryAllByText(/Chronicle|First passage|Later reinforcement/)).toHaveLength(0)
+    expect(screen.getByRole('heading', { name: '第一步 · 入境识词' })).toHaveClass('sr-only')
+    const action = screen.getByRole('button', { name: '完成第一步，进入回忆' })
+    const lessonHistory = screen.getByText('本篇完成日期')
+    expect(action.compareDocumentPosition(lessonHistory) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(lessonHistory).toHaveAttribute('data-lazy', 'true')
+    expect(screen.getByText('第一步完成日期')).toHaveAttribute('data-lazy', 'true')
+    expect(screen.queryByText(/日期历史可独立记录/)).not.toBeInTheDocument()
+    expect(container.querySelector('header [aria-hidden="true"]')).toBeNull()
+  })
+
+  it('keeps reinforcement collapsed without requesting the queue until explicitly loaded', () => {
+    render(<StoryLessonShell lesson={firstPassedLesson} progress={firstPassedLesson.progress} dueWords={1} nextLessonId="lesson-2" />)
+    const toggle = screen.getByLabelText('展开或收起到期强化')
+    expect(toggle.closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByRole('button', { name: '载入到期强化词' })).not.toBeVisible()
+    expect(screen.getByRole('link', { name: '进入下一篇' })).toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(screen.getByRole('button', { name: '载入到期强化词' })).toBeEnabled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('switches views through the fixed step controls without writing learning progress', async () => {
     render(<StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} previousLessonId="lesson-0" nextLessonId="lesson-2" />)
+    fireEvent.click(screen.getByLabelText('展开或收起快捷导航'))
     expect(screen.getByRole('button', { name: '上一步' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     expect(await screen.findByRole('heading', { name: '第二步 · 遮义回想' })).toBeInTheDocument()
@@ -231,7 +256,7 @@ describe('StoryLessonShell', () => {
       '/api/story/lessons/lesson-1/steps/1/completions',
     )
     expect(screen.getAllByRole('article', { name: /故事段落/ })).toHaveLength(2)
-    expect(screen.getAllByText('故事学习进度 1/2')).toHaveLength(2)
+    expect(screen.getAllByText('故事学习进度 1/2')).toHaveLength(1)
     expect(screen.getByRole('button', { name: '跳到第 2 个未完成段落' })).toBeInTheDocument()
     expect(screen.getByText('第 1 段完成日期')).toHaveAttribute(
       'data-endpoint',
@@ -250,7 +275,7 @@ describe('StoryLessonShell', () => {
       'data-endpoint',
       '/api/story/lessons/lesson-1/paragraphs/0/completions?step=2',
     )
-    expect(screen.getAllByText('故事学习进度 0/2')).toHaveLength(2)
+    expect(screen.getAllByText('故事学习进度 0/2')).toHaveLength(1)
     expect(screen.getByRole('button', { name: '跳到第 1 个未完成段落' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /第三步/ }))
     expect(screen.getByText('第三步完成日期')).toHaveAttribute(
@@ -311,7 +336,7 @@ describe('StoryLessonShell', () => {
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' })
     expect(screen.getAllByRole('article', { name: /故事段落/ })).toHaveLength(2)
     expect(screen.getByRole('button', { name: '取消收藏第 1 段' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getAllByRole('progressbar', { name: '段落完成进度' })).toHaveLength(2)
+    expect(screen.getAllByRole('progressbar', { name: '段落完成进度' })).toHaveLength(1)
     expect(screen.getByText('第 1 段完成日期')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '记得' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '模糊' })).not.toBeInTheDocument()
@@ -399,7 +424,7 @@ describe('StoryLessonShell', () => {
     expect(resolveGloss).toHaveAttribute('aria-expanded', 'false')
     expect(resolveGloss).toHaveAttribute('aria-pressed', 'false')
     expect(schemeGloss).toHaveAttribute('aria-expanded', 'false')
-    expect(within(resolveGloss).getByText('点击查看释义')).toHaveAttribute('aria-hidden', 'false')
+    expect(within(resolveGloss).getByText('查看释义')).toHaveAttribute('aria-hidden', 'false')
     const hiddenResolveGloss = within(resolveGloss).getByText('决意')
     expect(hiddenResolveGloss).toHaveAttribute('aria-hidden', 'true')
     expect(hiddenResolveGloss).toHaveClass('opacity-0', 'transition-opacity', 'motion-reduce:transition-none')
@@ -429,6 +454,7 @@ describe('StoryLessonShell', () => {
     expect(resolveCells[2]).toHaveTextContent('记得')
     expect(resolveRow).toHaveTextContent('2026-08-24')
 
+    fireEvent.click(screen.getByLabelText('展开或收起到期强化'))
     fireEvent.click(screen.getByRole('button', { name: '载入到期强化词' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/story/review?lessonId=lesson-1'))
     expect(within(resolveRow).getByRole('button', { name: 'resolve 第3轮未到期' })).toBeDisabled()
@@ -442,6 +468,7 @@ describe('StoryLessonShell', () => {
     expect(resolveCells[1]).toHaveTextContent('模糊')
     expect(resolveCells[2]).toHaveTextContent('记得')
     expect(resolveRow).toHaveTextContent('2026-08-24')
+    fireEvent.click(screen.getByLabelText('展开或收起到期强化'))
     fireEvent.click(screen.getByRole('button', { name: '载入到期强化词' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(within(resolveRow).getByRole('button', { name: 'resolve 第3轮未到期' })).toBeDisabled()
@@ -485,6 +512,7 @@ describe('StoryLessonShell', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<StoryLessonShell lesson={unstartedLesson} progress={unstartedLesson.progress} dueWords={1} />)
 
+    fireEvent.click(screen.getByLabelText('展开或收起到期强化'))
     fireEvent.click(screen.getByRole('button', { name: '载入到期强化词' }))
     const action = await screen.findByRole('button', { name: 'resolve 第1轮：记得' })
     fireEvent.click(action)
@@ -527,6 +555,7 @@ describe('StoryLessonShell', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<StoryLessonShell lesson={unstartedLesson} progress={unstartedLesson.progress} dueWords={1} />)
 
+    fireEvent.click(screen.getByLabelText('展开或收起到期强化'))
     fireEvent.click(screen.getByRole('button', { name: '载入到期强化词' }))
     fireEvent.click(await screen.findByRole('button', { name: 'resolve 第1轮：记得' }))
 
@@ -555,8 +584,9 @@ describe('StoryLessonShell', () => {
       body: JSON.stringify({ step: 3 }),
     }))
     expect(await screen.findByRole('link', { name: '进入下一篇' })).toHaveAttribute('href', '/story/lesson-2')
-    expect(screen.getByRole('link', { name: '查看 2 个到期强化词' })).toHaveAttribute('href', '#step-4')
-    expect(screen.getByText(/Step4 不会阻塞下一篇/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '查看 2 个到期强化词' })).not.toBeInTheDocument()
+    expect(screen.getByText('本篇学习已完成')).toBeInTheDocument()
+    expect(screen.getByLabelText('展开或收起到期强化').closest('details')).not.toHaveAttribute('open')
   })
 })
 

@@ -47,7 +47,7 @@ afterEach(() => {
 })
 
 describe('StoryReader paragraph cards', () => {
-  it('renders title detail links, target links, independent gloss toggles, and shared progress on every card', async () => {
+  it('renders title detail links, target links, independent gloss toggles, and one shared progress summary', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ completions: [] }) }))
     render(
       <StoryReader
@@ -64,23 +64,22 @@ describe('StoryReader paragraph cards', () => {
 
     const cards = screen.getAllByRole('article', { name: /故事段落/ })
     expect(cards).toHaveLength(2)
-    for (const card of cards) {
-      expect(within(card).getByText('故事学习进度 4/15')).toBeInTheDocument()
-      expect(within(card).getByRole('progressbar', { name: '段落完成进度' })).toHaveAttribute('aria-valuenow', '4')
-      expect(within(card).getByRole('progressbar', { name: '段落完成进度' })).toHaveAttribute('aria-valuemax', '15')
-      expect(within(card).getByRole('progressbar', { name: '段落完成进度' })).toHaveAttribute(
-        'aria-valuetext',
-        '已完成 4 段，共 15 段',
-      )
-    }
+    expect(screen.getAllByRole('progressbar', { name: '段落完成进度' })).toHaveLength(1)
+    expect(screen.getByText('故事学习进度 4/15')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '段落完成进度' })).toHaveAttribute('aria-valuenow', '4')
+    expect(screen.getByRole('progressbar', { name: '段落完成进度' })).toHaveAttribute('aria-valuemax', '15')
+    expect(screen.getByRole('progressbar', { name: '段落完成进度' })).toHaveAttribute('aria-valuetext', '已完成 4 段，共 15 段')
     expect(screen.getByRole('link', { name: 'resolve' })).toHaveAttribute('href', '/word/word-1')
     expect(screen.getByRole('link', { name: 'scheme' })).toHaveAttribute('href', '/word/word-2')
     expect(screen.getByRole('link', { name: '雨夜重生' })).toHaveAttribute('href', '/story/lesson-1/cards/0')
     expect(screen.getByRole('link', { name: '学堂试探' })).toHaveAttribute('href', '/story/lesson-1/cards/1')
     expect(screen.queryByRole('link', { name: '查看本段详情' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '查看本段详情' })).not.toBeInTheDocument()
-    expect(await within(cards[0]).findByText('编辑学习记录')).toBeInTheDocument()
-    expect(within(cards[0]).getByRole('button', { name: '记录今天' })).toBeInTheDocument()
+    expect(await within(cards[0]).findByText('查看记录')).toBeInTheDocument()
+    expect(within(cards[0]).queryByRole('button', { name: '记录今天' })).not.toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+    fireEvent.click(within(cards[0]).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
+    expect(await within(cards[0]).findByRole('button', { name: '记录今天' })).toBeInTheDocument()
 
     const visibleGloss = screen.getByRole('button', { name: '隐藏段内 resolve 的释义：决意' })
     expect(visibleGloss).toHaveAttribute('aria-pressed', 'true')
@@ -94,7 +93,7 @@ describe('StoryReader paragraph cards', () => {
     expect(screen.getByText('决意')).toHaveAttribute('aria-hidden', 'false')
   })
 
-  it('updates the shared completed-card count on every card after a first paragraph completion', async () => {
+  it('updates the shared completed-card count after a first paragraph completion', async () => {
     const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
         return {
@@ -121,12 +120,13 @@ describe('StoryReader paragraph cards', () => {
     )
 
     const firstCard = screen.getAllByRole('article', { name: /故事段落/ })[0]
+    fireEvent.click(within(firstCard).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
     fireEvent.click(await within(firstCard).findByRole('button', { name: '补记其他日期' }))
     const picker = within(firstCard).getByLabelText('第 1 段完成日期')
     fireEvent.change(picker, { target: { value: '2026-08-22' } })
     fireEvent.click(screen.getAllByRole('button', { name: '保存日期' })[0])
 
-    await waitFor(() => expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(2))
+    await waitFor(() => expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(1))
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/story/lessons/lesson-1/paragraphs/0/completions?step=1',
       expect.objectContaining({ method: 'POST' }),
@@ -152,7 +152,7 @@ describe('StoryReader paragraph cards', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '跳到第 2 个未完成段落' }))
     expect(window.scrollTo).toHaveBeenCalledWith(0, 0)
-    expect(screen.getAllByText('故事学习进度 1/2')).toHaveLength(2)
+    expect(screen.getAllByText('故事学习进度 1/2')).toHaveLength(1)
 
     rerender(
       <StoryReader
@@ -205,14 +205,15 @@ describe('StoryReader paragraph cards', () => {
 
     render(<LearningViews />)
     const firstCard = screen.getAllByRole('article', { name: /故事段落/ })[0]
+    fireEvent.click(within(firstCard).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
     fireEvent.click(await within(firstCard).findByRole('button', { name: '补记其他日期' }))
     const picker = within(firstCard).getByLabelText('第 1 段完成日期')
     fireEvent.change(picker, { target: { value: '2026-08-22' } })
     fireEvent.click(screen.getAllByRole('button', { name: '保存日期' })[0])
-    await waitFor(() => expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(2))
+    await waitFor(() => expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(1))
 
     fireEvent.click(screen.getByRole('button', { name: '切换学习视图' }))
-    expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(2)
+    expect(screen.getAllByText('故事学习进度 5/15')).toHaveLength(1)
   })
 
   it('loads and saves expanded paragraph histories independently', async () => {
@@ -258,6 +259,9 @@ describe('StoryReader paragraph cards', () => {
     )
 
     const cards = screen.getAllByRole('article', { name: /故事段落/ })
+    expect(fetchMock).not.toHaveBeenCalled()
+    fireEvent.click(within(cards[0]).getByRole('button', { name: '记录或查看第 1 段完成日期历史' }))
+    fireEvent.click(within(cards[1]).getByRole('button', { name: '记录或查看第 2 段完成日期历史' }))
     const firstHistory = await within(cards[0]).findByRole('list', { name: '已保存日期' })
     const secondHistory = await within(cards[1]).findByRole('list', { name: '已保存日期' })
     expect(within(firstHistory).getByText('2026-09-01')).toBeInTheDocument()

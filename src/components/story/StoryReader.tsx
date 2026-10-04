@@ -44,6 +44,14 @@ export function StoryReader({
 
   return (
     <div>
+      <div className="mb-5 max-w-40 text-xs text-[var(--story-muted)]">
+        <p>故事学习进度 {sharedCompletedCards}/{totalCards}</p>
+        {totalCards > 0 ? (
+          <div role="progressbar" aria-label="段落完成进度" aria-valuemin={0} aria-valuemax={totalCards} aria-valuenow={sharedCompletedCards} aria-valuetext={`已完成 ${sharedCompletedCards} 段，共 ${totalCards} 段`} className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--story-line)]">
+            <div className="h-full bg-[var(--story-accent)]" style={{ width: `${Math.min(100, Math.round((sharedCompletedCards / totalCards) * 100))}%` }} />
+          </div>
+        ) : null}
+      </div>
       <div className="space-y-8">
         {paragraphs.map((paragraph, paragraphIndex) => (
           <StoryParagraphCard
@@ -53,6 +61,7 @@ export function StoryReader({
             paragraphIndex={paragraphIndex}
             lessonWords={lessonWords}
             mode={mode}
+            showProgress={false}
             completedCards={sharedCompletedCards}
             totalCards={totalCards}
             bookmarked={bookmarkedParagraphIndexes.has(paragraphIndex)}
@@ -74,7 +83,7 @@ export function StoryReader({
             const target = document.getElementById(`story-paragraph-${firstIncompleteParagraph}`)
             if (target) scrollToPosition(Math.max(0, window.scrollY + target.getBoundingClientRect().top - 24))
           }}
-          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-30 grid h-12 w-12 place-items-center rounded-full border border-[var(--story-accent-line)] bg-[var(--story-accent)] text-xl font-bold text-white shadow-lg transition duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none sm:bottom-6 sm:right-6"
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-30 grid h-12 w-12 place-items-center rounded-full border border-[var(--story-accent-line)] bg-[var(--story-surface)] text-xl font-bold text-[var(--story-muted)] hover:border-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none sm:bottom-6 sm:right-6"
         >
           <span aria-hidden="true">↓</span>
         </button>

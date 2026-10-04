@@ -103,16 +103,16 @@ export default function WordDetailPage() {
       {bookmarkError ? <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">{bookmarkError}</p> : null}
 
       {word.groups.length > 0 ? (
-        <nav aria-label="所属词组" className="mb-6 flex flex-wrap gap-2">
-          {word.groups.map((group) => <button type="button" key={group.wordGroup.id} onClick={() => router.push(`/learn?groupId=${group.wordGroup.id}`)} className="min-h-11 rounded-full bg-stone-100 px-3 py-2 text-xs text-stone-500 hover:bg-stone-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700">{group.wordGroup.name}</button>)}
-        </nav>
+        <div aria-label="所属词组" className="mb-6 flex flex-wrap gap-2">
+          {word.groups.map((group) => <span key={group.wordGroup.id} className="rounded-full bg-stone-100 px-3 py-2 text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">{group.wordGroup.name}</span>)}
+        </div>
       ) : null}
 
       <WordLearningContent word={word} />
       <StoryReferences references={storyReferences} />
 
       <div className="mt-8 flex gap-3">
-        {userWord && userWord.mastery > 0 ? <button type="button" onClick={() => router.push('/review')} className="min-h-12 flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">去复习</button> : word.groups[0] ? <button type="button" onClick={() => router.push(`/learn?groupId=${word.groups[0]?.wordGroup.id}`)} className="min-h-12 flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">从 {word.groups[0].wordGroup.name} 学习</button> : null}
+        {userWord && userWord.mastery > 0 ? <button type="button" onClick={() => router.push('/review')} className="min-h-12 flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">去复习</button> : null}
         <button type="button" onClick={() => router.back()} className="min-h-12 rounded-xl border border-stone-200 px-4 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">返回</button>
       </div>
     </div>

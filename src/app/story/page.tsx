@@ -1,10 +1,8 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { connection } from 'next/server'
 
 import { StoryCourseList } from '@/components/story/StoryCourseList'
 import { StoryCourseProgress } from '@/components/story/StoryCourseProgress'
-import { StoryOfflinePreparation } from '@/components/story/StoryOfflinePreparation'
 import { getLocalUserId, prisma } from '@/lib/prisma'
 import { listStoryLessons } from '@/lib/story-service'
 
@@ -41,20 +39,6 @@ export default async function StoryPage() {
             沿故事时间线逐篇推进，在中文叙事中识记英文词。每篇先完成三步首次学习，再让强化复习按自己的节奏到来。
           </p>
         </div>
-        <div className="relative mt-6 flex flex-wrap gap-3 text-sm">
-          <Link
-            href="/learn"
-            className="inline-flex min-h-11 items-center rounded-xl border border-stone-300 bg-white px-4 py-2 font-medium text-stone-700 transition hover:border-stone-400 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-200 dark:hover:bg-stone-800"
-          >
-            普通词卡学习
-          </Link>
-          <Link
-            href="/review"
-            className="inline-flex min-h-11 items-center rounded-xl px-4 py-2 font-medium text-stone-600 transition hover:bg-stone-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 dark:text-stone-300 dark:hover:bg-stone-800"
-          >
-            前往复习
-          </Link>
-        </div>
       </header>
 
       <div className="mt-6">
@@ -65,10 +49,6 @@ export default async function StoryPage() {
           reinforced={reinforced}
           dueCount={dueCount}
         />
-      </div>
-
-      <div className="mt-4">
-        <StoryOfflinePreparation />
       </div>
 
       <section aria-labelledby="story-lessons-title" className="mt-9">

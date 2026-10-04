@@ -84,7 +84,6 @@ function BookmarkCard({ item, saving, onUnbookmark }: BookmarkCardProps) {
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3 dark:border-stone-800">
-            <Link href={`/learn?wordId=${item.word.id}`} className={actionClassName}>学习</Link>
             <Link href="/review" className={actionClassName}>复习</Link>
           </div>
         </article>

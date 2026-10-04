@@ -1,71 +1,45 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
+import { MorphIcon } from 'morphicons/react'
+
+// Local Sun/Moon paths consumed by Morphicons; no remote icon requests.
+const sun = 'M16 12A4 4 0 1 1 8 12A4 4 0 1 1 16 12Z M12 2v2 M12 20v2 M2 12h2 M20 12h2 M4.93 4.93l1.41 1.41 M17.66 17.66l1.41 1.41 M4.93 19.07l1.41-1.41 M17.66 6.34l1.41-1.41'
+const moon = 'M20.9 13A9 9 0 0 1 11 3.1A9 9 0 1 0 20.9 13Z'
+const themeSpring = { stiffness: 500, damping: 45 }
+
+function readTheme() {
+  const stored = localStorage.getItem('theme')
+  return stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)
+}
+
+function subscribeTheme(onChange: () => void) {
+  window.addEventListener('storage', onChange)
+  window.addEventListener('contextvocab-theme-change', onChange)
+  return () => {
+    window.removeEventListener('storage', onChange)
+    window.removeEventListener('contextvocab-theme-change', onChange)
+  }
+}
 
 export default function ThemeToggle() {
-  const [mounted, setMounted] = useState(false)
-  const [dark, setDark] = useState(false)
-
+  const dark = useSyncExternalStore<boolean | null>(subscribeTheme, readTheme, () => null)
   useEffect(() => {
-    setMounted(true)
-    const stored = localStorage.getItem('theme')
-    const isDark =
-      stored === 'dark' ||
-      (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)
-    document.documentElement.classList.toggle('dark', isDark)
-    setDark(isDark)
-  }, [])
+    if (dark !== null) document.documentElement.classList.toggle('dark', dark)
+  }, [dark])
 
   const toggle = () => {
     const next = !dark
-    setDark(next)
     localStorage.setItem('theme', next ? 'dark' : 'light')
     document.documentElement.classList.toggle('dark', next)
+    window.dispatchEvent(new Event('contextvocab-theme-change'))
   }
 
+  const label = dark ? '切换到亮色模式' : '切换到暗色模式'
   return (
-    <button
-      onClick={toggle}
-      className="p-1.5 rounded-lg transition-colors text-stone-500 hover:text-stone-800 hover:bg-stone-200/50 dark:text-stone-400 dark:hover:text-amber-300 dark:hover:bg-stone-800/50"
-      title={dark ? '切换到亮色模式' : '切换到暗色模式'}
-    >
-      {mounted ? (
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={`w-5 h-5 transition-all duration-500 ${
-            dark
-              ? 'text-amber-400 fill-amber-400/15'
-              : 'text-stone-500'
-          }`}
-          style={
-            dark
-              ? {
-                  filter:
-                    'drop-shadow(0 0 6px #fbbf24) drop-shadow(0 0 12px #f59e0b)',
-                }
-              : undefined
-          }
-        >
-          {/* 灯泡玻璃罩 — 小头圆肚 */}
-          <path d="M12 5C7 5 6 8 6 12C6 14 7 15.5 9 16.5L9 17L15 17L15 16.5C17 15.5 18 14 18 12C18 8 17 5 12 5Z" />
-          {/* 灯丝 — 短横线，偏下 */}
-          <path d="M10 11h4" />
-          <path d="M10.5 12.5h3" />
-          <path d="M11 14h2" />
-          {/* 灯座 — 加长 */}
-          <path d="M9 18h6" />
-          <path d="M9.5 19.5h5" />
-          <path d="M10 21h4" />
-          <path d="M10.5 22h3" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" className="w-5 h-5 invisible" />
-      )}
+    <button type="button" onClick={toggle} aria-label={label} title={label}
+      className="grid h-10 w-10 place-items-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100">
+      {dark !== null ? <MorphIcon icon={dark ? sun : moon} size={20} strokeWidth={2} spring={themeSpring} reducedMotion="user" /> : <svg aria-hidden="true" width="20" height="20" className="invisible" />}
     </button>
   )
 }

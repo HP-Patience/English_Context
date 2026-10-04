@@ -6,7 +6,6 @@ import SelectionSearch from '@/components/SelectionSearch'
 import type { StoryCompletionSummary } from '@/lib/story-completion'
 import type { StoryLessonWordDto } from '@/lib/story-service'
 import type { StoryLessonParagraph } from '@/lib/story-types'
-import { CompletionDateHistory } from './CompletionDateHistory'
 import { StoryReader } from './StoryReader'
 import { StoryWordList } from './StoryWordList'
 
@@ -29,9 +28,9 @@ const stepHeading: Record<FirstPassView, string> = {
 }
 
 const stepDescription: Record<FirstPassView, string> = {
-  1: '顺着剧情阅读，英文目标词与本篇语境释义同时出现。',
-  2: '重读完整故事，英文仍留在原处；先回想，再按需要揭开段内释义。',
-  3: '按顺序快速回想本篇单词，点击右侧逐个核对释义。',
+  1: '阅读故事，留意英文词及释义。',
+  2: '先回想词义，再点击核对。',
+  3: '回想单词，点击右侧核对释义。',
 }
 
 export function StoryFirstPassPanel({
@@ -74,22 +73,8 @@ export function StoryFirstPassPanel({
 
   return (
     <section aria-labelledby={`step-${activeStep}-title`} className="mt-7">
-      <div className="mb-6 space-y-4 border-b border-[var(--story-line)] pb-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--story-muted)]">First passage</p>
-          <h2 id={`step-${activeStep}-title`} className="mt-1 font-serif text-2xl font-bold text-[var(--story-ink)]">
-            {stepHeading[activeStep]}
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-[var(--story-muted)]">{stepDescription[activeStep]}</p>
-        </div>
-        <CompletionDateHistory
-          key={activeStep}
-          endpoint={`/api/story/lessons/${encodeURIComponent(lessonId)}/steps/${activeStep}/completions`}
-          label={`${activeStep === 1 ? '第一' : activeStep === 2 ? '第二' : '第三'}步完成日期`}
-          summaryLabel="本步骤已学习"
-          manageable
-        />
-      </div>
+      <h2 id={`step-${activeStep}-title`} className="sr-only">{stepHeading[activeStep]}</h2>
+      <p className="mb-5 text-xs leading-5 text-[var(--story-muted)]">{stepDescription[activeStep]}</p>
 
       {activeStep === 1 ? (
         <SelectionSearch>

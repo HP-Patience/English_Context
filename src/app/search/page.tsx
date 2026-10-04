@@ -258,13 +258,6 @@ function SearchPageContent() {
                   >
                     去复习
                   </button>
-                ) : word.groups && word.groups.length > 0 ? (
-                  <button
-                    onClick={() => router.push(`/learn?groupId=${word.groups[0].wordGroup.id}`)}
-                    className="rounded-lg bg-stone-100 px-3 py-1 text-xs text-stone-600 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700"
-                  >
-                    从 {word.groups[0].wordGroup.name} 学习
-                  </button>
                 ) : (
                   <span className="rounded-lg bg-stone-50 px-3 py-1 text-xs text-stone-400 dark:bg-stone-800 dark:text-stone-500">
                     未学

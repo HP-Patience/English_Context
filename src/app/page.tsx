@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { cachedFetch } from '@/lib/api-cache'
@@ -44,7 +44,6 @@ export default function HomePage() {
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set())
   const [showInstallBanner, setShowInstallBanner] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-  const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     const dismissedAt = localStorage.getItem('pwa-install-dismissed')
@@ -106,15 +105,6 @@ export default function HomePage() {
       return next
     })
   }
-
-  const prefetchLearn = useCallback((groupId: string, r?: number) => {
-    if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current)
-    prefetchTimerRef.current = setTimeout(() => {
-      const url = `/learn?groupId=${groupId}${r ? `&round=${r}` : ''}`
-      router.prefetch(url)
-      cachedFetch(`/api/kaoyan/learn${r ? `?groupId=${groupId}&round=${r}` : `?groupId=${groupId}`}`).catch(() => {})
-    }, 100)
-  }, [router])
 
   if (loading) {
     return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
@@ -227,11 +217,7 @@ export default function HomePage() {
                 <div className="border-t border-stone-100 dark:border-stone-700">
                   {stage.groups.map((g) => (
                     <div key={g.id} className="flex items-stretch">
-                      <button
-                        onClick={() => router.push(`/learn?groupId=${g.id}${g.currentRound > 0 ? `&round=${g.currentRound}` : ''}`)}
-                        onMouseEnter={() => prefetchLearn(g.id, g.currentRound)}
-                        className="flex flex-1 items-center justify-between px-4 py-3 pl-8 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800"
-                      >
+                      <Link href={`/learn?groupId=${encodeURIComponent(g.id)}`} className="flex flex-1 items-center justify-between px-4 py-3 pl-8 text-left hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-stone-500 dark:hover:bg-stone-800">
                         <div>
                           <p className="text-sm text-stone-700 dark:text-stone-300">{g.name}</p>
                           <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
@@ -251,7 +237,7 @@ export default function HomePage() {
                             {g.learned}/{g.total}
                           </span>
                         </div>
-                      </button>
+                      </Link>
                       <Link
                         href={`/list/${g.id}`}
                         className="flex items-center border-l border-stone-100 px-3 text-xs text-stone-400 transition hover:text-stone-600 dark:border-stone-700 dark:hover:text-stone-300"

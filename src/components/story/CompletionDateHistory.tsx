@@ -13,6 +13,7 @@ type CompletionDateHistoryProps = {
   readonly onFirstCompletion?: () => void
   readonly onCompletionDelta?: (delta: 1 | -1) => void
   readonly lazy?: boolean
+  readonly compact?: boolean
   readonly manageable?: boolean
   readonly summaryLabel?: string
 }
@@ -29,6 +30,7 @@ export function CompletionDateHistory({
   onFirstCompletion,
   onCompletionDelta,
   lazy = false,
+  compact = false,
   manageable = false,
   summaryLabel = '已学习',
 }: CompletionDateHistoryProps) {
@@ -171,13 +173,13 @@ export function CompletionDateHistory({
   }
 
   return (
-    <section aria-label={`${label}历史`} className="rounded-xl border border-[var(--story-line)] bg-[var(--story-bg)] p-3">
+    <section aria-label={`${label}历史`} className={compact ? 'py-1' : 'rounded-xl border border-[var(--story-line)] bg-[var(--story-bg)] p-3'}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-[var(--story-muted)]">
           {manageable && expanded ? <span className="mr-2 text-[var(--story-ink)]">编辑学习记录</span> : null}
-          {visibleCount === undefined ? '可独立记录完成日期' : <>{summaryLabel} <span className="tabular-nums text-[var(--story-ink)]">{visibleCount}</span> 次{visibleLatestDate ? <> · 最近 <time dateTime={visibleLatestDate}>{visibleLatestDate}</time></> : null}</>}
+          {visibleCount === undefined ? (compact ? label.replace('完成日期', '学习记录') : '可独立记录完成日期') : <>{summaryLabel} <span className="tabular-nums text-[var(--story-ink)]">{visibleCount}</span> 次{visibleLatestDate ? <> · 最近 <time dateTime={visibleLatestDate}>{visibleLatestDate}</time></> : null}</>}
         </p>
-        {!expanded ? <button type="button" aria-label={`记录或查看${label}历史`} onClick={() => setExpanded(true)} className={controlClass}>编辑学习记录</button> : null}
+        {!expanded ? <button type="button" aria-label={`记录或查看${label}历史`} onClick={() => setExpanded(true)} className={controlClass}>{compact ? '查看记录' : '编辑学习记录'}</button> : null}
       </div>
 
       {expanded && historyLoaded ? (
@@ -207,7 +209,7 @@ export function CompletionDateHistory({
           {completions.length > 3 ? <button type="button" onClick={() => setShowAll((current) => !current)} className={controlClass}>{showAll ? '收起记录' : `查看全部 ${completions.length} 条`}</button> : null}
 
           <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={busy || !online} onClick={recordToday} className="min-h-10 rounded-lg bg-red-900 px-4 text-sm font-semibold text-white disabled:opacity-60 dark:bg-red-800">{busy ? '正在保存…' : '记录今天'}</button>
+            <button type="button" disabled={busy || !online} onClick={recordToday} className={compact ? controlClass : 'min-h-10 rounded-lg bg-red-900 px-4 text-sm font-semibold text-white disabled:opacity-60 dark:bg-red-800'}>{busy ? '正在保存…' : '记录今天'}</button>
             <button type="button" disabled={busy || !online} onClick={() => setBackfillOpen((current) => !current)} className={controlClass}>{backfillOpen ? '收起补记' : '补记其他日期'}</button>
           </div>
 

@@ -27,7 +27,7 @@ export function StoryWordList({ lessonWords, bookmarkedWordIds, onWordBookmarked
   }
 
   return (
-    <ol aria-label="本篇目标词" className="divide-y divide-[var(--story-line)] rounded-2xl border border-[var(--story-line)] bg-[var(--story-surface)] px-3 sm:px-5">
+    <ol aria-label="本篇目标词" className="divide-y divide-[var(--story-line)]">
       {orderedWords.map((lessonWord) => {
         const visible = revealedWordIds.has(lessonWord.id)
         return (
@@ -70,7 +70,7 @@ export function StoryWordList({ lessonWords, bookmarkedWordIds, onWordBookmarked
                 aria-hidden={visible}
                 className={`col-start-1 row-start-1 transition-opacity duration-200 motion-reduce:transition-none ${visible ? 'opacity-0' : 'opacity-100'}`}
               >
-                点击查看释义
+                查看释义
               </span>
             </button>
           </li>

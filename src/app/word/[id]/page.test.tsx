@@ -67,6 +67,9 @@ describe('/word/[id]', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'resolve' })).toBeInTheDocument()
     expect(screen.getByText('decide firmly')).toBeInTheDocument()
+    expect(screen.getByText('高频词')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '高频词' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '去复习' })).toBeInTheDocument()
     expect(screen.getByText((_content, element) => element?.tagName === 'P' && element.textContent === 'She resolved to continue.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '朗读句子' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /学堂交锋/ })).toHaveAttribute('href', '/story/lesson-2/cards/1')

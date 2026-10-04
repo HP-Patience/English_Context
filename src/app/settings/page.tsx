@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import LogoutButton from '@/components/LogoutButton'
 
 const cards = [
   {
@@ -21,11 +23,17 @@ const cards = [
 ]
 
 export default function SettingsPage() {
+  const [canManageUsers, setCanManageUsers] = useState(false)
+  useEffect(() => {
+    fetch('/api/admin/users', { cache: 'no-store' }).then(response => setCanManageUsers(response.ok)).catch(() => setCanManageUsers(false))
+  }, [])
+  const entries = [...cards, { href: '/stats', title: '学习统计', desc: '查看学习进度和掌握情况' }, ...(canManageUsers ? [{ href: '/admin', title: '用户管理', desc: '管理员：创建和管理账号' }] : [])]
+
   return (
     <div className="mx-auto max-w-lg">
       <h1 className="mb-6 text-2xl font-bold text-stone-900 dark:text-stone-100">设置</h1>
       <div className="space-y-3">
-        {cards.map(card => (
+        {entries.map(card => (
           <Link
             key={card.href}
             href={card.href}
@@ -40,6 +48,9 @@ export default function SettingsPage() {
             </svg>
           </Link>
         ))}
+      </div>
+      <div className="mt-8 border-t border-stone-200 pt-5 dark:border-stone-700">
+        <LogoutButton className="min-h-11 rounded-lg px-3 text-sm text-stone-500 hover:bg-stone-100 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-red-400" />
       </div>
     </div>
   )
