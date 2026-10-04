@@ -10,6 +10,7 @@ import { CompletionDateHistory } from './CompletionDateHistory'
 import { StoryFirstPassPanel, type FirstPassView } from './StoryFirstPassPanel'
 import { StoryReinforcementSection } from './StoryReinforcementSection'
 import { StoryStepNav } from './StoryStepNav'
+import { StoryQuickNav } from './StoryQuickNav'
 import { useStoryReviewQueue } from './useStoryReviewQueue'
 
 export type StoryLessonView = Pick<
@@ -21,6 +22,7 @@ type StoryLessonShellProps = {
   readonly lesson: StoryLessonView
   readonly progress: UserStoryProgressDto
   readonly dueWords: number
+  readonly previousLessonId?: string | null
   readonly nextLessonId?: string | null
 }
 
@@ -36,7 +38,7 @@ function stepName(step: FirstPassView): string {
   return '第三步'
 }
 
-export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = null }: StoryLessonShellProps) {
+export function StoryLessonShell({ lesson, progress, dueWords, previousLessonId = null, nextLessonId = null }: StoryLessonShellProps) {
   const [savedProgress, setSavedProgress] = useState(progress)
   const [activeStep, setActiveStep] = useState<FirstPassView>(() => firstPassView(progress))
   const renderedStep = useDeferredValue(activeStep)
@@ -176,6 +178,12 @@ export function StoryLessonShell({ lesson, progress, dueWords, nextLessonId = nu
         }}
         onLoad={() => void review.load()}
         onSubmit={review.submit}
+      />
+      <StoryQuickNav
+        currentStep={activeStep}
+        onSelect={selectStep}
+        previousLessonId={previousLessonId}
+        nextLessonId={nextLessonId}
       />
     </article>
   )

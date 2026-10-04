@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 
 import { getAuthConfig } from '@/lib/auth/config'
 import {
@@ -6,11 +6,10 @@ import {
   sessionCookieOptions,
 } from '@/lib/auth/session'
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   const authConfig = getAuthConfig()
-  const response = NextResponse.redirect(new URL('/login', request.url), 303)
+  const response = NextResponse.json({ ok: true })
   response.headers.set('Cache-Control', 'no-store')
-  response.headers.set('Clear-Site-Data', '"cache", "storage"')
   response.cookies.set(AUTH_SESSION_COOKIE, '', {
     ...sessionCookieOptions(authConfig?.secureCookie ?? false),
     expires: new Date(0),

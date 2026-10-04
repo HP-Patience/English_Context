@@ -100,6 +100,25 @@ describe('/story/[lessonId] server page', () => {
     expect(mocks.shellProps[0]).toMatchObject({ nextLessonId: 'lesson-2' })
   })
 
+  it('passes neighbouring chapters from publication order, not input array order', async () => {
+    mocks.getStoryLesson.mockResolvedValueOnce({ ...readyLesson, id: 'lesson-2', order: 2 })
+    mocks.listStoryLessons.mockResolvedValueOnce([
+      { id: 'lesson-3', order: 3 },
+      { id: 'lesson-1', order: 1 },
+      { id: 'lesson-2', order: 2 },
+    ])
+    const page = await StoryLessonPage({ params: Promise.resolve({ lessonId: 'lesson-2' }) })
+    expect(page.key).toBe('lesson-2')
+    render(page)
+    expect(mocks.shellProps[0]).toMatchObject({ previousLessonId: 'lesson-1', nextLessonId: 'lesson-3' })
+  })
+
+  it('passes null chapter destinations at the first and last boundaries', async () => {
+    mocks.listStoryLessons.mockResolvedValueOnce([{ id: 'lesson-1', order: 1 }])
+    render(await StoryLessonPage({ params: Promise.resolve({ lessonId: 'lesson-1' }) }))
+    expect(mocks.shellProps[0]).toMatchObject({ previousLessonId: null, nextLessonId: null })
+  })
+
   it('rejects malformed dynamic params before querying lesson data', async () => {
     await expect(StoryLessonPage({ params: Promise.resolve({ lessonId: '   ' }) })).rejects.toThrow('NEXT_NOT_FOUND')
 

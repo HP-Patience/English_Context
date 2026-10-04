@@ -27,17 +27,19 @@ export default async function StoryLessonPage({ params }: StoryLessonPageProps) 
   if (!lesson) notFound()
 
   const lessons = await listStoryLessons({ prisma, userId })
-  const nextLessonId = [...lessons]
-    .sort((left, right) => left.order - right.order)
-    .find((candidate) => candidate.order > lesson.order)?.id ?? null
+  const orderedLessons = [...lessons].sort((left, right) => left.order - right.order)
+  const previousLessonId = orderedLessons.filter((candidate) => candidate.order < lesson.order).at(-1)?.id ?? null
+  const nextLessonId = orderedLessons.find((candidate) => candidate.order > lesson.order)?.id ?? null
 
   const lessonView = toPublicStoryLessonDetail(lesson)
 
   return (
     <StoryLessonShell
+      key={lesson.id}
       lesson={lessonView}
       progress={lesson.progress}
       dueWords={lesson.dueReviewCount}
+      previousLessonId={previousLessonId}
       nextLessonId={nextLessonId}
     />
   )

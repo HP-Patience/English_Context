@@ -201,6 +201,19 @@ describe('StoryLessonShell', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => progressResponse(3) }))
   })
 
+  it('switches views through the fixed step controls without writing learning progress', async () => {
+    render(<StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} previousLessonId="lesson-0" nextLessonId="lesson-2" />)
+    expect(screen.getByRole('button', { name: '上一步' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    expect(await screen.findByRole('heading', { name: '第二步 · 遮义回想' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    expect(await screen.findByRole('heading', { name: '第三步 · 归卷复习' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: '上一章' })).toHaveAttribute('href', '/story/lesson-0')
+    expect(screen.getByRole('link', { name: '下一章' })).toHaveAttribute('href', '/story/lesson-2')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('starts with paragraph cards and keeps every learning view independently enterable', () => {
     const { container } = render(
       <StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} nextLessonId="lesson-2" />,

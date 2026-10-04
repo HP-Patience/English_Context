@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/auth/config', () => ({ getAuthConfig: () => ({ secureCookie: false }) }))
 
@@ -7,13 +6,14 @@ import { AUTH_SESSION_COOKIE } from '@/lib/auth/session'
 import { POST } from './route'
 
 describe('POST /api/auth/logout', () => {
-  it('clears the session and asks supported browsers to remove cache and storage', async () => {
-    const response = await POST(new NextRequest('http://localhost/api/auth/logout', { method: 'POST' }))
+  it('expires the session cookie and returns a no-store response without a redirect', async () => {
+    const response = await POST()
 
-    expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('http://localhost/login')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('location')).toBeNull()
     expect(response.headers.get('Cache-Control')).toBe('no-store')
-    expect(response.headers.get('Clear-Site-Data')).toBe('"cache", "storage"')
+    expect(response.headers.get('Clear-Site-Data')).toBeNull()
     expect(response.cookies.get(AUTH_SESSION_COOKIE)?.value).toBe('')
+    await expect(response.json()).resolves.toEqual({ ok: true })
   })
 })
