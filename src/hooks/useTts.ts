@@ -1,25 +1,25 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useSyncExternalStore } from 'react'
+import { loadBrowserVoices, selectBrowserVoice, TTS_SETTINGS_CHANGED } from '@/lib/browser-tts'
 
 type TtsConfig = {
   provider: string
   baseURL: string
   voice: string
+  browserVoice?: string
   hasKey: boolean
 }
+
+const subscribeToSupport = () => () => {}
+const getSpeechSupport = () => !!window.speechSynthesis
+const getServerSupport = () => true
 
 export function useTts(text: string) {
   const [playing, setPlaying] = useState(false)
   const [config, setConfig] = useState<TtsConfig | null>(null)
-  const [supported, setSupported] = useState(true)
+  const supported = useSyncExternalStore(subscribeToSupport, getSpeechSupport, getServerSupport)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.speechSynthesis) {
-      setSupported(false)
-    }
-  }, [])
 
   useEffect(() => {
     return () => {
@@ -31,6 +31,12 @@ export function useTts(text: string) {
         audioRef.current = null
       }
     }
+  }, [])
+
+  useEffect(() => {
+    const resetConfig = () => setConfig(null)
+    window.addEventListener(TTS_SETTINGS_CHANGED, resetConfig)
+    return () => window.removeEventListener(TTS_SETTINGS_CHANGED, resetConfig)
   }, [])
 
   const play = useCallback(async () => {
@@ -79,21 +85,11 @@ export function useTts(text: string) {
           window.speechSynthesis.cancel()
         }
 
-        let voices = window.speechSynthesis.getVoices()
-        if (!voices.length) {
-          await new Promise<void>((r) => {
-            window.speechSynthesis.onvoiceschanged = () => {
-              window.speechSynthesis.onvoiceschanged = null
-              r()
-            }
-            setTimeout(r, 300)
-          })
-          voices = window.speechSynthesis.getVoices()
-        }
-        const enVoice = voices.find((v) => v.lang.startsWith('en'))
+        const voices = await loadBrowserVoices(window.speechSynthesis)
+        const enVoice = selectBrowserVoice(voices, cfg?.browserVoice || '')
 
         const utterance = new SpeechSynthesisUtterance(text)
-        utterance.lang = 'en-US'
+        utterance.lang = enVoice?.lang || 'en-US'
         utterance.rate = 0.9
         if (enVoice) utterance.voice = enVoice
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { englishVoices, loadBrowserVoices, selectBrowserVoice, voiceId, TTS_SETTINGS_CHANGED } from '@/lib/browser-tts'
 
 export default function ApiConfigPage() {
   return (
@@ -210,6 +211,9 @@ function TtsConfigPanel() {
   const [baseURL, setBaseURL] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [voice, setVoice] = useState('')
+  const [browserVoice, setBrowserVoice] = useState('')
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+  const [speechSupported, setSpeechSupported] = useState(true)
   const [hasKey, setHasKey] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -224,9 +228,26 @@ function TtsConfigPanel() {
         setProvider(data.provider || 'browser')
         setBaseURL(data.baseURL || '')
         setVoice(data.voice || '')
+        setBrowserVoice(data.browserVoice || '')
         setHasKey(data.hasKey)
       })
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const synth = window.speechSynthesis
+    let active = true
+    const update = () => {
+      if (!active) return
+      setSpeechSupported(!!synth)
+      setVoices(synth ? englishVoices(synth.getVoices()) : [])
+    }
+    queueMicrotask(update)
+    synth?.addEventListener('voiceschanged', update)
+    return () => {
+      active = false
+      synth?.removeEventListener('voiceschanged', update)
+    }
   }, [])
 
   function markChanged() { if (!changed) setChanged(true) }
@@ -234,7 +255,7 @@ function TtsConfigPanel() {
   async function save() {
     setSaving(true)
     try {
-      const body: Record<string, string> = { provider, baseURL, voice }
+      const body: Record<string, string> = { provider, baseURL, voice, browserVoice }
       if (apiKey) body.apiKey = apiKey
       const res = await fetch('/api/settings/tts', {
         method: 'PUT',
@@ -242,6 +263,7 @@ function TtsConfigPanel() {
         body: JSON.stringify(body),
       })
       if (res.ok) {
+        window.dispatchEvent(new Event(TTS_SETTINGS_CHANGED))
         setSaved(true)
         setChanged(false)
         setHasKey(!!apiKey || hasKey)
@@ -256,22 +278,26 @@ function TtsConfigPanel() {
   async function handleTest() {
     setTesting(true)
     try {
-      const body: Record<string, string> = { provider, baseURL, voice }
-      if (apiKey) body.apiKey = apiKey
-      await fetch('/api/settings/tts', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      setHasKey(!!apiKey || hasKey)
-      setApiKey('')
-
-      if (provider === 'browser' && window.speechSynthesis) {
-        window.speechSynthesis.cancel()
+      if (provider === 'browser') {
+        const synth = window.speechSynthesis
+        if (!synth || !testWord.trim()) return
+        synth.cancel()
+        const selected = selectBrowserVoice(await loadBrowserVoices(synth), browserVoice)
         const u = new SpeechSynthesisUtterance(testWord)
-        u.lang = 'en-US'
-        window.speechSynthesis.speak(u)
+        u.lang = selected?.lang || 'en-US'
+        u.rate = 0.9
+        if (selected) u.voice = selected
+        synth.speak(u)
       } else if (hasKey || apiKey) {
+        const body: Record<string, string> = { provider, baseURL, voice, browserVoice }
+        if (apiKey) body.apiKey = apiKey
+        const savedResponse = await fetch('/api/settings/tts', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        })
+        if (!savedResponse.ok) return
+        window.dispatchEvent(new Event(TTS_SETTINGS_CHANGED))
+        setHasKey(!!apiKey || hasKey)
+        setApiKey('')
         const res = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -291,7 +317,7 @@ function TtsConfigPanel() {
   return (
     <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
       <h2 className="mb-1 text-sm font-semibold text-stone-700 dark:text-stone-300">发音 (TTS)</h2>
-      <p className="mb-4 text-xs text-stone-400 dark:text-stone-500">选择"浏览器 TTS"可离线使用，配置 API 可获得更自然的语音。</p>
+      <p className="mb-4 text-xs text-stone-400 dark:text-stone-500">选择浏览器 TTS 可离线使用，配置 API 可获得更自然的语音。</p>
 
       <div className="space-y-4">
         <div>
@@ -306,6 +332,24 @@ function TtsConfigPanel() {
             <option value="custom">自定义 API (OpenAI 兼容)</option>
           </select>
         </div>
+
+        {provider === 'browser' && (
+          <div>
+            <label htmlFor="browser-tts-voice" className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">英文音色</label>
+            <select
+              id="browser-tts-voice"
+              value={browserVoice}
+              disabled={!speechSupported}
+              onChange={e => { setBrowserVoice(e.target.value); markChanged() }}
+              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+            >
+              <option value="">自动选择英文音色</option>
+              {browserVoice && !voices.some(v => voiceId(v) === browserVoice) && <option value={browserVoice}>已保存音色（此设备不可用，自动回退）</option>}
+              {voices.map(v => <option key={voiceId(v)} value={voiceId(v)}>{v.name} · {v.lang}</option>)}
+            </select>
+            {!speechSupported ? <p className="mt-2 text-xs text-stone-500">当前浏览器不支持系统朗读，请使用 API 发音服务。</p> : voices.length === 0 ? <p className="mt-2 text-xs text-stone-500">暂未检测到英文音色；朗读时将尝试使用系统默认声音。</p> : null}
+          </div>
+        )}
 
         {provider !== 'browser' && (
           <>
@@ -367,7 +411,7 @@ function TtsConfigPanel() {
             />
             <button
               onClick={handleTest}
-              disabled={testing}
+              disabled={testing || !testWord.trim() || (provider === 'browser' && !speechSupported)}
               className="shrink-0 rounded-lg border border-stone-300 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-800"
             >
               {testing ? '...' : '试听'}

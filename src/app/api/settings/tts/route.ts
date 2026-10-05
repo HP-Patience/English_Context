@@ -10,16 +10,17 @@ export async function GET() {
       provider: config.provider || 'browser',
       baseURL: config.baseURL || '',
       voice: config.voice || '',
+      browserVoice: config.browserVoice || '',
       hasKey: !!config.apiKey,
     })
   } catch {
-    return NextResponse.json({ provider: 'browser', baseURL: '', voice: '', hasKey: false })
+    return NextResponse.json({ provider: 'browser', baseURL: '', voice: '', browserVoice: '', hasKey: false })
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
-    const { provider, baseURL, apiKey, voice } = await req.json()
+    const { provider, baseURL, apiKey, voice, browserVoice } = await req.json()
     const userId = await getLocalUserId()
     const user = await prisma.user.findUnique({ where: { id: userId } })
     const existing = user?.ttsConfig ? JSON.parse(user.ttsConfig) : {}
@@ -28,8 +29,14 @@ export async function PUT(req: NextRequest) {
     if (baseURL !== undefined) existing.baseURL = baseURL
     if (apiKey !== undefined) existing.apiKey = apiKey
     if (voice !== undefined) existing.voice = voice
+    if (browserVoice !== undefined) {
+      if (typeof browserVoice !== 'string' || browserVoice.length > 1000) {
+        return NextResponse.json({ error: '无效的浏览器音色' }, { status: 400 })
+      }
+      existing.browserVoice = browserVoice
+    }
 
-    for (const k of ['provider', 'baseURL', 'apiKey', 'voice']) {
+    for (const k of ['provider', 'baseURL', 'apiKey', 'voice', 'browserVoice']) {
       if (!existing[k]) delete existing[k]
     }
 
