@@ -1,35 +1,57 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-/** Keep previous content until the next content is ready, then fade in place. */
+/** Mount incoming content hidden while loading; cross-fade only once it is ready. */
 export function FadeSwap({ transitionKey, children, className = '' }: {
   transitionKey: string | number
   children: ReactNode
   className?: string
 }) {
   const [displayed, setDisplayed] = useState({ key: transitionKey, children })
+  const [readyKey, setReadyKey] = useState<string | number | null>(null)
+  const incoming = useRef<HTMLDivElement>(null)
   const changing = displayed.key !== transitionKey
-  if (!changing && displayed.children !== children) {
-    setDisplayed({ key: transitionKey, children })
-  }
+  const ready = changing && readyKey === transitionKey
+  if (!changing && displayed.children !== children) setDisplayed({ key: transitionKey, children })
+  if (!changing && readyKey !== null) setReadyKey(null)
 
   useEffect(() => {
-    if (!changing) return
+    if (!changing || !incoming.current) return
+    const panel = incoming.current
+    let timer: number | undefined
+    function check() {
+      if (panel.querySelector('[data-page-loading]')) return
+      observer.disconnect()
+      timer = window.setTimeout(() => setReadyKey(transitionKey), 0)
+    }
+    const observer = new MutationObserver(check)
+    observer.observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-page-loading'] })
+    check()
+    return () => {
+      observer.disconnect()
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [changing, transitionKey])
+
+  useEffect(() => {
+    if (!ready) return
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    const timer = window.setTimeout(() => setDisplayed({ key: transitionKey, children }), reduced ? 0 : 80)
+    const timer = window.setTimeout(() => setDisplayed({ key: transitionKey, children }), reduced ? 0 : 120)
     return () => window.clearTimeout(timer)
-  }, [changing, transitionKey, children])
+  }, [ready, transitionKey, children])
 
   return (
-    <div className={className} aria-busy={changing}>
-      <div key={displayed.key} className={`content-fade ${changing ? 'content-fade-exit' : 'content-fade-enter'}`}
-        onAnimationEnd={event => {
-          if (event.target === event.currentTarget && !changing) event.currentTarget.classList.remove('content-fade-enter')
-        }}
-        inert={changing || undefined} aria-busy={changing || undefined}>
+    <div className={`${className} content-fade-stack`} aria-busy={changing}>
+      <div key={displayed.key} className={`content-fade ${ready ? 'content-fade-exit' : ''}`}
+        inert={changing || undefined} aria-hidden={changing || undefined}>
         {changing ? displayed.children : children}
       </div>
+      {changing ? <div key={transitionKey} ref={incoming}
+        className={`content-fade ${ready ? 'content-fade-enter' : 'content-fade-wait'}`}
+        inert={!ready || undefined} aria-hidden={!ready || undefined}>
+        {children}
+      </div> : null}
     </div>
   )
 }

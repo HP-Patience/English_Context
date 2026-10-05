@@ -304,6 +304,7 @@ describe('StoryLessonShell', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: /第二步/ }))
+    await waitFor(() => expect(document.querySelector('.story-step-panel')).toHaveAttribute('aria-busy', 'false'))
     const recalledSecondCard = screen.getAllByRole('article', { name: /故事段落/ })[1]
     expect(within(recalledSecondCard).getByRole('button', { name: '取消收藏第 2 段' })).toHaveAttribute('aria-pressed', 'true')
   })
@@ -337,7 +338,7 @@ describe('StoryLessonShell', () => {
     expect(screen.getAllByRole('article', { name: /故事段落/ })).toHaveLength(2)
     expect(screen.getByRole('button', { name: '取消收藏第 1 段' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getAllByRole('progressbar', { name: '段落完成进度' })).toHaveLength(1)
-    expect(screen.getByText('第 1 段完成日期')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('第 1 段完成日期')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: '记得' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '模糊' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '忘记' })).not.toBeInTheDocument()
@@ -377,7 +378,7 @@ describe('StoryLessonShell', () => {
     expect(screen.getByRole('button', { name: '返回第二步' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '返回第二步' }))
 
-    expect(screen.getByRole('heading', { level: 2, name: '第二步 · 遮义回想' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: '第二步 · 遮义回想' })).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
@@ -389,7 +390,7 @@ describe('StoryLessonShell', () => {
     expect(screen.getByRole('button', { name: /第三步/ })).toHaveAttribute('aria-current', 'step')
     const heading = await screen.findByRole('heading', { level: 2, name: '第三步 · 归卷复习' })
     expect(heading).toBeInTheDocument()
-    expect(heading.closest('.story-step-panel')).toHaveAttribute('aria-busy', 'false')
+    await waitFor(() => expect(heading.closest('.story-step-panel')).toHaveAttribute('aria-busy', 'false'))
   })
 
   it('keeps Step3 enterable while sequential persistence renders an ordered independent gloss reveal list', async () => {

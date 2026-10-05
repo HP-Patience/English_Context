@@ -109,7 +109,7 @@ export default function HomePage() {
   }
 
   if (loading) {
-    return <div className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
+    return <div data-page-loading="" aria-busy="true" className="py-16 text-center text-sm text-stone-400 dark:text-stone-500">加载中...</div>
   }
 
   return (
@@ -257,7 +257,7 @@ export default function HomePage() {
 
       {/* Empty state */}
       {stages.length === 0 && (
-        <Loading text="词库加载中..." />
+        <Loading text="词库加载中..." blocking={false} />
       )}
 
       {/* Bottom actions */}

@@ -78,7 +78,7 @@ function LearnPageContent({ groupId }: { groupId: string | null }) {
     }
   }
 
-  if (loading && !item) return <div className="mx-auto min-h-48 max-w-lg" aria-busy="true" />
+  if (loading && !item) return <div className="mx-auto min-h-48 max-w-lg" data-page-loading="" aria-busy="true" />
   if (done) return <div className="mx-auto max-w-lg py-8"><h1 className="text-xl font-semibold">暂时没有未背的单词</h1></div>
 
   return (
@@ -133,5 +133,5 @@ function ScopedLearnPage() {
 }
 
 export default function LearnPage() {
-  return <Suspense fallback={<div className="min-h-48" aria-busy="true" />}><ScopedLearnPage /></Suspense>
+  return <Suspense fallback={<div className="min-h-48" data-page-loading="" aria-busy="true" />}><ScopedLearnPage /></Suspense>
 }

@@ -215,17 +215,19 @@ html {
   animation: content-fade-in 120ms ease-out both;
 }
 .content-fade-exit {
-  animation: content-fade-out 80ms ease-in both;
+  animation: content-fade-out 120ms ease-out both;
   pointer-events: none;
 }
-.route-fade-delayed {
-  animation-delay: 80ms;
-}
+.content-fade-stack { display: grid; }
+.content-fade-stack > .content-fade { grid-area: 1 / 1; min-width: 0; }
+.content-fade-wait { visibility: hidden; }
+.route-fade-snapshot.route-fade-hold { animation: none; opacity: 1; }
+.route-fade-snapshot * { animation: none !important; transition: none !important; }
 .route-fade-snapshot {
   position: absolute;
   inset: 0 0 auto;
   pointer-events: none;
-  animation: content-fade-out 80ms ease-in both;
+  animation: content-fade-out 120ms ease-out both;
 }
 /* Avoid nested fades during a page transition. */
 .route-fade-enter .content-fade-enter,

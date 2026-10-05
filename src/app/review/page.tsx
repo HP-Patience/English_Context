@@ -190,7 +190,7 @@ export default function ReviewPage() {
   function renderContent() {
   if (loading) return (
     <div className="mx-auto max-w-lg">
-      <div className="min-h-48" aria-busy="true" />
+      <div className="min-h-48" data-page-loading="" aria-busy="true" />
     </div>
   )
 
@@ -221,7 +221,7 @@ export default function ReviewPage() {
     if (relearnLoading) {
       return (
         <div className="mx-auto max-w-lg">
-              <div className="min-h-48" aria-busy="true" />
+              <div className="min-h-48" data-page-loading="" aria-busy="true" />
         </div>
       )
     }
