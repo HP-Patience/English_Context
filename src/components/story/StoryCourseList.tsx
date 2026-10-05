@@ -36,7 +36,7 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
     return (
       <div
         role="status"
-        className="rounded-2xl border border-dashed border-stone-300 bg-stone-100/70 px-6 py-12 text-center dark:border-stone-700 dark:bg-stone-900/60"
+        className="rounded-2xl border border-dashed border-stone-300 bg-stone-100/70 px-4 py-8 text-center dark:border-stone-700 dark:bg-stone-900/60"
       >
         <p className="font-serif text-xl font-semibold text-stone-800 dark:text-stone-200">故事课程尚未发布</p>
         <p className="mt-2 text-sm leading-6 text-stone-500 dark:text-stone-400">
@@ -47,7 +47,7 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
   }
 
   return (
-    <ol className="space-y-4" aria-label="故事课程篇章">
+    <ol className="space-y-3" aria-label="故事课程篇章">
       {readyLessons.map((lesson) => {
         const isCurrent = lesson.id === currentLessonId
         return (
@@ -55,26 +55,26 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
             <article
               aria-label={`第 ${lesson.order} 篇：${lesson.title}`}
               data-current={isCurrent ? 'true' : 'false'}
-              className={`group relative overflow-hidden rounded-2xl border bg-white shadow-sm transition duration-200 dark:bg-stone-900 dark:shadow-none ${
+              className={`group relative overflow-hidden rounded-2xl border bg-white shadow-sm transition-colors duration-150 dark:bg-stone-900 dark:shadow-none ${
                 isCurrent
                   ? 'border-red-800/50 ring-1 ring-red-800/15 dark:border-red-700/60 dark:ring-red-500/20'
-                  : 'border-stone-200 hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-md motion-reduce:hover:translate-y-0 motion-reduce:transition-none dark:border-stone-800 dark:hover:border-stone-700'
+                  : 'border-stone-200 hover:border-stone-300 motion-reduce:transition-none dark:border-stone-800 dark:hover:border-stone-700'
               }`}
             >
-              <div className="grid sm:grid-cols-[5.25rem_minmax(0,1fr)]">
+              <div className="grid sm:grid-cols-[4rem_minmax(0,1fr)]">
                 <div
-                  className={`flex items-center justify-between border-b px-4 py-3 sm:flex-col sm:justify-center sm:border-b-0 sm:border-r sm:px-3 sm:py-6 ${
+                  className={`flex items-center justify-between border-b px-3 py-2 sm:flex-col sm:justify-center sm:border-b-0 sm:border-r sm:px-2 sm:py-4 ${
                     isCurrent
                       ? 'border-red-800/20 bg-red-950 text-stone-50 dark:border-red-700/30 dark:bg-red-950/80'
                       : 'border-stone-200 bg-stone-100 text-stone-700 dark:border-stone-800 dark:bg-stone-950 dark:text-stone-300'
                   }`}
                 >
-                  <span className="text-[0.65rem] font-semibold uppercase tracking-[0.24em] opacity-70">Chronicle</span>
-                  <span className="font-serif text-2xl font-bold tabular-nums">{String(lesson.order).padStart(2, '0')}</span>
+                  <span className="text-[0.65rem] font-semibold uppercase tracking-[0.08em] opacity-70">Chap</span>
+                  <span className="font-serif text-xl font-bold tabular-nums">{String(lesson.order).padStart(2, '0')}</span>
                 </div>
 
-                <div className="p-4 sm:p-5">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="p-3 sm:p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         {isCurrent && (
@@ -86,7 +86,7 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
                           {statusCopy[lesson.status]}
                         </span>
                       </div>
-                      <h3 className="mt-2 font-serif text-xl font-semibold tracking-tight text-stone-950 dark:text-stone-50 sm:text-2xl">
+                      <h3 className="mt-2 font-serif text-lg font-semibold tracking-tight text-stone-950 dark:text-stone-50">
                         {lesson.title}
                       </h3>
                       <p className="mt-1.5 text-xs leading-5 text-stone-500 dark:text-stone-400">
@@ -108,14 +108,14 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
                     </Link>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-100 pt-3 text-xs dark:border-stone-800">
-                    <span className="rounded-md bg-stone-100 px-2.5 py-1.5 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3 text-xs dark:border-stone-800">
+                    <span className="rounded-md bg-stone-100 px-2 py-1 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
                       {lesson.targetWordCount} 个目标词
                     </span>
-                    <span className="rounded-md bg-stone-100 px-2.5 py-1.5 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+                    <span className="rounded-md bg-stone-100 px-2 py-1 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
                       当前第 {lesson.currentStep} 步
                     </span>
-                    <span className={`rounded-md px-2.5 py-1.5 ${
+                    <span className={`rounded-md px-2 py-1 ${
                       lesson.dueReviewCount > 0
                         ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200'
                         : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'
@@ -123,7 +123,7 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
                       {lesson.dueReviewCount > 0 ? `${lesson.dueReviewCount} 个待强化` : '暂无待强化'}
                     </span>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <CompletionDateHistory
                       endpoint={`/api/story/lessons/${encodeURIComponent(lesson.id)}/completions`}
                       label={`第 ${lesson.order} 篇完成日期`}

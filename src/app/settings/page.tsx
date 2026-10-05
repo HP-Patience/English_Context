@@ -50,7 +50,7 @@ export default function SettingsPage() {
         ))}
       </div>
       <div className="mt-8 border-t border-stone-200 pt-5 dark:border-stone-700">
-        <LogoutButton className="min-h-11 rounded-lg px-3 text-sm text-stone-500 hover:bg-stone-100 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-red-400" />
+        <LogoutButton className="inline-flex min-h-11 min-w-24 items-center justify-center rounded-lg border border-stone-950 bg-stone-950 px-5 py-2 text-sm font-semibold text-white transition-colors hover:border-stone-700 hover:bg-stone-700 active:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-stone-600 dark:bg-stone-950 dark:text-white dark:hover:border-stone-500 dark:hover:bg-stone-700 dark:active:bg-stone-800 dark:focus-visible:ring-offset-stone-950" />
       </div>
     </div>
   )

@@ -30,7 +30,7 @@ describe('StoryCardDetail', () => {
 
     expect(screen.getByRole('button', { name: '取消收藏第 1 段' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '取消收藏第 1 段' })).toHaveAttribute('title', '取消收藏第 1 段')
-    expect(screen.getByRole('heading', { name: '雨夜重生', level: 3 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '1. 雨夜重生', level: 3 })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '雨夜重生' })).not.toBeInTheDocument()
   })
 })

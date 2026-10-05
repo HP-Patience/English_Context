@@ -29,6 +29,15 @@ async function nextUnlearnedWord(userId: string, groupId: string | null = null) 
     const learned = learnable.filter(entry => entry.word.meanings.every(meaning => meaning.userWordMeanings[0]?.mastery > 0)).length
     return NextResponse.json({ done: true, groupId, total: learnable.length, learned }, { headers: { 'Cache-Control': 'no-store' } })
   }
+  // Count all learnable words in this List, including already learned words.
+  const listWhere = { wordGroupId: item.wordGroupId, word: { meanings: { some: {} } } }
+  const [listTotal, listPosition] = await Promise.all([
+    prisma.wordGroupItem.count({ where: listWhere }),
+    prisma.wordGroupItem.count({ where: { ...listWhere, OR: [
+      { sortOrder: { lt: item.sortOrder } },
+      { sortOrder: item.sortOrder, id: { lte: item.id } },
+    ] } }),
+  ])
   const meaning = item.word.meanings[0]
   const progress = meaning.userWordMeanings[0]
   const sentence = progress ? await prisma.generatedSentence.findFirst({ where: { userWordMeaningId: progress.id }, orderBy: { lastUsedAt: 'desc' } }) : null
@@ -37,6 +46,7 @@ async function nextUnlearnedWord(userId: string, groupId: string | null = null) 
     wordId: item.word.id, word: item.word.text, bookmarked: item.word.userWords[0]?.bookmarked ?? false,
     pos: meaning.partOfSpeech, definition: meaning.definition, definitionCn: meaning.definitionCn,
     wordMastery: item.word.userWords[0]?.mastery ?? 0, meaningMastery: progress?.mastery ?? 0,
+    listProgress: { position: listPosition, total: listTotal },
     groupId: item.wordGroupId, sentence: sentence?.sentenceText ?? meaning.example ?? null, sentenceCn: sentence?.sentenceCn ?? null,
   }, { headers: { 'Cache-Control': 'no-store' } })
 }

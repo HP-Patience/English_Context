@@ -44,14 +44,16 @@ export function WordLearningContent({ word }: WordLearningContentProps) {
               <div key={meaning.id} className="space-y-2">
                 {sentences.map((sentence, sentenceIndex) => (
                   <article key={`${sentence.sentenceText}-${sentenceIndex}`}>
-                    <div className="mb-1 flex justify-end"><SentenceTTSButton text={sentence.sentenceText} /></div>
-                    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
+                    <div className="relative rounded-xl border border-stone-200 bg-white py-4 pl-10 pr-4 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
                       <SelectionSearch>
-                        <p className="text-sm leading-relaxed text-stone-800 dark:text-stone-200" lang="en">
+                        <div>
+                          <span className="absolute left-1 top-4 inline-flex h-7 items-center"><SentenceTTSButton text={sentence.sentenceText} /></span>
+                        <p className="min-w-0 flex-1 break-words text-sm leading-7 text-stone-800 dark:text-stone-200" lang="en">
                           {highlightWord(sentence.sentenceText, word.text).map((part, partIndex) => part.highlight ? (
                             <span key={partIndex} className="font-semibold text-amber-700 underline decoration-amber-300 decoration-2 underline-offset-4 dark:text-amber-400">{part.text}</span>
                           ) : <span key={partIndex}>{part.text}</span>)}
                         </p>
+                        </div>
                       </SelectionSearch>
                       {sentence.sentenceCn ? <p className="mt-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400" lang="zh-CN">{sentence.sentenceCn}</p> : null}
                       {sentence.contextTopic ? <span className="mt-2 inline-block rounded-md bg-stone-100 px-2 py-1 text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">{sentence.contextTopic}</span> : null}

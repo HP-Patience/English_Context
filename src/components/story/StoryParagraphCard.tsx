@@ -47,6 +47,7 @@ export function StoryParagraphCard({
     >
       <div className="flex items-start justify-between gap-3">
         <h3 id={headingId} className="font-serif text-xl font-semibold sm:text-2xl">
+          <span className="tabular-nums">{paragraphIndex + 1}.</span>{' '}
           {detailLink ? (
             <Link href={`/story/${encodeURIComponent(lessonId)}/cards/${paragraphIndex}`} className="rounded-sm underline decoration-[var(--story-accent-line)] underline-offset-4 hover:text-[var(--story-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--story-accent)]">
               {paragraph.sceneTitle}

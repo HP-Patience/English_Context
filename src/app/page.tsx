@@ -1,5 +1,7 @@
 'use client'
 
+import { memoryRatingButtonClass } from '@/components/MemoryRatingButtons'
+
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -139,7 +141,7 @@ export default function HomePage() {
         <Card className="mb-6">
           <div className="mb-1 flex items-center justify-between text-sm">
             <span className="font-medium text-stone-700 dark:text-stone-300">
-              🔥 连续 {dailyGoal.streak?.current ?? 0} 天
+              连续 {dailyGoal.streak?.current ?? 0} 天
             </span>
             <span className="text-stone-500 dark:text-stone-400">
               今日 {dailyGoal.learned}/{dailyGoal.target} 词
@@ -262,7 +264,7 @@ export default function HomePage() {
       <div className="mt-6 flex justify-center">
         <button
           onClick={() => router.push('/review')}
-          className="text-sm text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100"
+          className={`${memoryRatingButtonClass()} min-w-40`}
         >
           复习 {(stats?.dueCount ?? 0) > 0 ? `(${stats?.dueCount})` : ''}
         </button>

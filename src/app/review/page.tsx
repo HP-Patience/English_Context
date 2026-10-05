@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { FadeSwap } from '@/components/FadeSwap'
 import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
+import { MemoryRatingButtons, memoryRatingButtonClass } from '@/components/MemoryRatingButtons'
 import SelectionSearch from '@/components/SelectionSearch'
 import { highlightWord } from '@/lib/highlight'
 import { cachedFetch, invalidateCache } from '@/lib/api-cache'
@@ -46,6 +48,7 @@ type ReviewItem = {
 }
 
 export default function ReviewPage() {
+  const [tab, setTab] = useState<TabType>('review')
   const router = useRouter()
   const [queue, setQueue] = useState<ReviewItem[]>([])
   const [idx, setIdx] = useState(0)
@@ -55,12 +58,12 @@ export default function ReviewPage() {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<TabType>('review')
   const [relearnQueue, setRelearnQueue] = useState<ReviewItem[]>([])
   const [relearnIdx, setRelearnIdx] = useState(0)
   const [relearnStarted, setRelearnStarted] = useState(false)
   const [relearnLoading, setRelearnLoading] = useState(false)
   const [relearnDone, setRelearnDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     cachedFetch<ReviewItem[]>('/api/review-queue')
@@ -74,7 +77,6 @@ export default function ReviewPage() {
 
   useEffect(() => {
     if (tab !== 'relearn') return
-    setRelearnLoading(true)
     cachedFetch<ReviewItem[]>('/api/relearn')
       .then((data) => {
         setRelearnQueue(data)
@@ -111,10 +113,11 @@ export default function ReviewPage() {
   }
 
   async function handleNext() {
-    if (!item) return
+    if (!item || submitting) return
+    setError(null)
     setSubmitting(true)
     try {
-      await fetch('/api/review/submit', {
+      const response = await fetch('/api/review/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -124,11 +127,16 @@ export default function ReviewPage() {
           flippedToForgot: selfRate === 'forgot',
         }),
       })
+      if (!response.ok) throw new Error('save failed')
       invalidateCache('/api/kaoyan/stats')
       invalidateCache('/api/daily-goal')
       invalidateCache('/api/stats')
       invalidateCache('/api/review/analysis')
-    } catch {}
+    } catch {
+      setError('进度未能保存，请重试。当前单词不会被跳过。')
+      setSubmitting(false)
+      return
+    }
     setSubmitting(false)
     if (idx < queue.length - 1) {
       setIdx((i) => i + 1)
@@ -149,10 +157,11 @@ export default function ReviewPage() {
 
   async function handleRelearnNext() {
     const rItem = relearnQueue[relearnIdx]
-    if (!rItem || !selfRate) return
+    if (!rItem || !selfRate || submitting) return
+    setError(null)
     setSubmitting(true)
     try {
-      await fetch('/api/kaoyan/learn', {
+      const response = await fetch('/api/kaoyan/learn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -160,7 +169,12 @@ export default function ReviewPage() {
           grade: gradeFromRate(selfRate),
         }),
       })
-    } catch {}
+      if (!response.ok) throw new Error('save failed')
+    } catch {
+      setError('进度未能保存，请重试。当前单词不会被跳过。')
+      setSubmitting(false)
+      return
+    }
     setSubmitting(false)
     if (relearnIdx < relearnQueue.length - 1) {
       setRelearnIdx((i) => i + 1)
@@ -173,18 +187,17 @@ export default function ReviewPage() {
     }
   }
 
+  function renderContent() {
   if (loading) return (
     <div className="mx-auto max-w-lg">
-      <TabBar tab={tab} onTabChange={setTab} />
-      <p className="text-center text-stone-500 dark:text-stone-400">加载中...</p>
+      <div className="min-h-48" aria-busy="true" />
     </div>
   )
 
   if (done) {
     return (
       <div className="mx-auto max-w-lg text-center">
-        <TabBar tab={tab} onTabChange={setTab} />
-        <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">✓</p>
+          <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">✓</p>
         <h2 className="mb-1 text-xl font-semibold">复习完成</h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">完成了 {idx} 个单词</p>
         <div className="flex justify-center gap-3">
@@ -197,8 +210,7 @@ export default function ReviewPage() {
   if (!item && queue.length === 0) {
     return (
       <div className="mx-auto max-w-lg text-center">
-        <TabBar tab={tab} onTabChange={setTab} />
-        <h2 className="mb-1 text-xl font-semibold">暂无复习</h2>
+          <h2 className="mb-1 text-xl font-semibold">暂无复习</h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">学些新词再来</p>
         <button onClick={() => router.push('/')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">学新词</button>
       </div>
@@ -209,8 +221,7 @@ export default function ReviewPage() {
     if (relearnLoading) {
       return (
         <div className="mx-auto max-w-lg">
-          <TabBar tab={tab} onTabChange={setTab} />
-          <p className="text-center text-stone-500 dark:text-stone-400">加载中...</p>
+              <div className="min-h-48" aria-busy="true" />
         </div>
       )
     }
@@ -218,8 +229,7 @@ export default function ReviewPage() {
     if (relearnDone) {
       return (
         <div className="mx-auto max-w-lg text-center">
-          <TabBar tab={tab} onTabChange={setTab} />
-          <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">✓</p>
+              <p className="mb-1 text-5xl font-light text-stone-300 dark:text-stone-600">✓</p>
           <h2 className="mb-1 text-xl font-semibold">重新学习完成</h2>
           <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">完成了 {relearnQueue.length} 个单词</p>
           <button onClick={() => { setRelearnDone(false); setRelearnStarted(false); setTab('review') }} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">返回复习</button>
@@ -231,8 +241,7 @@ export default function ReviewPage() {
       if (relearnQueue.length === 0) {
         return (
           <div className="mx-auto max-w-lg text-center">
-            <TabBar tab={tab} onTabChange={setTab} />
-            <h2 className="mb-1 text-xl font-semibold">暂无需要重新学习的单词</h2>
+                  <h2 className="mb-1 text-xl font-semibold">暂无需要重新学习的单词</h2>
             <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">继续保持！</p>
           </div>
         )
@@ -240,8 +249,7 @@ export default function ReviewPage() {
 
       return (
         <div className="mx-auto max-w-lg text-center">
-          <TabBar tab={tab} onTabChange={setTab} />
-          <h2 className="mb-1 text-xl font-semibold">{relearnQueue.length} 个需要重新学习</h2>
+              <h2 className="mb-1 text-xl font-semibold">{relearnQueue.length} 个需要重新学习</h2>
           <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">掌握度低于 60% 的单词</p>
           <button
             onClick={() => {
@@ -264,8 +272,7 @@ export default function ReviewPage() {
     if (!relearnItem) {
       return (
         <div className="mx-auto max-w-lg text-center">
-          <TabBar tab={tab} onTabChange={setTab} />
-          <p className="text-sm text-stone-400 dark:text-stone-500">暂无内容</p>
+              <p className="text-sm text-stone-400 dark:text-stone-500">暂无内容</p>
         </div>
       )
     }
@@ -276,14 +283,14 @@ export default function ReviewPage() {
 
     return (
       <div className="mx-auto max-w-lg">
-        <TabBar tab={tab} onTabChange={setTab} />
-        <div className="mb-6 flex items-center gap-3">
+          <div className="mb-6 flex items-center gap-3">
           <div className="h-1 flex-1 rounded-full bg-stone-200 dark:bg-stone-800">
             <div className="h-1 rounded-full bg-stone-900 transition-all dark:bg-stone-100" style={{ width: `${((relearnIdx + 1) / relearnQueue.length) * 100}%` }} />
           </div>
           <span className="text-xs text-stone-400 dark:text-stone-500">{relearnIdx + 1}/{relearnQueue.length}</span>
         </div>
 
+        <FadeSwap transitionKey={relearnItem.id}>
         <div className="mb-6">
           {rsentence.text && <SelectionSearch><p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
             {rparts.map((part, i) =>
@@ -297,19 +304,9 @@ export default function ReviewPage() {
         </div>
 
         {!showDef ? (
-          <div className="grid grid-cols-3 gap-1.5">
-            <button onClick={() => { setSelfRate('clear'); setShowDef(true); setShowForgotAfterClear(true) }} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600">
-              <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-[10px] text-green-600 dark:bg-green-900 dark:text-green-400">✓</span>清楚
-            </button>
-            <button onClick={() => { setSelfRate('vague'); setShowDef(true) }} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600">
-              <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-[10px] text-amber-600 dark:bg-amber-900 dark:text-amber-400">~</span>模糊
-            </button>
-            <button onClick={() => { setSelfRate('forgot'); setShowDef(true) }} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600">
-              <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-[10px] text-red-600 dark:bg-red-900 dark:text-red-400">✗</span>忘记
-            </button>
-          </div>
+          <MemoryRatingButtons value={selfRate === null ? null : gradeFromRate(selfRate)} disabled={submitting} onChange={(grade) => handleRate(grade === 4 ? 'clear' : grade === 2 ? 'vague' : 'forgot')} />
         ) : (
-          <div className="space-y-4">
+          <div className="learn-definition-reveal space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold">{relearnItem.userWord.word.text}</h2>
@@ -336,20 +333,25 @@ export default function ReviewPage() {
               </div>
             )}
 
-            {showForgotAfterClear && (
+            <div className="flex justify-center gap-2">
+
+            <button onClick={handleRelearnNext} disabled={submitting} className={`${memoryRatingButtonClass()} w-[calc((100%_-_1rem)/3)]`}>
+              {submitting ? '...' : '继续'}
+            </button>
+{showForgotAfterClear && (
               <button
                 onClick={() => { setSelfRate('forgot'); setShowForgotAfterClear(false) }}
-                className="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-400 shadow-sm transition hover:border-red-200 hover:text-red-500 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500 dark:shadow-none dark:hover:border-red-400"
+                className={`${memoryRatingButtonClass()} w-[calc((100%_-_1rem)/3)]`}
               >
                 忘记
               </button>
             )}
 
-            <button onClick={handleRelearnNext} disabled={submitting} className="w-full rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-stone-800 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 dark:shadow-none">
-              {submitting ? '...' : '继续'}
-            </button>
+
+            </div>
           </div>
         )}
+        </FadeSwap>
       </div>
     )
   }
@@ -357,8 +359,7 @@ export default function ReviewPage() {
   if (tab === 'analysis') {
     return (
       <div className="mx-auto max-w-lg">
-        <TabBar tab={tab} onTabChange={setTab} />
-        <AnalysisPanel />
+          <AnalysisPanel />
       </div>
     )
   }
@@ -369,7 +370,6 @@ export default function ReviewPage() {
 
   return (
     <div className="mx-auto max-w-lg">
-      <TabBar tab={tab} onTabChange={setTab} />
       {/* progress bar */}
       <div className="mb-6 flex items-center gap-3">
         <div className="h-1 flex-1 rounded-full bg-stone-200 dark:bg-stone-800">
@@ -378,15 +378,14 @@ export default function ReviewPage() {
         <span className="text-xs text-stone-400 dark:text-stone-500">{idx + 1}/{queue.length}</span>
       </div>
 
+      <FadeSwap transitionKey={item.id}>
       {/* sentence */}
       <div className="mb-6">
         {sentence.text && (
           <SelectionSearch>
-            <div>
-              <div className="mb-1.5 flex justify-end">
-                <SentenceTTSButton text={sentence.text} />
-              </div>
-              <p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
+            <div className="flex items-start gap-2">
+              <span className="inline-flex h-8 shrink-0 items-center"><SentenceTTSButton text={sentence.text} /></span>
+              <p className="min-w-0 flex-1 break-words text-lg leading-8 text-stone-800 dark:text-stone-200">
                 {parts.map((part, i) =>
                   part.highlight ? (
                     <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">
@@ -404,32 +403,10 @@ export default function ReviewPage() {
 
       {/* self-assessment */}
       {!showDef ? (
-        <div className="grid grid-cols-3 gap-1.5">
-          <button
-            onClick={() => handleRate('clear')}
-            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600"
-          >
-            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-[10px] text-green-600 dark:bg-green-900 dark:text-green-400">✓</span>
-            清楚
-          </button>
-          <button
-            onClick={() => handleRate('vague')}
-            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600"
-          >
-            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-[10px] text-amber-600 dark:bg-amber-900 dark:text-amber-400">~</span>
-            模糊
-          </button>
-          <button
-            onClick={() => handleRate('forgot')}
-            className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-center text-xs font-medium text-stone-600 shadow-sm transition hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none dark:hover:border-stone-600"
-          >
-            <span className="mx-auto mb-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-[10px] text-red-600 dark:bg-red-900 dark:text-red-400">✗</span>
-            忘记
-          </button>
-        </div>
+        <MemoryRatingButtons value={selfRate === null ? null : gradeFromRate(selfRate)} disabled={submitting} onChange={(grade) => handleRate(grade === 4 ? 'clear' : grade === 2 ? 'vague' : 'forgot')} />
       ) : (
         /* definition panel */
-        <div className="space-y-4">
+        <div className="learn-definition-reveal space-y-4">
           {/* Word header with mastery */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -469,24 +446,35 @@ export default function ReviewPage() {
             </div>
           )}
 
-          {showForgotAfterClear && (
+          <div className="flex justify-center gap-2">
+
+          <button
+            onClick={handleNext}
+            disabled={submitting}
+            className={`${memoryRatingButtonClass()} w-[calc((100%_-_1rem)/3)]`}
+          >
+            {submitting ? '...' : idx < queue.length - 1 ? '继续' : '完成'}
+          </button>
+{showForgotAfterClear && (
             <button
               onClick={handleForgotAfterClear}
-              className="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-400 shadow-sm transition hover:border-red-200 hover:text-red-500 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500 dark:shadow-none dark:hover:border-red-400"
+              className={`${memoryRatingButtonClass()} w-[calc((100%_-_1rem)/3)]`}
             >
               忘记
             </button>
           )}
 
-          <button
-            onClick={handleNext}
-            disabled={submitting}
-            className="w-full rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-stone-800 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 dark:shadow-none"
-          >
-            {submitting ? '...' : idx < queue.length - 1 ? '继续' : '完成'}
-          </button>
+
+          </div>
         </div>
       )}
+      </FadeSwap>
     </div>
   )
+  }
+  return <div className="mx-auto max-w-lg">
+    <TabBar tab={tab} onTabChange={next => { setTab(next); setError(null); if (next === 'relearn') setRelearnLoading(true) }} />
+    {error ? <p role="alert" className="mb-4 text-sm text-red-700 dark:text-red-300">{error}</p> : null}
+    <FadeSwap transitionKey={tab}>{renderContent()}</FadeSwap>
+  </div>
 }

@@ -201,3 +201,43 @@ html {
     transition: none;
   }
 }
+
+@keyframes content-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes content-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.content-fade-enter,
+.route-fade-enter {
+  animation: content-fade-in 120ms ease-out both;
+}
+.content-fade-exit {
+  animation: content-fade-out 80ms ease-in both;
+  pointer-events: none;
+}
+.route-fade-delayed {
+  animation-delay: 80ms;
+}
+.route-fade-snapshot {
+  position: absolute;
+  inset: 0 0 auto;
+  pointer-events: none;
+  animation: content-fade-out 80ms ease-in both;
+}
+/* Avoid nested fades during a page transition. */
+.route-fade-enter .content-fade-enter,
+.route-fade-enter .learn-definition-reveal,
+.content-fade-enter .learn-definition-reveal {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .content-fade-enter,
+  .content-fade-exit,
+  .route-fade-enter,
+  .route-fade-snapshot {
+    animation: none;
+  }
+}

@@ -57,7 +57,7 @@ import StoryPage from './page'
 
 describe('/story server page', () => {
   it('loads the local user course through the service and renders aggregate progress', async () => {
-    const { container } = render(await StoryPage())
+    const { container } = render(await StoryPage({ searchParams: Promise.resolve({}) }))
 
     expect(mocks.connection).toHaveBeenCalledOnce()
     expect(mocks.getLocalUserId).toHaveBeenCalledOnce()
@@ -65,7 +65,7 @@ describe('/story server page', () => {
       prisma: expect.any(Object),
       userId: 'local-user',
     })
-    expect(screen.getByRole('heading', { level: 1, name: '蛊界词途' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '蛊界词途' })).not.toBeInTheDocument()
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: '修习卷宗' })).toBeInTheDocument()
     expect(screen.getByText('1 篇')).toBeInTheDocument()

@@ -239,7 +239,7 @@ describe('StoryLessonShell', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('starts with paragraph cards and keeps every learning view independently enterable', () => {
+  it('starts with paragraph cards and keeps every learning view independently enterable', async () => {
     const { container } = render(
       <StoryLessonShell lesson={lesson} progress={lesson.progress} dueWords={2} nextLessonId="lesson-2" />,
     )
@@ -271,10 +271,10 @@ describe('StoryLessonShell', () => {
       'data-endpoint',
       '/api/story/lessons/lesson-1/steps/2/completions',
     )
-    expect(screen.getByText('第 1 段完成日期')).toHaveAttribute(
+    await waitFor(() => expect(screen.getByText('第 1 段完成日期')).toHaveAttribute(
       'data-endpoint',
       '/api/story/lessons/lesson-1/paragraphs/0/completions?step=2',
-    )
+    ))
     expect(screen.getAllByText('故事学习进度 0/2')).toHaveLength(1)
     expect(screen.getByRole('button', { name: '跳到第 1 个未完成段落' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /第三步/ }))

@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useDeferredValue, useState } from 'react'
+import { FadeSwap } from '@/components/FadeSwap'
+import { useState } from 'react'
 
 import type { PublicStoryLessonDetail, StoryProgressApiResponse } from '@/lib/story-api-types'
 import type { UserStoryProgressDto } from '@/lib/story-service'
@@ -41,7 +42,7 @@ function stepName(step: FirstPassView): string {
 export function StoryLessonShell({ lesson, progress, dueWords, previousLessonId = null, nextLessonId = null }: StoryLessonShellProps) {
   const [savedProgress, setSavedProgress] = useState(progress)
   const [activeStep, setActiveStep] = useState<FirstPassView>(() => firstPassView(progress))
-  const renderedStep = useDeferredValue(activeStep)
+  const renderedStep = activeStep
   const [savingStep, setSavingStep] = useState<StoryFirstPassStep | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [bookmarkedParagraphIndexes, setBookmarkedParagraphIndexes] = useState<ReadonlySet<number>>(
@@ -96,10 +97,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, previousLessonId 
 
       <StoryStepNav currentStep={activeStep} completedStep={savedProgress.completedStep} onSelect={selectStep} />
 
-      <div
-        aria-busy={renderedStep !== activeStep}
-        className={`story-step-panel ${renderedStep !== activeStep ? 'story-step-panel-pending' : ''}`}
-      >
+      <FadeSwap transitionKey={activeStep} className="story-step-panel">
         <StoryFirstPassPanel
           lessonId={lesson.id}
           activeStep={renderedStep}
@@ -109,7 +107,7 @@ export function StoryLessonShell({ lesson, progress, dueWords, previousLessonId 
           bookmarkedParagraphIndexes={bookmarkedParagraphIndexes}
           onParagraphBookmarkChange={handleParagraphBookmarkChange}
         />
-      </div>
+      </FadeSwap>
 
       {error ? <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-900 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">{error}</p> : null}
 

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const prisma = {
-    wordGroupItem: { findFirst: vi.fn(), findMany: vi.fn() },
+    wordGroupItem: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     generatedSentence: { findFirst: vi.fn() },
     meaning: { findUnique: vi.fn() },
     userWord: { upsert: vi.fn(), update: vi.fn() },
@@ -21,7 +21,7 @@ import { GET, POST } from './route'
 const pending = { id: 'pending-1', mastery: 0, interval: 0, easeFactor: 2.5 }
 function candidate(existing = true) {
   return {
-    wordGroupId: 'group-1',
+    id: 'item-1', sortOrder: 4, wordGroupId: 'group-1',
     word: { id: 'word-1', text: 'agent', userWords: [], meanings: [{
       id: 'meaning-1', partOfSpeech: 'noun', definitionCn: '代理人', definition: 'a representative',
       example: 'The agent arrived.', userWordMeanings: existing ? [pending] : [],
@@ -33,9 +33,24 @@ beforeEach(() => {
   vi.resetAllMocks()
   mocks.getLocalUserId.mockResolvedValue('reader-1')
   mocks.prisma.generatedSentence.findFirst.mockResolvedValue(null)
+  mocks.prisma.wordGroupItem.count.mockResolvedValue(30)
 })
 
 describe('account-scoped next unlearned word', () => {
+  it('returns the List position using all learnable words and stable item ordering', async () => {
+    mocks.prisma.wordGroupItem.findFirst.mockResolvedValue(candidate())
+    mocks.prisma.wordGroupItem.count.mockResolvedValueOnce(30).mockResolvedValueOnce(5)
+    const response = await GET(new NextRequest('http://localhost/api/kaoyan/learn'))
+    expect(await response.json()).toMatchObject({ listProgress: { position: 5, total: 30 } })
+    expect(mocks.prisma.wordGroupItem.count).toHaveBeenNthCalledWith(1, {
+      where: { wordGroupId: 'group-1', word: { meanings: { some: {} } } },
+    })
+    expect(mocks.prisma.wordGroupItem.count).toHaveBeenNthCalledWith(2, {
+      where: { wordGroupId: 'group-1', word: { meanings: { some: {} } }, OR: [
+        { sortOrder: { lt: 4 } }, { sortOrder: 4, id: { lte: 'item-1' } },
+      ] },
+    })
+  })
   it('selects the next pending meaning in course order without requiring a group or changing progress', async () => {
     mocks.prisma.wordGroupItem.findFirst.mockResolvedValue(candidate())
     const response = await GET(new NextRequest('http://localhost/api/kaoyan/learn'))
