@@ -14,6 +14,19 @@ const item = { id: null, meaningId: 'meaning-1', wordId: 'word-1', word: 'agent'
 const reply = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); mocks.query = '' })
 describe('direct word learning', () => {
+  it('reveals definitions once without remounting them when the rating changes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(reply(item))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<LearnPage />)
+    await screen.findByRole('link', { name: 'agent' })
+    fireEvent.click(screen.getByRole('button', { name: '记得' }))
+    const definition = screen.getByText('代理人').closest('.learn-definition-reveal')
+    expect(definition).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '模糊' }))
+    expect(screen.getByText('代理人').closest('.learn-definition-reveal')).toBe(definition)
+    expect(screen.getByRole('button', { name: '模糊' })).toHaveAttribute('aria-pressed', 'true')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
   it('centers the word independently of the bookmark and places sentence audio after its text', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply(item)))
     render(<LearnPage />)

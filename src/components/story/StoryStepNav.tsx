@@ -22,19 +22,21 @@ export function StoryStepNav({ currentStep, completedStep, onSelect }: StoryStep
           const active = currentStep === step
           const complete = completedStep >= step
           return (
-            <li key={step}>
+            <li key={step} className="min-w-0">
               <button
                 type="button"
                 aria-current={active ? 'step' : undefined}
+                aria-label={`${title}：${caption}${complete ? '，已完成' : ''}`}
+                data-completed={complete}
                 onClick={() => onSelect(step)}
-                className={`min-h-14 w-full rounded-xl px-2 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:px-4 ${
+                className={`relative flex min-h-14 w-full flex-col items-center gap-1.5 rounded-lg px-1 py-2 text-center transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:px-4 ${
                    active ? 'story-step-active' : 'story-step-inactive'
                 }`}
               >
-                <span className="block text-[0.62rem] font-semibold uppercase tracking-[0.16em] sm:text-xs">
-                  {complete ? `${title} · 已成` : title}
+                <span aria-hidden="true" className="story-step-marker relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full border text-xs font-semibold">
+                  {complete ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg> : step}
                 </span>
-                <span className="mt-0.5 block truncate font-serif text-xs font-semibold sm:text-sm">{caption}</span>
+                <span className="relative z-10 block max-w-full truncate text-xs font-semibold sm:text-sm">{caption}</span>
               </button>
             </li>
           )

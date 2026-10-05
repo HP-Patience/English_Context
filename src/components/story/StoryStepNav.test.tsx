@@ -16,28 +16,30 @@ describe('StoryStepNav', () => {
       <StoryStepNav currentStep={1} completedStep={2} onSelect={onSelect} />,
     )
     const stepList = screen.getByRole('list')
+    expect(screen.queryByText('第一步 · 已成')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /第一步/ }).querySelector('svg')).not.toBeNull()
 
     expect(stepList).toHaveAttribute('data-current-step', '1')
     expect(screen.getAllByRole('button').filter((button) => button.getAttribute('aria-current') === 'step'))
       .toEqual([screen.getByRole('button', { name: /第一步/ })])
-    expect(screen.getByText('第一步 · 已成')).toBeInTheDocument()
-    expect(screen.getByText('第二步 · 已成')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /第一步/ })).toHaveAttribute('data-completed', 'true')
+    expect(screen.getByRole('button', { name: /第二步/ })).toHaveAttribute('data-completed', 'true')
 
     rerender(<StoryStepNav currentStep={2} completedStep={2} onSelect={onSelect} />)
 
     expect(stepList).toHaveAttribute('data-current-step', '2')
     expect(screen.getAllByRole('button').filter((button) => button.getAttribute('aria-current') === 'step'))
       .toEqual([screen.getByRole('button', { name: /第二步/ })])
-    expect(screen.getByText('第一步 · 已成')).toBeInTheDocument()
-    expect(screen.getByText('第二步 · 已成')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /第一步/ })).toHaveAttribute('data-completed', 'true')
+    expect(screen.getByRole('button', { name: /第二步/ })).toHaveAttribute('data-completed', 'true')
 
     rerender(<StoryStepNav currentStep={3} completedStep={2} onSelect={onSelect} />)
 
     expect(stepList).toHaveAttribute('data-current-step', '3')
     expect(screen.getAllByRole('button').filter((button) => button.getAttribute('aria-current') === 'step'))
       .toEqual([screen.getByRole('button', { name: /第三步/ })])
-    expect(screen.getByText('第一步 · 已成')).toBeInTheDocument()
-    expect(screen.getByText('第二步 · 已成')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /第一步/ })).toHaveAttribute('data-completed', 'true')
+    expect(screen.getByRole('button', { name: /第二步/ })).toHaveAttribute('data-completed', 'true')
   })
 
   it('calls onSelect with the clicked step', async () => {

@@ -124,30 +124,37 @@ html {
   color: var(--bookmark-selected-ink);
 }
 
-.story-theme .story-step-list::before {
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  width: calc((100% - 0.5rem) / 3);
-  border-radius: 0.75rem;
-  background: var(--story-accent-soft);
-  content: "";
-  pointer-events: none;
-  transform: translateX(0);
-  transition: transform 200ms ease-out;
-}
-
-.story-theme .story-step-list[data-current-step="2"]::before {
-  transform: translateX(calc(100% + 0.25rem));
-}
-
-.story-theme .story-step-list[data-current-step="3"]::before {
-  transform: translateX(calc(200% + 0.5rem));
-}
-
 .story-theme .story-step-list > li {
   position: relative;
-  z-index: 1;
+}
+
+.story-theme .story-step-list > li:not(:last-child)::after {
+  position: absolute;
+  top: 1.5rem;
+  left: calc(50% + 1rem);
+  width: calc(100% - 2rem + 0.25rem);
+  height: 1px;
+  background: var(--story-line);
+  content: "";
+  pointer-events: none;
+}
+
+.story-theme .story-step-marker {
+  border-color: var(--story-line);
+  background: var(--story-surface);
+  color: var(--story-muted);
+}
+
+.story-theme [data-completed="true"] .story-step-marker {
+  border-color: var(--story-accent-line);
+  background: var(--story-accent-soft);
+  color: var(--story-accent);
+}
+
+.story-theme .story-step-active .story-step-marker {
+  border-color: var(--story-accent);
+  background: var(--story-accent);
+  color: var(--story-surface);
 }
 
 .story-theme .story-step-active {
@@ -159,8 +166,20 @@ html {
 }
 
 .story-theme .story-step-inactive:hover {
-  background: var(--story-bg);
   color: var(--story-ink);
+}
+
+@keyframes learning-feedback-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.learn-definition-reveal {
+  animation: learning-feedback-fade 180ms ease-out;
+}
+
+.quick-nav-icon {
+  animation: learning-feedback-fade 150ms ease-out;
 }
 
 .story-theme .story-step-panel {
@@ -174,7 +193,10 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .story-theme .story-step-list::before,
+  .learn-definition-reveal,
+  .quick-nav-icon {
+    animation: none;
+  }
   .story-theme .story-step-panel {
     transition: none;
   }
