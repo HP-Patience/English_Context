@@ -14,6 +14,30 @@ const item = { id: null, meaningId: 'meaning-1', wordId: 'word-1', word: 'agent'
 const reply = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); mocks.query = '' })
 describe('direct word learning', () => {
+  it('centers the word independently of the bookmark and places sentence audio after its text', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply(item)))
+    render(<LearnPage />)
+    const word = await screen.findByRole('heading', { name: 'agent' })
+    expect(word).toHaveClass('text-center')
+    expect(word.parentElement?.parentElement).toHaveClass('justify-center', 'relative')
+    expect(screen.getByRole('button', { name: '收藏单词' }).parentElement).toHaveClass('absolute', 'right-0')
+    const audio = screen.getByRole('button', { name: '朗读句子' })
+    const sentence = audio.closest('p')
+    expect(sentence).toHaveTextContent('The secret agent was caught.')
+    expect(sentence?.lastElementChild).toContainElement(audio)
+  })
+  it('gives rating buttons visible hover feedback and a distinct selected state', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply(item)))
+    render(<LearnPage />)
+    await screen.findByRole('link', { name: 'agent' })
+    for (const label of ['记得', '模糊', '忘记']) {
+      expect(screen.getByRole('button', { name: label })).toHaveClass('enabled:hover:bg-stone-200', 'enabled:hover:text-stone-900', 'dark:enabled:hover:bg-stone-700')
+    }
+    fireEvent.click(screen.getByRole('button', { name: '记得' }))
+    expect(screen.getByRole('button', { name: '记得' })).toHaveClass('bg-stone-900', 'text-white', 'dark:bg-stone-100')
+    expect(screen.getByRole('button', { name: '记得' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '模糊' })).toHaveAttribute('aria-pressed', 'false')
+  })
   it('keeps loading within the selected group and resets state when the group changes', async () => {
     mocks.query = 'groupId=group%2F2'
     const fetchMock = vi.fn().mockResolvedValueOnce(reply({ done: true })).mockResolvedValueOnce(reply(item)).mockResolvedValueOnce(reply({ newMastery: 63 })).mockResolvedValueOnce(reply({ ...item, word: 'advance', meaningId: 'meaning-2' }))
@@ -25,7 +49,7 @@ describe('direct word learning', () => {
     rerender(<LearnPage />)
     await screen.findByRole('link', { name: 'agent' })
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/kaoyan/learn?groupId=group-3', { cache: 'no-store' })
-    fireEvent.click(screen.getByRole('button', { name: '清楚' }))
+    fireEvent.click(screen.getByRole('button', { name: '记得' }))
     fireEvent.click(screen.getByRole('button', { name: '保存并继续' }))
     await screen.findByRole('link', { name: 'advance' })
     expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/kaoyan/learn?groupId=group-3', { cache: 'no-store' })
@@ -37,7 +61,7 @@ describe('direct word learning', () => {
     expect(await screen.findByRole('link', { name: 'agent' })).toHaveAttribute('href', '/word/word-1')
     expect(fetchMock).toHaveBeenCalledWith('/api/kaoyan/learn', { cache: 'no-store' })
     expect(screen.queryByText('代理人')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '清楚' }))
+    fireEvent.click(screen.getByRole('button', { name: '记得' }))
     expect(screen.getByText('代理人')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: '保存并继续' }))

@@ -23,7 +23,7 @@ type LearnItem = {
   sentence: string | null
   sentenceCn: string | null
 }
-const ratings = [{ label: '清楚', grade: 4 }, { label: '模糊', grade: 2 }, { label: '忘记', grade: 0 }]
+const ratings = [{ label: '记得', grade: 4 }, { label: '模糊', grade: 2 }, { label: '忘记', grade: 0 }]
 
 function LearnPageContent({ groupId }: { groupId: string | null }) {
   const requestUrl = groupId ? `/api/kaoyan/learn?groupId=${encodeURIComponent(groupId)}` : '/api/kaoyan/learn'
@@ -82,19 +82,20 @@ function LearnPageContent({ groupId }: { groupId: string | null }) {
       {error ? <p role="alert" className="mb-5 text-sm text-red-700 dark:text-red-300">{error}</p> : null}
       {!item ? <button type="button" onClick={() => { setError(null); setLoading(true); void loadNext() }} className="min-h-11 rounded-lg border border-stone-300 px-5 text-sm dark:border-stone-700">重试</button> : (
         <>
-          <div className="mb-6 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold"><Link href={`/word/${encodeURIComponent(item.wordId)}`} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500">{item.word}</Link></h1>
-              <PronounceButton word={item.word} />
+          <div className="relative mb-6 flex min-h-9 items-center justify-center px-20">
+            <div className="relative min-w-0">
+              <h1 className="break-all text-center text-2xl font-semibold"><Link href={`/word/${encodeURIComponent(item.wordId)}`} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500">{item.word}</Link></h1>
+              <span className="absolute left-full top-1/2 ml-2 inline-flex -translate-y-1/2"><PronounceButton word={item.word} /></span>
             </div>
-            <WordBookmarkButton key={item.wordId} wordId={item.wordId} word={item.word} initialBookmarked={item.bookmarked} size="base" />
+            <div className="absolute right-0 top-1/2 -translate-y-1/2">
+              <WordBookmarkButton key={item.wordId} wordId={item.wordId} word={item.word} initialBookmarked={item.bookmarked} size="base" />
+            </div>
           </div>
           {item.sentence ? <SelectionSearch><div className="mb-6">
-            <div className="mb-2 flex justify-end"><SentenceTTSButton text={item.sentence} /></div>
-            <p className="text-lg leading-8">{highlightWord(item.sentence, item.word).map((part, index) => <span key={index} className={part.highlight ? 'font-semibold text-amber-700 underline decoration-amber-300 underline-offset-4 dark:text-amber-400' : undefined}>{part.text}</span>)}</p>
+            <p className="text-lg leading-8">{highlightWord(item.sentence, item.word).map((part, index) => <span key={index} className={part.highlight ? 'font-semibold text-amber-700 underline decoration-amber-300 underline-offset-4 dark:text-amber-400' : undefined}>{part.text}</span>)}<span className="ml-2 inline-flex align-middle"><SentenceTTSButton text={item.sentence} /></span></p>
           </div></SelectionSearch> : null}
           <div className="grid grid-cols-3 gap-2">
-            {ratings.map(({ label, grade }) => <button key={grade} type="button" disabled={saving} aria-pressed={rating === grade} onClick={() => setRating(grade)} className={`min-h-12 rounded-lg border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 disabled:opacity-50 ${rating === grade ? 'border-stone-900 font-semibold dark:border-stone-100' : 'border-stone-200 text-stone-500 hover:border-stone-400 dark:border-stone-700 dark:text-stone-400'}`}>{label}</button>)}
+            {ratings.map(({ label, grade }) => <button key={grade} type="button" disabled={saving} aria-pressed={rating === grade} onClick={() => setRating(grade)} className={`min-h-12 rounded-lg border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 disabled:opacity-50 ${rating === grade ? 'border-stone-900 bg-stone-900 font-semibold text-white dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900' : 'border-stone-200 text-stone-500 enabled:hover:border-stone-500 enabled:hover:bg-stone-200 enabled:hover:text-stone-900 dark:border-stone-700 dark:text-stone-400 dark:enabled:hover:border-stone-400 dark:enabled:hover:bg-stone-700 dark:enabled:hover:text-stone-100'}`}>{label}</button>)}
           </div>
           {rating !== null ? <div className="mt-6 space-y-4">
             <div className="border-t border-stone-200 pt-4 dark:border-stone-700">
