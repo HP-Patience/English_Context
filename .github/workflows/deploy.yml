@@ -45,6 +45,7 @@ jobs:
           cp -a public/. .next/standalone/public/
           cp deploy/english-context.service deploy/apply-production-migrations.mjs .next/standalone/deploy/
           cp scripts/migrate-single-user-to-admin.mjs .next/standalone/scripts/
+          cp scripts/maintenance/merge-duplicate-meanings.mjs .next/standalone/scripts/
           cp -a prisma/migrations/20261002_multi_user_accounts prisma/migrations/20261002_multi_user_interactions prisma/migrations/20261002_require_account_credentials .next/standalone/deploy/prisma/migrations/
           tar -C .next/standalone -czf "$RUNNER_TEMP/${GITHUB_SHA}.tar.gz" .
 
@@ -75,3 +76,4 @@ jobs:
           "${SSH[@]}" "$SERVER_USER@$SERVER_HOST" 'mkdir -p "$HOME/English_Context/incoming"'
           "${SCP[@]}" "$RUNNER_TEMP/${GITHUB_SHA}.tar.gz" "${SERVER_USER}@${SERVER_HOST}:English_Context/incoming/${GITHUB_SHA}.tar.gz"
           "${SSH[@]}" "$SERVER_USER@$SERVER_HOST" "bash -s -- '$GITHUB_SHA'" < deploy/deploy.sh
+
