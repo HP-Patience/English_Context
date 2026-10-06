@@ -39,6 +39,19 @@ const responseBody = {
         nextReviewAt: '2026-09-05T00:00:00.000Z',
         sentences: [{ sentenceText: 'She resolved to continue.', sentenceCn: '她下定决心继续。', contextTopic: 'choice' }],
       }],
+    }, {
+      id: 'meaning-duplicate',
+      partOfSpeech: 'verb',
+      definition: ' decide firmly ',
+      definitionCn: '下定决心',
+      userWordMeanings: [{
+        id: 'user-meaning-duplicate',
+        mastery: 10,
+        easeFactor: 2.1,
+        interval: 1,
+        nextReviewAt: '2026-09-06T00:00:00.000Z',
+        sentences: [],
+      }],
     }],
     userWords: [{ id: 'user-word-1', mastery: 40, status: 'learning', bookmarked: false }],
     groups: [{ wordGroup: { id: 'group-1', name: '高频词' } }],
@@ -66,7 +79,7 @@ describe('/word/[id]', () => {
     render(<WordDetailPage />)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'resolve' })).toBeInTheDocument()
-    expect(screen.getByText('decide firmly')).toBeInTheDocument()
+    expect(screen.getAllByText('decide firmly')).toHaveLength(1)
     expect(screen.getByText('高频词')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '高频词' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '去复习' })).toHaveAttribute('href', '/review')

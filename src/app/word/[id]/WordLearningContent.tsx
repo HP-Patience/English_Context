@@ -2,14 +2,56 @@ import SelectionSearch from '@/components/SelectionSearch'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
 import { highlightWord } from '@/lib/highlight'
 
-import type { WordDetail } from './word-detail-types'
+import type { WordDetail, WordMeaning } from './word-detail-types'
+
+
+function meaningKey(meaning: WordMeaning): string {
+  return [
+    meaning.partOfSpeech.trim().toLocaleLowerCase(),
+    meaning.definition.trim().toLocaleLowerCase(),
+    meaning.definitionCn?.trim().toLocaleLowerCase() ?? '',
+  ].join('\u0000')
+}
+
+function mergeMeanings(meanings: readonly WordMeaning[]): WordMeaning[] {
+  const merged = new Map<string, WordMeaning>()
+
+  for (const meaning of meanings) {
+    const key = meaningKey(meaning)
+    const existing = merged.get(key)
+    if (!existing) {
+      merged.set(key, meaning)
+      continue
+    }
+
+    const progress = [...existing.userWordMeanings, ...meaning.userWordMeanings]
+      .sort((left, right) => right.mastery - left.mastery || right.interval - left.interval)[0]
+    const sentences = [...existing.userWordMeanings, ...meaning.userWordMeanings]
+      .flatMap((item) => item.sentences)
+      .filter((sentence, index, all) => all.findIndex((candidate) => (
+        candidate.sentenceText === sentence.sentenceText
+        && candidate.sentenceCn === sentence.sentenceCn
+        && candidate.contextTopic === sentence.contextTopic
+      )) === index)
+
+    merged.set(key, {
+      ...existing,
+      userWordMeanings: progress
+        ? [{ ...progress, sentences }]
+        : [],
+    })
+  }
+
+  return [...merged.values()]
+}
 
 type WordLearningContentProps = {
   readonly word: WordDetail
 }
 
 export function WordLearningContent({ word }: WordLearningContentProps) {
-  const hasSentences = word.meanings.some((meaning) => (meaning.userWordMeanings[0]?.sentences.length ?? 0) > 0)
+  const meanings = mergeMeanings(word.meanings)
+  const hasSentences = meanings.some((meaning) => (meaning.userWordMeanings[0]?.sentences.length ?? 0) > 0)
 
   return (
     <>
@@ -19,7 +61,7 @@ export function WordLearningContent({ word }: WordLearningContentProps) {
           <div className="rounded-xl border border-dashed border-stone-200 bg-white px-5 py-8 text-center text-sm text-stone-500 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:shadow-none">
             该单词的坏释义已清理，当前暂无可显示内容。
           </div>
-        ) : word.meanings.map((meaning) => {
+        ) : meanings.map((meaning) => {
           const progress = meaning.userWordMeanings[0]
           return (
             <article key={meaning.id} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:shadow-none">
@@ -37,7 +79,7 @@ export function WordLearningContent({ word }: WordLearningContentProps) {
       {hasSentences ? (
         <section aria-labelledby="word-sentences" className="mb-6 space-y-3">
           <h2 id="word-sentences" className="text-sm font-medium text-stone-500 dark:text-stone-400">例句与译文</h2>
-          {word.meanings.map((meaning) => {
+          {meanings.map((meaning) => {
             const sentences = meaning.userWordMeanings[0]?.sentences ?? []
             if (sentences.length === 0) return null
             return (
