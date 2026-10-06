@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
@@ -20,20 +21,28 @@ export default function WordDetailPage() {
   const [userWord, setUserWord] = useState<UserWordInfo | null>(null)
   const [storyReferences, setStoryReferences] = useState<WordDetailResponse['storyReferences']>([])
   const [error, setError] = useState('')
+  const [loadedId, setLoadedId] = useState<string | null>(null)
+  const [errorId, setErrorId] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
   const [bookmarkError, setBookmarkError] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
   const [savingBookmark, setSavingBookmark] = useState(false)
-  const loading = word === null && error.length === 0
+  const activeError = errorId === id ? error : ''
+  const loading = loadedId !== id && activeError.length === 0
 
   useEffect(() => {
     if (!id) return
-    fetch(`/api/words/${id}`)
+    const controller = new AbortController()
+    fetch(`/api/words/${id}`, { signal: controller.signal })
       .then(async (response): Promise<WordDetailResponse> => {
         if (!response.ok) throw new WordNotFoundError()
         return response.json()
       })
       .then((data) => {
+        if (controller.signal.aborted) return
         setWord(data.word)
+        setLoadedId(id)
+        setErrorId(null)
         setStoryReferences(data.storyReferences)
         const currentUserWord = data.word.userWords[0]
         if (currentUserWord) {
@@ -41,8 +50,15 @@ export default function WordDetailPage() {
           setBookmarked(currentUserWord.bookmarked)
         }
       })
-      .catch((caught) => setError(caught instanceof Error ? caught.message : '单词加载失败，请稍后重试。'))
-  }, [id])
+      .catch((caught) => {
+        if (caught instanceof DOMException && caught.name === 'AbortError') return
+        if (!controller.signal.aborted) {
+          setErrorId(id)
+          setError(caught instanceof Error ? caught.message : '单词加载失败，请稍后重试。')
+        }
+      })
+    return () => controller.abort()
+  }, [id, retryToken])
 
   async function toggleBookmark(): Promise<void> {
     if (!word) return
@@ -69,13 +85,16 @@ export default function WordDetailPage() {
     }
   }
 
-  if (loading) return <div className="mx-auto max-w-lg"><Loading /></div>
+  if (loading) return <div className="mx-auto min-h-[28rem] max-w-lg"><Loading className="min-h-[28rem]" /></div>
 
-  if (error || !word) {
+  if (activeError || !word) {
     return (
       <div className="mx-auto max-w-lg py-16 text-center">
-        <p className="text-sm text-stone-500 dark:text-stone-400">{error || '单词未找到'}</p>
-        <button type="button" onClick={() => router.back()} className="mt-4 min-h-11 rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900">返回</button>
+        <p className="text-sm text-stone-500 dark:text-stone-400">{activeError || '单词未找到'}</p>
+        <div className="mt-4 flex justify-center gap-3">
+          {activeError ? <button type="button" onClick={() => { setErrorId(null); setRetryToken(token => token + 1) }} className="min-h-11 rounded-lg border border-stone-300 px-5 py-2 text-sm dark:border-stone-700">重试</button> : null}
+          <button data-route-transition type="button" onClick={() => router.back()} className="min-h-11 rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900">返回</button>
+        </div>
       </div>
     )
   }
@@ -112,8 +131,8 @@ export default function WordDetailPage() {
       <StoryReferences references={storyReferences} />
 
       <div className="mt-8 flex gap-3">
-        {userWord && userWord.mastery > 0 ? <button type="button" onClick={() => router.push('/review')} className="min-h-12 flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">去复习</button> : null}
-        <button type="button" onClick={() => router.back()} className="min-h-12 rounded-xl border border-stone-200 px-4 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">返回</button>
+        {userWord && userWord.mastery > 0 ? <Link href="/review" className="min-h-12 flex-1 rounded-xl bg-stone-900 px-4 py-3 text-center text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">去复习</Link> : null}
+        <button data-route-transition type="button" onClick={() => router.back()} className="min-h-12 rounded-xl border border-stone-200 px-4 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">返回</button>
       </div>
     </div>
   )

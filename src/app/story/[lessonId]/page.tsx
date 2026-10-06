@@ -23,10 +23,12 @@ export default async function StoryLessonPage({ params }: StoryLessonPageProps) 
   if (!lessonId) notFound()
 
   const userId = await getLocalUserId()
-  const lesson = await getStoryLesson({ prisma, userId, lessonId })
+  const [lesson, lessons] = await Promise.all([
+    getStoryLesson({ prisma, userId, lessonId }),
+    listStoryLessons({ prisma, userId }),
+  ])
   if (!lesson) notFound()
 
-  const lessons = await listStoryLessons({ prisma, userId })
   const orderedLessons = [...lessons].sort((left, right) => left.order - right.order)
   const previousLessonId = orderedLessons.filter((candidate) => candidate.order < lesson.order).at(-1)?.id ?? null
   const nextLessonId = orderedLessons.find((candidate) => candidate.order > lesson.order)?.id ?? null

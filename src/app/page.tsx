@@ -4,7 +4,6 @@ import { memoryRatingButtonClass } from '@/components/MemoryRatingButtons'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { cachedFetch } from '@/lib/api-cache'
 import Loading from '@/components/Loading'
 import Card from '@/components/Card'
@@ -39,7 +38,6 @@ interface KaoyanStats {
 }
 
 export default function HomePage() {
-  const router = useRouter()
   const [stats, setStats] = useState<KaoyanStats | null>(null)
   const [dailyGoal, setDailyGoal] = useState<DailyGoalStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -262,12 +260,12 @@ export default function HomePage() {
 
       {/* Bottom actions */}
       <div className="mt-6 flex justify-center">
-        <button
-          onClick={() => router.push('/review')}
+        <Link
+          href="/review"
           className={`${memoryRatingButtonClass()} min-w-40`}
         >
           复习 {(stats?.dueCount ?? 0) > 0 ? `(${stats?.dueCount})` : ''}
-        </button>
+        </Link>
       </div>
 
       {/* PWA install banner */}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { FadeSwap } from '@/components/FadeSwap'
 import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
@@ -49,7 +49,6 @@ type ReviewItem = {
 
 export default function ReviewPage() {
   const [tab, setTab] = useState<TabType>('review')
-  const router = useRouter()
   const [queue, setQueue] = useState<ReviewItem[]>([])
   const [idx, setIdx] = useState(0)
   const [selfRate, setSelfRate] = useState<'clear' | 'vague' | 'forgot' | null>(null)
@@ -72,7 +71,7 @@ export default function ReviewPage() {
         setLoading(false)
         if (data.length === 0) setDone(true)
       })
-      .catch(() => setLoading(false))
+      .catch(() => { setError('复习内容加载失败，请重试。'); setLoading(false) })
   }, [])
 
   useEffect(() => {
@@ -82,7 +81,7 @@ export default function ReviewPage() {
         setRelearnQueue(data)
         setRelearnLoading(false)
       })
-      .catch(() => setRelearnLoading(false))
+      .catch(() => { setError('重新学习内容加载失败，请重试。'); setRelearnLoading(false) })
   }, [tab])
 
   const item = queue[idx]
@@ -190,7 +189,7 @@ export default function ReviewPage() {
   function renderContent() {
   if (loading) return (
     <div className="mx-auto max-w-lg">
-      <div className="min-h-48" data-page-loading="" aria-busy="true" />
+      <div className="min-h-[28rem]" data-page-loading="" aria-busy="true" />
     </div>
   )
 
@@ -201,7 +200,7 @@ export default function ReviewPage() {
         <h2 className="mb-1 text-xl font-semibold">复习完成</h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">完成了 {idx} 个单词</p>
         <div className="flex justify-center gap-3">
-          <button onClick={() => router.push('/')} className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">学新词</button>
+          <Link href="/" className="rounded-lg border border-stone-200 px-5 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800">学新词</Link>
         </div>
       </div>
     )
@@ -212,7 +211,7 @@ export default function ReviewPage() {
       <div className="mx-auto max-w-lg text-center">
           <h2 className="mb-1 text-xl font-semibold">暂无复习</h2>
         <p className="mb-8 text-sm text-stone-400 dark:text-stone-500">学些新词再来</p>
-        <button onClick={() => router.push('/')} className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">学新词</button>
+        <Link href="/" className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200">学新词</Link>
       </div>
     )
   }
@@ -221,7 +220,7 @@ export default function ReviewPage() {
     if (relearnLoading) {
       return (
         <div className="mx-auto max-w-lg">
-              <div className="min-h-48" data-page-loading="" aria-busy="true" />
+              <div className="min-h-[28rem]" data-page-loading="" aria-busy="true" />
         </div>
       )
     }

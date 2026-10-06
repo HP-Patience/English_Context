@@ -40,6 +40,7 @@ export function CompletionDateHistory({
   const [pending, setPending] = useState<PendingCompletion | null>(null)
   const [undo, setUndo] = useState<StoryCompletionEvent | null>(null)
   const [expanded, setExpanded] = useState(!lazy)
+  const [requested, setRequested] = useState(!lazy)
   const [historyLoaded, setHistoryLoaded] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [backfillOpen, setBackfillOpen] = useState(false)
@@ -59,15 +60,19 @@ export function CompletionDateHistory({
   }, [])
 
   useEffect(() => {
-    if (!expanded || historyLoaded) return
+    if (!requested || historyLoaded) return
     let active = true
+    let succeeded = false
     setBusy(true)
     void fetch(endpoint)
       .then(async (response) => response.ok ? parseCompletionHistory(await response.json()) : null)
       .then((history) => {
         if (!active) return
         if (!history) setError(true)
-        else setCompletions(sortCompletions(history))
+        else {
+          succeeded = true
+          setCompletions(sortCompletions(history))
+        }
       })
       .catch((caught: unknown) => {
         if (!(caught instanceof TypeError || caught instanceof SyntaxError)) throw caught
@@ -76,11 +81,13 @@ export function CompletionDateHistory({
       .finally(() => {
         if (active) {
           setBusy(false)
-          setHistoryLoaded(true)
+          if (succeeded || !lazy) setHistoryLoaded(true)
+          if (succeeded) setExpanded(true)
+          else if (lazy) setRequested(false)
         }
       })
     return () => { active = false }
-  }, [endpoint, expanded, historyLoaded])
+  }, [endpoint, requested, historyLoaded, lazy])
 
   useEffect(() => {
     if (!undo) return
@@ -179,7 +186,7 @@ export function CompletionDateHistory({
           {manageable && expanded ? <span className="mr-2 text-[var(--story-ink)]">编辑学习记录</span> : null}
           {visibleCount === undefined ? (compact ? label.replace('完成日期', '学习记录') : '可独立记录完成日期') : <>{summaryLabel} <span className="tabular-nums text-[var(--story-ink)]">{visibleCount}</span> 次{visibleLatestDate ? <> · 最近 <time dateTime={visibleLatestDate}>{visibleLatestDate}</time></> : null}</>}
         </p>
-        {!expanded ? <button type="button" aria-label={`记录或查看${label}历史`} onClick={() => setExpanded(true)} className={controlClass}>{compact ? '查看记录' : '编辑学习记录'}</button> : null}
+        {!expanded ? <button type="button" aria-label={`记录或查看${label}历史`} disabled={busy || !online} aria-busy={busy} onClick={() => { setError(false); setBusy(true); setRequested(true) }} className={`${controlClass} ${compact ? 'w-20' : 'w-28'}`}>{busy ? '加载中…' : compact ? '查看记录' : '编辑学习记录'}</button> : null}
       </div>
 
       {expanded && historyLoaded ? (

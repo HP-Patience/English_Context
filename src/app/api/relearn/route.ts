@@ -17,9 +17,11 @@ export async function GET() {
         { lastRatedAt: { lte: oneDayAgo } },
       ],
     },
-    include: {
-      meaning: true,
-      userWord: { include: { word: true } },
+    select: {
+      id: true,
+      easeFactor: true,
+      meaning: { select: { id: true, partOfSpeech: true, definition: true, definitionCn: true } },
+      userWord: { select: { wordId: true, bookmarked: true, word: { select: { id: true, text: true } } } },
       sentences: {
         where: { source: { not: 'synonym_test' } },
         orderBy: { lastUsedAt: 'desc' },

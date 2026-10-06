@@ -252,12 +252,12 @@ function SearchPageContent() {
 
               <div className="mt-2 flex gap-2">
                 {learned ? (
-                  <button
-                    onClick={() => router.push('/review')}
+                  <Link
+                    href="/review"
                     className="rounded-lg bg-stone-100 px-3 py-1 text-xs text-stone-600 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700"
                   >
                     去复习
-                  </button>
+                  </Link>
                 ) : (
                   <span className="rounded-lg bg-stone-50 px-3 py-1 text-xs text-stone-400 dark:bg-stone-800 dark:text-stone-500">
                     未学

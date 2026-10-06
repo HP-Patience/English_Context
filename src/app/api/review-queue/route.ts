@@ -10,9 +10,11 @@ export async function GET() {
       nextReviewAt: { lte: new Date() },
       interval: { gt: 0 },
     },
-    include: {
-      meaning: true,
-      userWord: { include: { word: true } },
+    select: {
+      id: true,
+      easeFactor: true,
+      meaning: { select: { id: true, partOfSpeech: true, definition: true, definitionCn: true } },
+      userWord: { select: { wordId: true, bookmarked: true, word: { select: { id: true, text: true } } } },
       sentences: { where: { source: { not: 'synonym_test' } }, orderBy: { lastUsedAt: 'desc' }, take: 3 },
     },
     orderBy: { nextReviewAt: 'asc' },

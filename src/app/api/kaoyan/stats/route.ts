@@ -9,6 +9,7 @@ type HomeResult = Awaited<ReturnType<typeof fetchStats>> & {
   dailyGoal: DailyGoalResult | null
 }
 const cache = new Map<string, { data: unknown; expiresAt: number }>()
+const inFlight = new Map<string, Promise<HomeResult>>()
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key)
   return entry && Date.now() < entry.expiresAt ? (entry.data as T) : null
@@ -107,18 +108,29 @@ export async function GET() {
   const cached = getCached<HomeResult>(cacheKey)
   if (cached) {
     return NextResponse.json(cached, {
-      headers: { 'Cache-Control': 'public, max-age=60' },
+      headers: { 'Cache-Control': 'private, max-age=60' },
     })
   }
 
-  const [stats, dailyGoal] = await Promise.all([
+  const pending = inFlight.get(cacheKey)
+  const resultPromise = pending ?? Promise.all([
     fetchStats(userId),
     fetchDailyGoal(userId).catch(() => null),
-  ])
+  ]).then(([stats, dailyGoal]) => {
+    const result = { ...stats, dailyGoal }
+    setCache(cacheKey, result)
+    return result
+  })
+  if (!pending) {
+    inFlight.set(cacheKey, resultPromise)
+    void resultPromise.then(
+      () => { if (inFlight.get(cacheKey) === resultPromise) inFlight.delete(cacheKey) },
+      () => { if (inFlight.get(cacheKey) === resultPromise) inFlight.delete(cacheKey) },
+    )
+  }
 
-  const result = { ...stats, dailyGoal }
-  setCache(cacheKey, result)
+  const result = await resultPromise
   return NextResponse.json(result, {
-    headers: { 'Cache-Control': 'public, max-age=60' },
+    headers: { 'Cache-Control': 'private, max-age=60' },
   })
 }

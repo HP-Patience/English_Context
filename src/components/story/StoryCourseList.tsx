@@ -130,6 +130,7 @@ export function StoryCourseList({ lessons, currentLessonId }: StoryCourseListPro
                       summaryLabel="本篇已学习"
                       initialCount={lesson.completionSummary.lesson.count}
                       latestDate={lesson.completionSummary.lesson.latestDate}
+                      lazy
                       manageable
                     />
                   </div>

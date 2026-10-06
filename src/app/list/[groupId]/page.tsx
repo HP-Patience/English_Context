@@ -75,6 +75,7 @@ export default function WordListPage() {
         </div>
         <div className="flex gap-2">
           <button
+            data-route-transition
             onClick={() => router.back()}
             className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800"
           >

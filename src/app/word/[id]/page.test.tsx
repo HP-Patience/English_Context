@@ -69,7 +69,7 @@ describe('/word/[id]', () => {
     expect(screen.getByText('decide firmly')).toBeInTheDocument()
     expect(screen.getByText('高频词')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '高频词' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '去复习' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '去复习' })).toHaveAttribute('href', '/review')
     expect(screen.getByText((_content, element) => element?.tagName === 'P' && element.textContent === 'She resolved to continue.')).toBeInTheDocument()
     const audio = screen.getByRole('button', { name: '朗读句子' })
     expect(audio.parentElement).toHaveClass('absolute', 'left-1', 'top-4')

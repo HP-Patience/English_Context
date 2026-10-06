@@ -386,7 +386,7 @@ function lessonInclude(userId: string, includeDetailRelations = false) {
         select: { paragraphIndex: true },
       },
     } : {}),
-    words: {
+    words: includeDetailRelations ? {
       orderBy: { sortOrder: 'asc' },
       include: {
         word: {
@@ -403,12 +403,20 @@ function lessonInclude(userId: string, includeDetailRelations = false) {
         },
         meaning: true,
         userProgress: { where: { userId } },
-        ...(includeDetailRelations ? {
-          reviewAttempts: {
-            where: { userId },
-            orderBy: { round: 'asc' },
-          },
-        } : {}),
+        reviewAttempts: {
+          where: { userId },
+          orderBy: { round: 'asc' },
+        },
+      },
+    } : {
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        sortOrder: true,
+        userProgress: {
+          where: { userId },
+          select: { userId: true, reviewRoundCompleted: true, nextReviewAt: true },
+        },
       },
     },
   }

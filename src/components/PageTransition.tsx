@@ -32,8 +32,7 @@ export function PageTransition({ children }: { children: ReactNode }) {
         if (link.download || (link.target && link.target !== '_self')) return
         const destination = new URL(link.href, location.href)
         if (destination.origin === location.origin && destination.pathname !== location.pathname) capture()
-      } else if (event.target.closest('button')) {
-        // Also covers existing router.push/back buttons without intercepting their action.
+      } else if (event.target.closest('button[data-route-transition]')) {
         capture()
       }
     }

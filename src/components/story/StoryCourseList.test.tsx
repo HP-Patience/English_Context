@@ -109,7 +109,7 @@ describe('StoryCourseList', () => {
     expect(within(laterLesson).getByRole('link', { name: '开始第 2 篇' })).toHaveAttribute('href', '/story/lesson-2')
     expect(within(laterLesson).getByRole('region', { name: '第 2 篇完成日期历史' })).toBeInTheDocument()
     expect(within(screen.getByRole('article', { name: '第 1 篇：青茅山醒来' }))
-      .getByRole('button', { name: '查看第 1 篇完成日期历史' })).toBeInTheDocument()
+      .getByRole('button', { name: '记录或查看第 1 篇完成日期历史' })).toBeInTheDocument()
   })
 
   it('mounts 100 lesson summaries without requesting history until one is expanded', async () => {
@@ -127,13 +127,14 @@ describe('StoryCourseList', () => {
     render(<StoryCourseList currentLessonId={null} lessons={lessons} />)
 
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(within(screen.getByRole('region', { name: '第 100 篇完成日期历史' })).getByText(/已记录/))
-      .toHaveTextContent('已记录 2 次 · 最近 2026-08-18')
+    expect(within(screen.getByRole('region', { name: '第 100 篇完成日期历史' })).getByText(/本篇已学习/))
+      .toHaveTextContent('本篇已学习 2 次 · 最近 2026-08-18')
 
-    await userEvent.click(screen.getByRole('button', { name: '查看第 1 篇完成日期历史' }))
+    await userEvent.click(screen.getByRole('button', { name: '记录或查看第 1 篇完成日期历史' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     expect(fetchMock).toHaveBeenCalledWith('/api/story/lessons/lesson-1/completions')
+    await userEvent.click(screen.getByRole('button', { name: '补记其他日期' }))
     expect(screen.getByLabelText('第 1 篇完成日期')).toHaveValue('')
   })
 

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
@@ -35,25 +35,47 @@ function LearnPageContent({ groupId }: { groupId: string | null }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [needsNext, setNeedsNext] = useState(false)
+  const requestRef = useRef<AbortController | null>(null)
 
-  const loadNext = useCallback(() => fetch(requestUrl, { cache: 'no-store' })
-    .then(async response => {
-      if (!response.ok) throw new Error('load failed')
-      const data = await response.json() as LearnItem | { done: true }
-      if ('done' in data && data.done) {
-        setNeedsNext(false)
-        setDone(true)
-        setItem(null)
-      } else if ('meaningId' in data && data.meaningId && data.wordId) {
-        setItem(data)
-        setRating(null)
-        setNeedsNext(false)
-        setDone(false)
-      } else throw new Error('invalid learning response')
-    })
-    .catch(() => setError('单词加载失败，请重试。'))
-    .finally(() => setLoading(false)), [requestUrl])
-  useEffect(() => { void loadNext() }, [loadNext])
+  const loadNext = useCallback(() => {
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    requestRef.current = controller
+    setLoading(true)
+    return fetch(requestUrl, { cache: 'no-store', signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error('load failed')
+        const data = await response.json() as LearnItem | { done: true }
+        if (controller.signal.aborted) return
+        if ('done' in data && data.done) {
+          setNeedsNext(false)
+          setDone(true)
+          setItem(null)
+        } else if ('meaningId' in data && data.meaningId && data.wordId) {
+          setItem(data)
+          setRating(null)
+          setNeedsNext(false)
+          setDone(false)
+        } else throw new Error('invalid learning response')
+      })
+      .catch((caught) => {
+        if (caught instanceof DOMException && caught.name === 'AbortError') return
+        if (!controller.signal.aborted) setError('单词加载失败，请重试。')
+      })
+      .finally(() => {
+        if (requestRef.current === controller) {
+          requestRef.current = null
+          setLoading(false)
+        }
+      })
+  }, [requestUrl])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadNext() }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      requestRef.current?.abort()
+    }
+  }, [loadNext])
 
   async function saveAndNext(grade = rating) {
     if (!item || grade === null || saving) return
@@ -78,7 +100,7 @@ function LearnPageContent({ groupId }: { groupId: string | null }) {
     }
   }
 
-  if (loading && !item) return <div className="mx-auto min-h-48 max-w-lg" data-page-loading="" aria-busy="true" />
+  if (loading && !item) return <div className="mx-auto min-h-[28rem] max-w-lg" data-page-loading="" aria-busy="true" />
   if (done) return <div className="mx-auto max-w-lg py-8"><h1 className="text-xl font-semibold">暂时没有未背的单词</h1></div>
 
   return (
@@ -133,5 +155,5 @@ function ScopedLearnPage() {
 }
 
 export default function LearnPage() {
-  return <Suspense fallback={<div className="min-h-48" data-page-loading="" aria-busy="true" />}><ScopedLearnPage /></Suspense>
+  return <Suspense fallback={<div className="min-h-[28rem]" data-page-loading="" aria-busy="true" />}><ScopedLearnPage /></Suspense>
 }

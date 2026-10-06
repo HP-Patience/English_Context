@@ -14,10 +14,34 @@ async function nextUnlearnedWord(userId: string, groupId: string | null = null) 
   const item = await prisma.wordGroupItem.findFirst({
     where: { ...(groupId ? { wordGroupId: groupId } : {}), word: { meanings: { some: unlearned } } },
     orderBy: [{ wordGroup: { sortOrder: 'asc' } }, { sortOrder: 'asc' }, { id: 'asc' }],
-    include: { word: { include: {
-      meanings: { where: unlearned, orderBy: { id: 'asc' }, include: { userWordMeanings: { where: { userWord: { userId }, mastery: 0, interval: 0 }, orderBy: { id: 'asc' } } } },
-      userWords: { where: { userId } },
-    } } },
+    select: {
+      id: true,
+      wordGroupId: true,
+      sortOrder: true,
+      word: { select: {
+      id: true,
+      text: true,
+      meanings: {
+        where: unlearned,
+        orderBy: { id: 'asc' },
+        take: 1,
+        select: {
+          id: true,
+          partOfSpeech: true,
+          definition: true,
+          definitionCn: true,
+          example: true,
+          userWordMeanings: {
+            where: { userWord: { userId }, mastery: 0, interval: 0 },
+            orderBy: { id: 'asc' },
+            take: 1,
+            select: { id: true, mastery: true },
+          },
+        },
+      },
+      userWords: { where: { userId }, select: { bookmarked: true, mastery: true }, take: 1 },
+      } },
+    },
   })
   if (!item) {
     if (!groupId) return NextResponse.json({ done: true }, { headers: { 'Cache-Control': 'no-store' } })

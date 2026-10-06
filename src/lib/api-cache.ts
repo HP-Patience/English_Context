@@ -4,6 +4,7 @@ type CacheEntry = {
 }
 
 const cache = new Map<string, CacheEntry>()
+const inFlight = new Map<string, Promise<unknown>>()
 
 export function cachedFetch<T = unknown>(
   url: string,
@@ -14,13 +15,23 @@ export function cachedFetch<T = unknown>(
     return Promise.resolve(cached.data as T)
   }
 
-  return fetch(url).then((res) => {
-    if (!res.ok) throw new Error(`cachedFetch ${url}: ${res.status}`)
-    return res.json().then((data) => {
-      cache.set(url, { data, expiresAt: Date.now() + ttlMs })
-      return data as T
+  const pending = inFlight.get(url)
+  if (pending) return pending as Promise<T>
+
+  const request = fetch(url)
+    .then((res) => {
+      if (!res.ok) throw new Error(`cachedFetch ${url}: ${res.status}`)
+      return res.json().then((data) => {
+        cache.set(url, { data, expiresAt: Date.now() + ttlMs })
+        return data as T
+      })
     })
-  })
+    .finally(() => {
+      if (inFlight.get(url) === request) inFlight.delete(url)
+    })
+
+  inFlight.set(url, request)
+  return request
 }
 
 /** Invalidate all cache entries whose URL contains `pattern` */
