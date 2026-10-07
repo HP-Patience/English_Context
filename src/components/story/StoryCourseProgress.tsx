@@ -25,7 +25,7 @@ export function StoryCourseProgress({
           <div>
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-stone-400">Course ledger</p>
             <h2 id="story-course-progress-title" className="mt-1 font-serif text-base font-semibold">
-              修习卷宗
+              学习进度
             </h2>
           </div>
           <p className="font-serif text-xl font-semibold tabular-nums text-stone-50">{firstPassed} / {total}</p>
@@ -64,9 +64,6 @@ export function StoryCourseProgress({
         </div>
       </dl>
 
-      <p className="border-t border-stone-800 bg-stone-900 px-4 py-2 text-xs leading-5 text-stone-400 sm:px-5">
-        Step4 会在之后按到期时间强化；完成前三步即可继续，<strong className="font-semibold text-stone-200">不会阻塞下一篇</strong>。
-      </p>
     </section>
   )
 }

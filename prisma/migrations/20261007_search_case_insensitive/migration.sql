@@ -1,0 +1,1 @@
+ALTER TABLE "User" ADD COLUMN "searchCaseInsensitive" BOOLEAN NOT NULL DEFAULT true;

@@ -10,7 +10,7 @@ import SelectionSearch from '@/components/SelectionSearch'
 import { FadeSwap } from '@/components/FadeSwap'
 import { WordBookmarkButton } from '@/components/WordBookmarkButton'
 import { invalidateCache } from '@/lib/api-cache'
-import { highlightWord } from '@/lib/highlight'
+import { highlightedWordClass, highlightWord } from '@/lib/highlight'
 
 type LearnItem = {
   id: string | null
@@ -107,8 +107,9 @@ function LearnPageContent({ groupId }: { groupId: string | null }) {
     <div className="mx-auto max-w-lg">
       {error ? <p role="alert" className="mb-5 text-sm text-red-700 dark:text-red-300">{error}</p> : null}
       {!item ? <button type="button" onClick={() => { setError(null); setLoading(true); void loadNext() }} className="min-h-11 rounded-lg border border-stone-300 px-5 text-sm dark:border-stone-700">重试</button> : (
+        <>
         <FadeSwap transitionKey={item.meaningId}>
-          <div className="relative mb-6 flex min-h-9 items-center justify-center px-20">
+          <div className="relative mb-8 flex min-h-9 items-center justify-center px-20">
             <div className="relative min-w-0">
               <h1 className="break-all text-center text-2xl font-semibold"><Link href={`/word/${encodeURIComponent(item.wordId)}`} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500">{item.word}</Link></h1>
               <span className="absolute left-full top-1/2 ml-2 inline-flex -translate-y-1/2"><PronounceButton word={item.word} /></span>
@@ -129,7 +130,11 @@ function LearnPageContent({ groupId }: { groupId: string | null }) {
           ) : null}
           {item.sentence ? <SelectionSearch><div className="mb-6 flex items-start gap-2">
             <span className="inline-flex h-8 shrink-0 items-center"><SentenceTTSButton text={item.sentence} /></span>
-            <p className="min-w-0 flex-1 break-words text-lg leading-8">{highlightWord(item.sentence, item.word).map((part, index) => <span key={index} className={part.highlight ? 'font-semibold text-amber-700 underline decoration-amber-300 underline-offset-4 dark:text-amber-400' : undefined}>{part.text}</span>)}</p>
+            <p className="min-w-0 flex-1 break-words text-lg leading-8 text-stone-800 dark:text-stone-200">{highlightWord(item.sentence, item.word).map((part, index) => part.highlight ? (
+              <Link key={index} href={`/word/${encodeURIComponent(item.wordId)}`} className={`${highlightedWordClass} rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}>
+                {part.text}
+              </Link>
+            ) : <span key={index}>{part.text}</span>)}</p>
           </div></SelectionSearch> : null}
           {rating === null ? <MemoryRatingButtons value={rating} onChange={setRating} disabled={saving} /> : null}
           {rating !== null ? <div className="mt-6 space-y-4">
@@ -144,6 +149,7 @@ function LearnPageContent({ groupId }: { groupId: string | null }) {
             </div>
           </div> : null}
         </FadeSwap>
+        </>
       )}
     </div>
   )

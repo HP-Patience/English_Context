@@ -1,3 +1,5 @@
+export const highlightedWordClass = 'font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4'
+
 export function highlightWord(sentence: string, word: string) {
   const markerRe = /\*\*(.+?)\*\*/
   if (markerRe.test(sentence)) {

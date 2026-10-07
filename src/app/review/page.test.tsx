@@ -34,6 +34,7 @@ describe('ReviewPage tab placement', () => {
     expect(screen.queryByRole('button', { name: /清楚/ })).not.toBeInTheDocument()
     const audio = screen.getByRole('button', { name: '朗读句子' })
     expect(audio.parentElement?.parentElement).toHaveClass('flex', 'items-start')
+    expect(screen.getByRole('link', { name: 'agent' })).toHaveAttribute('href', '/word/word-1')
     expect(audio.parentElement?.nextElementSibling).toHaveTextContent('The secret agent was caught.')
     expect(audio.parentElement?.nextElementSibling).toHaveClass('min-w-0', 'flex-1', 'break-words')
     const tab = screen.getByRole('button', { name: '重新学习' })

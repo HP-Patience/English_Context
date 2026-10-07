@@ -46,7 +46,7 @@ jobs:
           cp deploy/english-context.service deploy/apply-production-migrations.mjs .next/standalone/deploy/
           cp scripts/migrate-single-user-to-admin.mjs .next/standalone/scripts/
           cp scripts/maintenance/merge-duplicate-meanings.mjs .next/standalone/scripts/
-          cp -a prisma/migrations/20261002_multi_user_accounts prisma/migrations/20261002_multi_user_interactions prisma/migrations/20261002_require_account_credentials .next/standalone/deploy/prisma/migrations/
+          cp -a prisma/migrations/20261002_multi_user_accounts prisma/migrations/20261002_multi_user_interactions prisma/migrations/20261002_require_account_credentials prisma/migrations/20261007_search_case_insensitive .next/standalone/deploy/prisma/migrations/
           tar -C .next/standalone -czf "$RUNNER_TEMP/${GITHUB_SHA}.tar.gz" .
 
       - name: Configure SSH

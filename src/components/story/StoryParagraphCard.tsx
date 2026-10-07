@@ -91,6 +91,7 @@ export function StoryParagraphCard({
           onCompletionDelta={onCompletionDelta}
           lazy
           compact
+          showSummary={false}
           manageable
         />
       </div>

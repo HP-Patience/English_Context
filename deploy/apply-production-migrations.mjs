@@ -16,6 +16,7 @@ export const PRODUCTION_MIGRATION_ORDER = [
   '20261002_multi_user_accounts',
   '20261002_multi_user_interactions',
   '20261002_require_account_credentials',
+  '20261007_search_case_insensitive',
 ]
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))

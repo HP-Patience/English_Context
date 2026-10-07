@@ -24,13 +24,16 @@ export default function PreferencesPage() {
   const [goalSaved, setGoalSaved] = useState(false)
   const [savingInterests, setSavingInterests] = useState(false)
   const [savingGoal, setSavingGoal] = useState(false)
+  const [searchCaseInsensitive, setSearchCaseInsensitive] = useState(true)
+  const [searchSettingSaved, setSearchSettingSaved] = useState(false)
+  const [savingSearchSetting, setSavingSearchSetting] = useState(false)
 
   useEffect(() => {
     fetch('/api/interests')
       .then(r => r.json())
-      .then(data => {
-        if (data.interests?.length > 0) {
-          setSelected(data.interests.map((i: any) => i.topic))
+      .then((data: { interests?: Array<{ topic: string }> }) => {
+        if (data.interests && data.interests.length > 0) {
+          setSelected(data.interests.map((i: { topic: string }) => i.topic))
         }
       })
       .catch(() => {})
@@ -38,6 +41,12 @@ export default function PreferencesPage() {
       .then(r => r.json())
       .then(data => {
         if (data.target) setDailyTarget(data.target)
+      })
+      .catch(() => {})
+    fetch('/api/search-settings')
+      .then(r => r.json())
+      .then(data => {
+        if (typeof data.searchCaseInsensitive === 'boolean') setSearchCaseInsensitive(data.searchCaseInsensitive)
       })
       .catch(() => {})
   }, [])
@@ -73,6 +82,22 @@ export default function PreferencesPage() {
     }
   }
 
+  async function saveSearchSetting() {
+    setSavingSearchSetting(true)
+    try {
+      const res = await fetch('/api/search-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchCaseInsensitive }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      setSearchSettingSaved(true)
+      setTimeout(() => setSearchSettingSaved(false), 2000)
+    } finally {
+      setSavingSearchSetting(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-lg space-y-8">
       <div>
@@ -102,6 +127,29 @@ export default function PreferencesPage() {
             {savingGoal ? '保存中...' : goalSaved ? '✓ 已保存' : '保存'}
           </button>
         </div>
+      </section>
+
+
+      {/* Search preference */}
+      <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <h2 className="mb-1 text-sm font-semibold text-stone-700 dark:text-stone-300">搜索偏好</h2>
+        <p className="mb-4 text-xs text-stone-400 dark:text-stone-500">控制搜索单词时是否忽略首字母大小写。</p>
+        <label className="flex items-center justify-between gap-4">
+          <span className="text-sm text-stone-700 dark:text-stone-300">忽略首字母大小写</span>
+          <input
+            type="checkbox"
+            checked={searchCaseInsensitive}
+            onChange={event => setSearchCaseInsensitive(event.target.checked)}
+            className="h-4 w-4 accent-stone-900 dark:accent-stone-100"
+          />
+        </label>
+        <button
+          onClick={saveSearchSetting}
+          disabled={savingSearchSetting}
+          className="mt-4 w-full rounded-lg bg-stone-900 py-2.5 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
+        >
+          {savingSearchSetting ? '保存中...' : searchSettingSaved ? '✓ 已保存' : '保存搜索设置'}
+        </button>
       </section>
 
       {/* Interests */}

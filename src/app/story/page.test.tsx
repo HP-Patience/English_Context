@@ -67,7 +67,7 @@ describe('/story server page', () => {
     })
     expect(screen.queryByRole('heading', { name: '蛊界词途' })).not.toBeInTheDocument()
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: '修习卷宗' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: '学习进度' })).toBeInTheDocument()
     expect(screen.getByText('1 篇')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '继续第 2 步' })).toHaveAttribute('href', '/story/lesson-2')
     expect(screen.queryByRole('link', { name: '普通词卡学习' })).not.toBeInTheDocument()

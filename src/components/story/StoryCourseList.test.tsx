@@ -162,7 +162,6 @@ describe('StoryCourseProgress', () => {
     expect(screen.getByText('4 篇')).toBeInTheDocument()
     expect(screen.getByText('12 词')).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '首次学习进度' })).toHaveAttribute('aria-valuenow', '18')
-    expect(screen.getByText(/Step4 会在之后按到期时间强化/)).toHaveTextContent('不会阻塞下一篇')
 
     for (const label of ['Course ledger', '强化中', '已强化', '今日待复习']) {
       expect(screen.getByText(label)).toHaveClass('text-stone-400')

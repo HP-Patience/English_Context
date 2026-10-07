@@ -4,6 +4,8 @@ import { prisma, getLocalUserId } from '@/lib/prisma'
 export async function GET(req: NextRequest) {
   const userId = await getLocalUserId()
   const q = req.nextUrl.searchParams.get('q')?.trim()
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { searchCaseInsensitive: true } })
+  const mode = user?.searchCaseInsensitive === false ? undefined : 'insensitive'
 
   if (!q || q.length < 1) {
     return NextResponse.json({ results: [] })
@@ -14,11 +16,11 @@ export async function GET(req: NextRequest) {
     where: {
       language: 'en',
       OR: [
-        { text: { startsWith: q } },
-        { text: { contains: q } },
+        { text: { startsWith: q, ...(mode ? { mode } : {}) } },
+        { text: { contains: q, ...(mode ? { mode } : {}) } },
         {
           meanings: {
-            some: { definitionCn: { contains: q } },
+            some: { definitionCn: { contains: q, ...(mode ? { mode } : {}) } },
           },
         },
       ],

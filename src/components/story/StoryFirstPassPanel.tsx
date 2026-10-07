@@ -27,12 +27,6 @@ const stepHeading: Record<FirstPassView, string> = {
   3: '第三步 · 归卷复习',
 }
 
-const stepDescription: Record<FirstPassView, string> = {
-  1: '阅读故事，留意英文词及释义。',
-  2: '先回想词义，再点击核对。',
-  3: '回想单词，点击右侧核对释义。',
-}
-
 export function StoryFirstPassPanel({
   lessonId,
   activeStep,
@@ -74,8 +68,6 @@ export function StoryFirstPassPanel({
   return (
     <section aria-labelledby={`step-${activeStep}-title`} className="mt-7">
       <h2 id={`step-${activeStep}-title`} className="sr-only">{stepHeading[activeStep]}</h2>
-      <p className="mb-5 text-xs leading-5 text-[var(--story-muted)]">{stepDescription[activeStep]}</p>
-
       {activeStep === 1 ? (
         <SelectionSearch>
           <StoryReader

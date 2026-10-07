@@ -1,6 +1,6 @@
 import SelectionSearch from '@/components/SelectionSearch'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
-import { highlightWord } from '@/lib/highlight'
+import { highlightedWordClass, highlightWord } from '@/lib/highlight'
 
 import type { WordDetail, WordMeaning } from './word-detail-types'
 
@@ -90,9 +90,9 @@ export function WordLearningContent({ word }: WordLearningContentProps) {
                       <SelectionSearch>
                         <div>
                           <span className="absolute left-1 top-4 inline-flex h-7 items-center"><SentenceTTSButton text={sentence.sentenceText} /></span>
-                        <p className="min-w-0 flex-1 break-words text-sm leading-7 text-stone-800 dark:text-stone-200" lang="en">
+                        <p className="min-w-0 flex-1 break-words text-lg leading-8 text-stone-800 dark:text-stone-200" lang="en">
                           {highlightWord(sentence.sentenceText, word.text).map((part, partIndex) => part.highlight ? (
-                            <span key={partIndex} className="font-semibold text-amber-700 underline decoration-amber-300 decoration-2 underline-offset-4 dark:text-amber-400">{part.text}</span>
+                            <span key={partIndex} className={highlightedWordClass}>{part.text}</span>
                           ) : <span key={partIndex}>{part.text}</span>)}
                         </p>
                         </div>

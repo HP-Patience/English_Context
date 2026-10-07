@@ -115,25 +115,6 @@ export default function HomePage() {
       <h1 className="mb-1 text-3xl font-bold tracking-tight">考研英语</h1>
       <p className="mb-6 text-sm text-stone-500 dark:text-stone-400">2026考研英语词汇闪过 · {stats?.totalWords || 6098} 词</p>
 
-      <section className="mb-6 overflow-hidden rounded-2xl border border-stone-300 bg-stone-950 text-stone-100 shadow-sm dark:border-stone-700" aria-labelledby="story-mode-title">
-        <div className="flex items-stretch">
-          <div className="flex w-16 shrink-0 items-center justify-center border-r border-stone-800 bg-red-950 px-3 text-center font-serif text-sm font-semibold leading-5 text-red-100">
-            故事<br />主线
-          </div>
-          <div className="min-w-0 flex-1 p-4">
-            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-stone-400">Chronicle mode</p>
-            <h2 id="story-mode-title" className="mt-1 font-serif text-xl font-semibold">连续故事背词</h2>
-            <p className="mt-1.5 text-xs leading-5 text-stone-400">沿篇章推进前三步学习，强化复习随后到期，不阻塞新剧情。</p>
-            <Link
-              href="/story"
-              className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-stone-100 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"
-            >
-              进入故事课程
-            </Link>
-          </div>
-        </div>
-      </section>
-
       {/* Daily goal progress */}
       {dailyGoal && (
         <Card className="mb-6">
@@ -262,7 +243,7 @@ export default function HomePage() {
       <div className="mt-6 flex justify-center">
         <Link
           href="/review"
-          className={`${memoryRatingButtonClass()} min-w-40`}
+          className={`${memoryRatingButtonClass().replaceAll("enabled:hover:", "hover:")} inline-flex min-w-40 items-center justify-center`}
         >
           复习 {(stats?.dueCount ?? 0) > 0 ? `(${stats?.dueCount})` : ''}
         </Link>

@@ -14,6 +14,7 @@ type CompletionDateHistoryProps = {
   readonly onCompletionDelta?: (delta: 1 | -1) => void
   readonly lazy?: boolean
   readonly compact?: boolean
+  readonly showSummary?: boolean
   readonly manageable?: boolean
   readonly summaryLabel?: string
 }
@@ -31,6 +32,7 @@ export function CompletionDateHistory({
   onCompletionDelta,
   lazy = false,
   compact = false,
+  showSummary = true,
   manageable = false,
   summaryLabel = '已学习',
 }: CompletionDateHistoryProps) {
@@ -182,10 +184,12 @@ export function CompletionDateHistory({
   return (
     <section aria-label={`${label}历史`} className={compact ? 'py-1' : 'rounded-xl border border-[var(--story-line)] bg-[var(--story-bg)] p-3'}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-[var(--story-muted)]">
-          {manageable && expanded ? <span className="mr-2 text-[var(--story-ink)]">编辑学习记录</span> : null}
-          {visibleCount === undefined ? (compact ? label.replace('完成日期', '学习记录') : '可独立记录完成日期') : <>{summaryLabel} <span className="tabular-nums text-[var(--story-ink)]">{visibleCount}</span> 次{visibleLatestDate ? <> · 最近 <time dateTime={visibleLatestDate}>{visibleLatestDate}</time></> : null}</>}
-        </p>
+        {showSummary ? (
+          <p className="text-xs font-semibold text-[var(--story-muted)]">
+            {manageable && expanded ? <span className="mr-2 text-[var(--story-ink)]">编辑学习记录</span> : null}
+            {visibleCount === undefined ? (compact ? label.replace('完成日期', '学习记录') : '可独立记录完成日期') : <>{summaryLabel} <span className="tabular-nums text-[var(--story-ink)]">{visibleCount}</span> 次{visibleLatestDate ? <> · 最近 <time dateTime={visibleLatestDate}>{visibleLatestDate}</time></> : null}</>}
+          </p>
+        ) : null}
         {!expanded ? <button type="button" aria-label={`记录或查看${label}历史`} disabled={busy || !online} aria-busy={busy} onClick={() => { setError(false); setBusy(true); setRequested(true) }} className={`${controlClass} ${compact ? 'w-20' : 'w-28'}`}>{busy ? '加载中…' : compact ? '查看记录' : '编辑学习记录'}</button> : null}
       </div>
 

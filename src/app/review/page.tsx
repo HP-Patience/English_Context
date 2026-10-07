@@ -7,7 +7,7 @@ import PronounceButton from '@/components/PronounceButton'
 import SentenceTTSButton from '@/components/SentenceTTSButton'
 import { MemoryRatingButtons, memoryRatingButtonClass } from '@/components/MemoryRatingButtons'
 import SelectionSearch from '@/components/SelectionSearch'
-import { highlightWord } from '@/lib/highlight'
+import { highlightedWordClass, highlightWord } from '@/lib/highlight'
 import { cachedFetch, invalidateCache } from '@/lib/api-cache'
 import AnalysisPanel from '@/components/AnalysisPanel'
 import { WordBookmarkButton } from '@/components/WordBookmarkButton'
@@ -294,7 +294,7 @@ export default function ReviewPage() {
           {rsentence.text && <SelectionSearch><p className="text-lg leading-relaxed text-stone-800 dark:text-stone-200">
             {rparts.map((part, i) =>
               part.highlight ? (
-                <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">{part.text}</span>
+                <Link key={i} href={`/word/${encodeURIComponent(relearnItem.userWord.word.id)}`} className={`${highlightedWordClass} rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}>{part.text}</Link>
               ) : (
                 <span key={i}>{part.text}</span>
               )
@@ -387,9 +387,9 @@ export default function ReviewPage() {
               <p className="min-w-0 flex-1 break-words text-lg leading-8 text-stone-800 dark:text-stone-200">
                 {parts.map((part, i) =>
                   part.highlight ? (
-                    <span key={i} className="font-semibold text-amber-600 underline decoration-amber-300 decoration-2 underline-offset-4">
+                    <Link key={i} href={`/word/${encodeURIComponent(item.userWord.word.id)}`} className={`${highlightedWordClass} rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}>
                       {part.text}
-                    </span>
+                    </Link>
                   ) : (
                     <span key={i}>{part.text}</span>
                   )
