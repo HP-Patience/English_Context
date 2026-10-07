@@ -14,6 +14,7 @@ test('production migration order bootstraps the admin before the credential cons
     '20261002_multi_user_accounts',
     '20261002_multi_user_interactions',
     '20261002_require_account_credentials',
+    '20261007_search_case_insensitive',
   ])
 })
 
@@ -56,6 +57,7 @@ test('prepare phase backfills the admin before interaction tables and leaves con
     'migration:20261002_multi_user_accounts',
     'ensure-admin:true',
     'migration:20261002_multi_user_interactions',
+    'migration:20261007_search_case_insensitive',
   ])
 })
 
@@ -72,6 +74,7 @@ test('finalize phase applies strict credentials only after account initializatio
     'ensure-admin:true',
     'migration:20261002_multi_user_interactions',
     'migration:20261002_require_account_credentials',
+    'migration:20261007_search_case_insensitive',
   ])
 })
 

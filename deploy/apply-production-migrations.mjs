@@ -160,6 +160,7 @@ export async function runProductionMigrationSequence({
   await ensureAdmin({ allowBootstrap: !credentialsAlreadyRequired })
   await applyMigration(PRODUCTION_MIGRATION_ORDER[1])
   if (phase === 'finalize') await applyMigration(PRODUCTION_MIGRATION_ORDER[2])
+  await applyMigration(PRODUCTION_MIGRATION_ORDER[3])
 }
 
 export async function applyProductionMigrations({ env = process.env, prisma, phase = 'prepare' } = {}) {
