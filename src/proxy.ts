@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { prisma } from '@/lib/prisma'
+
 import { getAuthConfig } from '@/lib/auth/config'
 import { AUTH_SESSION_COOKIE, verifySessionToken } from '@/lib/auth/session'
 
@@ -31,13 +33,20 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const authConfig = getAuthConfig()
   const token = request.cookies.get(AUTH_SESSION_COOKIE)?.value
-  const authenticated = authConfig
-    ? Boolean(await verifySessionToken(token, authConfig.secret))
-    : false
+  const userId = authConfig ? await verifySessionToken(token, authConfig.secret) : null
+  const user = userId
+    ? await prisma.user.findUnique({ where: { id: userId }, select: { status: true } })
+    : null
+  const authenticated = user?.status === 'active'
+
+  function discardInvalidSession(response: NextResponse) {
+    if (token && !authenticated) response.cookies.delete(AUTH_SESSION_COOKIE)
+    return response
+  }
 
   if (pathname === '/login') {
     if (authenticated) return NextResponse.redirect(new URL('/', request.url))
-    return NextResponse.next()
+    return discardInvalidSession(NextResponse.next())
   }
 
   if (PUBLIC_AUTH_PATHS.has(pathname)) {
@@ -55,8 +64,8 @@ export async function proxy(request: NextRequest) {
   }
 
   if (authenticated) return NextResponse.next()
-  if (pathname.startsWith('/api/')) return unauthorizedApiResponse()
-  return loginRedirect(request)
+  if (pathname.startsWith('/api/')) return discardInvalidSession(unauthorizedApiResponse())
+  return discardInvalidSession(loginRedirect(request))
 }
 
 export const config = {

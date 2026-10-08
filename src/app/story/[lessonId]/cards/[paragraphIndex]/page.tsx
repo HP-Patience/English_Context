@@ -5,7 +5,8 @@ import { connection } from 'next/server'
 import { StoryCardDetail } from '@/components/story/StoryCardDetail'
 import { normalizeStoryIdentifier } from '@/lib/story-api-types'
 import { parseStoryParagraphIndex } from '@/lib/story-completion-api'
-import { getLocalUserId, prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
+import { requirePageUserId } from '@/lib/auth/page-user'
 import { getStoryLesson } from '@/lib/story-service'
 
 export const metadata: Metadata = {
@@ -24,7 +25,7 @@ export default async function StoryCardPage({ params }: StoryCardPageProps) {
   const paragraphIndex = parseStoryParagraphIndex(values.paragraphIndex)
   if (!lessonId || paragraphIndex === null) notFound()
 
-  const userId = await getLocalUserId()
+  const userId = await requirePageUserId()
   const lesson = await getStoryLesson({ prisma, userId, lessonId })
   if (!lesson) notFound()
   const paragraph = lesson.content.paragraphs[paragraphIndex]

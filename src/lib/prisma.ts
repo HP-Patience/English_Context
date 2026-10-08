@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { PrismaClient } from '@prisma/client'
 
+import { AuthenticationRequiredError } from './auth/errors'
 import { getAuthConfig } from './auth/config'
 import { AUTH_SESSION_COOKIE, verifySessionToken } from './auth/session'
 
@@ -26,12 +27,12 @@ export async function getSessionUserId(): Promise<string | null> {
  */
 export async function getLocalUserId(): Promise<string> {
   const userId = await getSessionUserId()
-  if (!userId) throw new Error('Authentication required')
+  if (!userId) throw new AuthenticationRequiredError()
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { status: true },
   })
-  if (!user || user.status !== 'active') throw new Error('Authentication required')
+  if (!user || user.status !== 'active') throw new AuthenticationRequiredError()
   return userId
 }

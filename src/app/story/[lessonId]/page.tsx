@@ -4,7 +4,8 @@ import { connection } from 'next/server'
 
 import { StoryLessonShell } from '@/components/story/StoryLessonShell'
 import { normalizeStoryIdentifier, toPublicStoryLessonDetail } from '@/lib/story-api-types'
-import { getLocalUserId, prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
+import { requirePageUserId } from '@/lib/auth/page-user'
 import { getStoryLesson, listStoryLessons } from '@/lib/story-service'
 
 export const metadata: Metadata = {
@@ -22,7 +23,7 @@ export default async function StoryLessonPage({ params }: StoryLessonPageProps) 
   const lessonId = normalizeStoryIdentifier(rawLessonId)
   if (!lessonId) notFound()
 
-  const userId = await getLocalUserId()
+  const userId = await requirePageUserId()
   const [lesson, lessons] = await Promise.all([
     getStoryLesson({ prisma, userId, lessonId }),
     listStoryLessons({ prisma, userId }),

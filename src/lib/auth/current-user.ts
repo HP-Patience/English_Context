@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 
+import { AuthenticationRequiredError } from './errors'
 import { prisma } from '@/lib/prisma'
 import { getAuthConfig } from './config'
 import { AUTH_SESSION_COOKIE, verifySessionToken } from './session'
@@ -13,14 +14,7 @@ export type CurrentUser = {
   statsSharingEnabled: boolean
 }
 
-export class AuthenticationRequiredError extends Error {
-  readonly status = 401
-
-  constructor() {
-    super('Authentication required')
-    this.name = 'AuthenticationRequiredError'
-  }
-}
+export { AuthenticationRequiredError } from './errors'
 
 export class AdministratorRequiredError extends Error {
   readonly status = 403

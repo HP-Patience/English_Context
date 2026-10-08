@@ -5,7 +5,8 @@ import { connection } from 'next/server'
 
 import { StoryCourseList } from '@/components/story/StoryCourseList'
 import { StoryCourseProgress } from '@/components/story/StoryCourseProgress'
-import { getLocalUserId, prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
+import { requirePageUserId } from '@/lib/auth/page-user'
 import { listStoryLessons } from '@/lib/story-service'
 
 export const metadata: Metadata = {
@@ -19,7 +20,7 @@ export default async function StoryPage({
   searchParams: Promise<{ page?: string | string[] }>
 }) {
   await connection()
-  const userId = await getLocalUserId()
+  const userId = await requirePageUserId()
   const lessons = await listStoryLessons({ prisma, userId })
   const orderedLessons = [...lessons].sort((left, right) => left.order - right.order)
   const currentLessonId = orderedLessons.find((lesson) => lesson.isUnlocked && lesson.completedStep < 3)?.id ?? null

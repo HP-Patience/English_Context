@@ -4,6 +4,9 @@ import { NextRequest } from 'next/server'
 import { AUTH_SESSION_COOKIE, createSessionToken } from '@/lib/auth/session'
 import { proxy } from './proxy'
 
+const account = vi.hoisted(() => ({ findUnique: vi.fn() }))
+vi.mock('@/lib/prisma', () => ({ prisma: { user: account } }))
+
 const secret = 'proxy-test-secret-that-is-at-least-thirty-two-characters'
 
 function request(path: string, token?: string) {
@@ -15,6 +18,7 @@ function request(path: string, token?: string) {
 
 describe('authentication proxy', () => {
   beforeEach(() => {
+    account.findUnique.mockReset().mockResolvedValue({ status: 'active' })
     vi.stubEnv('APP_AUTH_USERNAME', 'owner')
     vi.stubEnv('APP_AUTH_PASSWORD_HASH', 'configured-hash')
     vi.stubEnv('APP_AUTH_SECRET', secret)
@@ -56,6 +60,23 @@ describe('authentication proxy', () => {
     const authenticatedResponse = await proxy(request('/login', token))
     expect(authenticatedResponse.status).toBe(307)
     expect(new URL(authenticatedResponse.headers.get('location')!).pathname).toBe('/')
+  })
+
+  it.each([null, { status: 'disabled' }])('rejects a signed cookie for an unavailable account: %s', async user => {
+    account.findUnique.mockResolvedValue(user)
+    const token = await createSessionToken('deleted-user', secret)
+    const response = await proxy(request('/story', token))
+    expect(response.status).toBe(307)
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/login')
+    expect(response.cookies.get(AUTH_SESSION_COOKIE)?.value).toBe('')
+    expect(account.findUnique).toHaveBeenCalledWith({ where: { id: 'deleted-user' }, select: { status: true } })
+
+    const login = await proxy(request('/login', token))
+    expect(login.headers.get('x-middleware-next')).toBe('1')
+    expect(login.cookies.get(AUTH_SESSION_COOKIE)?.value).toBe('')
+
+    const api = await proxy(request('/api/story/lessons', token))
+    expect(api.status).toBe(401)
   })
 
   it('fails closed when authentication is not configured', async () => {
